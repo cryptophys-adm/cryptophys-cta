@@ -22,7 +22,7 @@ const json = (data, status = 200) => new Response(JSON.stringify(data, null, 2),
 export const publishOn = (env) => String(env?.CONTENT_PUBLISH ?? "off").trim().toLowerCase() === "on";
 export const channelsOf = (env) => String(env?.CONTENT_CHANNELS ?? CHANNELS.join(",")).split(",").map((c) => c.trim()).filter((c) => CHANNELS.includes(c));
 const delayOf = (env) => { const n = Number(env?.PUBLIC_DELAY_HOURS ?? 24); return Number.isFinite(n) && n >= 1 ? n : 24; };
-/** The Worker secrets of each channel's account (set by the deploy workflow from GitHub secrets). */
+/** The Worker secrets of each channel's account (kept by the native deploy; organism.json `deploy.secrets_kept`). */
 export const SECRETS = Object.freeze({
   threads: { access_token: "THREADS_ACCESS_TOKEN", user_id: "THREADS_USER_ID" },
   instagram: { access_token: "INSTAGRAM_ACCESS_TOKEN", user_id: "INSTAGRAM_USER_ID" },
