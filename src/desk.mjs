@@ -23,6 +23,9 @@ export const DESK_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS media (
     id TEXT PRIMARY KEY, draft_id TEXT NOT NULL, content_type TEXT NOT NULL, data TEXT NOT NULL, bytes INTEGER NOT NULL, created_at TEXT NOT NULL)`,
   // A video (YouTube, TikTok) is larger than a row may be (2 MB): its base64 is kept in chunks, `media.data` empty.
+  // Each published post's latest metrics (src/insights.mjs), read once a day.
+  `CREATE TABLE IF NOT EXISTS post_metrics (
+    draft_id TEXT PRIMARY KEY, channel TEXT NOT NULL, fetched_at TEXT NOT NULL, data TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS media_chunks (
     media_id TEXT NOT NULL, seq INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (media_id, seq))`
 ];
@@ -64,15 +67,15 @@ export function addDrafts(sql, drafts, { now = Date.now() } = {}) {
   return added;
 }
 
-const shape = (r) => ({ ...r, decision_times: JSON.parse(r.decision_times || "[]"), guardian: JSON.parse(r.guardian || "{}"), overlay: r.overlay ? JSON.parse(r.overlay) : null });
+const shape = (r) => ({ ...r, decision_times: JSON.parse(r.decision_times || "[]"), guardian: JSON.parse(r.guardian || "{}"), overlay: r.overlay ? JSON.parse(r.overlay) : null, metrics: r.metrics ? JSON.parse(r.metrics) : null });
 
 /** The newest drafts, optionally of one status. */
 export function listDrafts(sql, { status = null, limit = 50 } = {}) {
   ensureDesk(sql);
   const n = Math.min(200, Math.max(1, Number(limit) || 50));
   const list = status && STATUSES.includes(status)
-    ? rows(sql, "SELECT * FROM drafts WHERE status = ? ORDER BY created_at DESC LIMIT ?", status, n)
-    : rows(sql, "SELECT * FROM drafts ORDER BY created_at DESC LIMIT ?", n);
+    ? rows(sql, "SELECT d.*, m.data AS metrics, m.fetched_at AS metrics_at FROM drafts d LEFT JOIN post_metrics m ON m.draft_id = d.id WHERE d.status = ? ORDER BY d.created_at DESC LIMIT ?", status, n)
+    : rows(sql, "SELECT d.*, m.data AS metrics, m.fetched_at AS metrics_at FROM drafts d LEFT JOIN post_metrics m ON m.draft_id = d.id ORDER BY d.created_at DESC LIMIT ?", n);
   return list.map(shape);
 }
 
@@ -210,5 +213,20 @@ export function noteDraft(sql, { id, action, detail = null }, { now = Date.now()
   ensureDesk(sql);
   if (!getDraft(sql, id)) return false;
   event(sql, { at: iso(now), id: String(id), action: clip(action, 40), actor: "content-engine", detail: detail ? clip(String(detail), 300) : null });
+  return true;
+}
+
+/** The posts published since `sinceIso` (newest first), with their stored metrics, for the performance report. */
+export function publishedSince(sql, sinceIso, { limit = 100 } = {}) {
+  ensureDesk(sql);
+  return rows(sql, "SELECT d.id, d.channel, d.kind, d.remote_id, d.published_at, m.data AS metrics, m.fetched_at AS metrics_at FROM drafts d LEFT JOIN post_metrics m ON m.draft_id = d.id WHERE d.status = 'published' AND d.published_at >= ? ORDER BY d.published_at DESC LIMIT ?",
+    String(sinceIso), Math.min(500, Math.max(1, Number(limit) || 100))).map((r) => ({ ...r, metrics: r.metrics ? JSON.parse(r.metrics) : null }));
+}
+/** Stores a post's latest metrics (one row per post, replaced on each read). */
+export function saveMetrics(sql, { id, channel, metrics }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  if (!getDraft(sql, id) || !metrics || typeof metrics !== "object") return false;
+  sql.exec("INSERT INTO post_metrics (draft_id, channel, fetched_at, data) VALUES (?, ?, ?, ?) ON CONFLICT(draft_id) DO UPDATE SET fetched_at = excluded.fetched_at, data = excluded.data",
+    String(id), String(channel), iso(now), JSON.stringify(metrics));
   return true;
 }

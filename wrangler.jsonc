@@ -45,7 +45,9 @@
     // here); read from its login redirect (kid). Not a secret. A plain var, so the deploy needs no Access read right.
     "ACCESS_AUD": "33c6d911ba06a57f6dbe2fa3c1c62a5850dba526b4458fc92bad394136668965",
     // The origin of the public card URLs Instagram fetches (GET /media/<id>.jpg, only once a draft is approved).
-    "PUBLIC_ORIGIN": "https://cta.cryptophys.work"
+    "PUBLIC_ORIGIN": "https://cta.cryptophys.work",
+    // The channels whose post metrics are read once a day (src/insights.mjs). X is not listed: X bills each read.
+    "CONTENT_INSIGHTS": "threads,instagram,youtube"
   },
   // The public page and the studio page (no build step). run_worker_first: the JWT is checked before any studio asset.
   "assets": {

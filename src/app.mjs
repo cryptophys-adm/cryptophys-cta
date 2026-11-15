@@ -3,11 +3,12 @@
 import { dailyDrafts } from "./drafts.mjs";
 import { analysisDrafts } from "./analysis-drafts.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "./channels.mjs";
-import { publishTo, publishingQuota, refreshToken, tiktokAccessToken, REFRESH_AFTER_DAYS } from "./publishers.mjs";
+import { publishTo, publishingQuota, refreshToken, tiktokAccessToken, googleAccessToken, REFRESH_AFTER_DAYS } from "./publishers.mjs";
 import { verifyAccessJwt } from "./access.mjs";
 import { brandOf, profileLinks, DEFAULT_BRAND } from "./brands.mjs";
 import { renderCard, renderVideo, toBase64, fromBase64 } from "./render.mjs";
 import { DISCLAIMER } from "./drafts.mjs";
+import { postInsights, performanceReport, insightChannelsOf, INSIGHTS_DAYS } from "./insights.mjs";
 import { ANALYSIS_DISCLAIMER } from "./analysis-drafts.mjs";
 
 export const RECAP_CRON = "17 22 * * 2-6";
@@ -119,6 +120,37 @@ export async function refreshTokens(env, { now = Date.now() } = {}) {
   return out;
 }
 
+/**
+ * Reads the metrics of the posts published in the last INSIGHTS_DAYS days (the channels in CONTENT_INSIGHTS) and
+ * stores them. A channel without an account, or one whose read fails, is reported and skipped; never throws.
+ */
+export async function collectInsights(env, { now = Date.now(), fetcher = (...a) => fetch(...a), limit = 60 } = {}) {
+  const d = desk(env);
+  const since = new Date(now - INSIGHTS_DAYS * 86_400_000).toISOString();
+  const posts = (await d.publishedSince(since, limit)).filter((p) => p.remote_id);
+  const channels = insightChannelsOf(env);
+  const out = { posts: posts.length, read: 0, skipped: {}, failed: [] };
+  const accounts = {}, tokens = {};
+  for (const p of posts) {
+    if (!channels.includes(p.channel)) { out.skipped[p.channel] = "not_read"; continue; }
+    try {
+      if (!(p.channel in accounts)) accounts[p.channel] = await accountOf(env, p.channel, { stored: await d.token(p.channel).catch(() => null) });
+      const account = accounts[p.channel];
+      if (!account) { out.skipped[p.channel] = "account_not_configured"; continue; }
+      if (p.channel === "youtube" && !tokens.youtube) tokens.youtube = await googleAccessToken({ account, fetcher });
+      const metrics = await postInsights(p.channel, { account, remoteId: p.remote_id, token: tokens[p.channel] ?? null, fetcher });
+      if (metrics && await d.saveMetrics({ id: p.id, channel: p.channel, metrics }, now)) out.read += 1;
+    } catch (e) { out.failed.push({ id: p.id, channel: p.channel, error: String(e?.message ?? e).slice(0, 160) }); }
+  }
+  return out;
+}
+
+/** The studio's performance report over the last INSIGHTS_DAYS days. */
+export async function studioPerformance(env, { now = Date.now() } = {}) {
+  const posts = await desk(env).publishedSince(new Date(now - INSIGHTS_DAYS * 86_400_000).toISOString(), 500);
+  return { ...performanceReport(posts, { channels: channelsOf(env) }), read: insightChannelsOf(env), posts: posts.slice(0, 50).map((p) => ({ id: p.id, channel: p.channel, kind: p.kind, published_at: p.published_at, metrics: p.metrics, metrics_at: p.metrics_at })) };
+}
+
 /** The studio's status: publishing, channels (configured or not, never a token), counts. */
 export async function studioStatus(env) {
   const channels = {};
@@ -154,7 +186,7 @@ async function rpc(fn, failure) {
 }
 
 const isStudio = (path) => path === "/studio" || path.startsWith("/studio/") || path.startsWith("/api/studio/");
-const STUDIO_ROUTES = ["/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
+const STUDIO_ROUTES = ["/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
 /** The public origin of the cards Instagram fetches (GET /media/<id>.jpg). */
 export const originOf = (env) => String(env?.PUBLIC_ORIGIN || "https://cta.cryptophys.work").replace(/\/+$/, "");
 const MEDIA_PATH = /^\/media\/([0-9a-f]{32})\.(jpg|webm)$/;
@@ -252,6 +284,12 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
           if (!out.ok || out.status !== "approved") return out;
           return { ...out, publish: await publishDraft(env, await desk(env).get(out.id), { now: at }) };
         }, "decide_failed");
+      }
+      if (route === "GET /api/studio/performance") return rpc(() => studioPerformance(env, { now: now ? now * 1000 : Date.now() }), "performance_failed");
+      if (route === "POST /api/studio/insights-now") {
+        const r = await personJson(request, url, identity, 256);
+        if (r.response) return r.response;
+        return rpc(() => collectInsights(env, { now: now ? now * 1000 : Date.now(), fetcher: fetchImpl }), "insights_failed");
       }
       if (route === "GET /api/studio/media") {
         const m = await desk(env).media(String(url.searchParams.get("id") || "")).catch(() => null);

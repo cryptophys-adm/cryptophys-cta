@@ -57,6 +57,8 @@ Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (dr
 | `POST /api/studio/draft-now` | a person, same origin, JSON | runs the drafting now |
 | `GET /api/studio/media?id=` | Access JWT | a card or video at any status (the studio's preview) |
 | `POST /api/studio/render-now` | a person, same origin, JSON | renders the waiting cards and videos now |
+| `GET /api/studio/performance` | Access JWT | the last 14 days: posts and summed views, likes, comments, shares per channel, the best post, each post's latest metrics |
+| `POST /api/studio/insights-now` | a person, same origin, JSON | reads the recent posts' metrics now |
 
 The Worker verifies the Access JWT itself (team `cryptophys.cloudflareaccess.com`; audience `ACCESS_AUD`, a plain var in
 `wrangler.jsonc`: the tag of the platform's Access application, not a secret). For the edge to ask for sign-in, the platform's `provision-access.yml` covers
@@ -68,7 +70,7 @@ rest of the host stays public.
 | Cron | What |
 |---|---|
 | `9 * * * 1-5` | pattern posts (confirmed on H1/H4/D1, forming on H4/D1; once each; at most four a day per channel); at 06:09 the key-level map |
-| `17 22 * * 2-6` | the recap of the trading day that ended 24 hours earlier; token refresh (only while publishing is on: Threads and Instagram long-lived tokens, TikTok's rotating refresh token) |
+| `17 22 * * 2-6` | the recap of the trading day that ended 24 hours earlier; token refresh (only while publishing is on: Threads and Instagram long-lived tokens, TikTok's rotating refresh token); then the metrics of the last 14 days' posts (`src/insights.mjs`; only while publishing is on) |
 
 ## 4. Channels
 
@@ -86,6 +88,12 @@ YouTube's resumable upload and TikTok's Direct Post and media transfer follow th
 two token refreshes (Google's token endpoint, TikTok's `/v2/oauth/token/`) follow the standard flows. One dry run and
 one real post on a test account per channel confirm them before `CONTENT_PUBLISH` is turned on. Daily quotas are read
 from Meta's limit endpoints at run time.
+
+Metrics (`src/insights.mjs`, `post_metrics` in the Desk): Threads (views, likes, replies, reposts, quotes, shares),
+Instagram (views, reach, likes, comments, saved, shares), YouTube (views, likes, comments), read for the channels in
+`CONTENT_INSIGHTS` (default `threads,instagram,youtube`; X only when listed, because X bills each read). Telegram (the
+Bot API has no post views) and TikTok (it needs the video id and `video.list`) are not read. The studio is in English
+(owner 2026-11-15: "lanjutkan semua", after the choice was offered).
 
 ## 5. Kernel and platform
 
