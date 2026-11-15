@@ -122,7 +122,7 @@ test("an approval keeps the guardian's levels rule for analysis drafts (regressi
 
 // ---- The overlay on TradingView's chart (owner 2026-11-15: patterns, key levels and the projection on the chart) ----
 import { overlayOf } from "../src/analysis-drafts.mjs";
-import { overlayPrices, overlaySvg, overlayLabels, geometryProblem, layoutLabels, measureInChart } from "../src/card.mjs";
+import { overlayPrices, overlayTimes, overlaySvg, overlayLabels, geometryProblem, layoutLabels, measureInChart } from "../src/card.mjs";
 
 const CONFIRMED = { chart: "H4", pattern: "descending_channel", name: "Descending Channel", chapter: 12, status: "confirmed", direction: "down", upper: 3905.2, lower: 3871.6, projection: 3820.4 };
 /** A linear price scale over a 1000 x 670 pane, like TradingView's (a higher price is higher on the chart). */
@@ -148,7 +148,8 @@ test("the overlay's words pass the guardian (levels allowed): zones as informati
   const o = overlayOf({ price: 3884.7, zones: [{ role: "supply", low: 3898, high: 3902.4, metrics: ["4H Camarilla H4", "daily pivot"] }, { role: "demand", low: 3861.1, high: 3866.8 }, { role: "at_price", low: 3880, high: 3886 }] }, { pattern: CONFIRMED });
   const forming = overlayOf({ price: 3884.7, zones: [] }, { pattern: { ...CONFIRMED, status: "forming" } });
   const words = [...overlayLabels(o), ...overlayLabels(forming)].join("\n");
-  assert.match(words, /Supply zone · sell area 3898\.00–3902\.40 · 4H Camarilla H4\n/);
+  assert.match(words, /Supply zone · sell area 3898\.00–3902\.40\n/);
+  assert.doesNotMatch(words, /Camarilla|pivot/, "on the chart the zone only, no metric names (owner 2026-11-15)");
   assert.match(words, /Demand zone · buy area 3861\.10–3866\.80\n/);
   assert.match(words, /Measured projection 3820\.40/);
   assert.match(words, /Close above 3905\.20 confirms up/);
@@ -229,4 +230,47 @@ test("the screenshot with an overlay: measured in TradingView's frame, drawn in 
   assert.match(seen.svg, /Measured projection 3820\.40/);
   await assert.rejects(run((prices) => ({ ...geoFor(prices), ys: prices.map(() => 10) })), /overlay cannot be placed/);
   await assert.rejects(run(() => ({ error: "no chart model" })), /overlay cannot be placed \(no chart model\)/);
+});
+
+
+test("the pattern's lines are drawn as fitted, from its start candle, and carried to the current candle", () => {
+  const lines = { from: "2026-11-10T08:00:00.000Z", to: "2026-11-14T20:00:00.000Z", upper: [3990, 3905.2], lower: [3950, 3871.6] };
+  const o = overlayOf({ price: 3884.7, zones: [] }, { pattern: { ...CONFIRMED, lines } });
+  assert.deepEqual(o.pattern.lines, lines);
+  assert.deepEqual(overlayTimes(o), [lines.from, lines.to]);
+  assert.equal(overlayOf({ price: 1, zones: [] }, { pattern: { ...CONFIRMED, lines: { ...lines, from: lines.to } } }).pattern.lines, undefined, "a start after the end is refused");
+  const prices = overlayPrices(o);
+  assert.ok(prices.includes(3990) && prices.includes(3950), "the start prices are in the range");
+  const geo = { ...geoFor(prices, { from: 3790, to: 4010 }), xLast: 700, xs: [300, 650] };
+  const y = (p) => 1 + ((4010 - p) / 220) * 670;
+  const svg = overlaySvg(o, geo);
+  // The upper line starts at its start candle and price, and runs on past its last candle at the same slope.
+  const m = /<line x1="301\.0" y1="([\d.]+)" x2="701\.0" y2="([\d.]+)"/.exec(svg);
+  assert.ok(m, svg.slice(0, 400));
+  assert.equal(Number(m[1]).toFixed(1), y(3990).toFixed(1));
+  const slope = (y(3905.2) - y(3990)) / 350;
+  assert.equal(Number(m[2]).toFixed(1), (y(3905.2) + slope * 50).toFixed(1));
+  assert.match(svg, /<circle cx="301\.0"/, "the start is marked");
+  // No anchors (or one not found on TradingView's chart): the levels flat over the recent candles.
+  const flat = overlaySvg(o, { ...geo, xs: [null, 650] });
+  assert.doesNotMatch(flat, /<circle/);
+  assert.match(flat, new RegExp(`y1="${y(3905.2).toFixed(1)}" x2="701\\.0" y2="${y(3905.2).toFixed(1)}"`));
+  assert.match(geometryProblem({ ...geo, xs: [-5, 650] }, prices), /pattern point/);
+});
+
+test("the in-chart measurement finds each anchor's candle by time and widens the view to its start", () => {
+  const H4 = 4 * 3600;
+  const open0 = Date.parse("2026-11-01T00:00:00Z") / 1000;
+  const bars = Array.from({ length: 200 }, (_, i) => [open0 + i * H4, 0, 3900, 3880, 3890]);
+  const calls = [];
+  const ps = { setMode() {}, setPriceRangeInPrice(r) { ps.r = r; }, priceToCoordinate: (p) => ((ps.r.to - p) / (ps.r.to - ps.r.from)) * 670 };
+  const ts = { width: () => 1000, setBarSpacing: (s) => calls.push(["spacing", s]), setRightOffset() {}, indexToCoordinate: (i) => i * 3 };
+  globalThis.window = { chartWidget: { model: () => ({ mainSeries: () => ({ priceScale: () => ps, bars: () => ({ lastIndex: () => 199, valueAt: (i) => bars[i] }), firstValue: () => 3890 }), timeScale: () => ts }), paneWidgets: () => [{ canvasElement: () => ({ getBoundingClientRect: () => ({ x: 1, y: 1, width: 1000, height: 670 }) }) }] } };
+  try {
+    // Close times: bar 100 closes at open(101); the last bar (199) is still open.
+    const from = new Date((open0 + 101 * H4) * 1000).toISOString(), to = new Date((open0 + 199 * H4 + 60) * 1000).toISOString();
+    const geo = measureInChart({ prices: [3900, 3880], futureShare: 0.3, bars: 70, times: [from, to, "2025-01-01T00:00:00Z"] });
+    assert.deepEqual(geo.xs, [300, 597, null], "bar 100, the last bar, and a time before the loaded candles");
+    assert.ok(calls[0][1] < (1000 * 0.7) / 70, "the view widened to show the pattern's start");
+  } finally { delete globalThis.window; }
 });

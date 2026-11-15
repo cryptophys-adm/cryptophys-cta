@@ -18,7 +18,11 @@ Bindings:
   (owner 2026-11-15: "Langsung gambar beserta pola dan key level serta proyeksi horizon di chart"; "Overlay on
   TradingView"), above the Cryptophys panel (the draft's own guardian-checked text) and a footer with "Chart by
   TradingView" and the disclaimer.
-  - The overlay: the zones nearest the price (supply above, demand below), a pattern's upper and lower lines, and for
+  - The overlay: the zones nearest the price (supply above, demand below; on the chart the zone only, no metric names:
+    owner 2026-11-15 "di chart cukup zone tidak perlu membawa metrics"), a pattern's upper and lower lines drawn as
+    fitted from its start candle (owner 2026-11-15: "gambar juga garis pattern di chart"; the analysis gives each line's
+    start and end time and price, and the browser finds those candles on TradingView's chart by time; without them the
+    levels are drawn flat), and for
     a confirmed pattern a dashed arrow from the breakout line at the last bar into a shaded future area, ending at the
     measured projection (no time is claimed: the analysis has a price, not a horizon); for a forming pattern, the
     two confirmation arrows. Only the draft's own numbers (`overlay`, stored with the draft).

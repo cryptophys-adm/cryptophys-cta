@@ -101,7 +101,7 @@ function draft({ id, kind, channel, text, now, overlay = null }) {
 }
 
 const num = (x) => (Number.isFinite(Number(x)) ? Math.round(Number(x) * 100) / 100 : null);
-const zoneOf = (z) => ({ role: z.role, low: num(z.low), high: num(z.high), strength: z.strength ?? null, metric: Array.isArray(z.metrics) && typeof z.metrics[0] === "string" ? z.metrics[0].slice(0, 40) : null });
+const zoneOf = (z) => ({ role: z.role, low: num(z.low), high: num(z.high), strength: z.strength ?? null });
 /**
  * Pure: what the Instagram card draws on TradingView's chart (src/card.mjs). The same numbers as the text, never
  * more: the price when read, the zones nearest to it (at most two supply above and two demand below, and the zone the
@@ -117,11 +117,20 @@ export function overlayOf(analysis, { pattern = null, maxZones = 2 } = {}) {
   };
   if (pattern) {
     out.pattern = { name: String(pattern.name ?? "").slice(0, 60), chart: pattern.chart, status: pattern.status, direction: pattern.direction ?? null,
-      upper: num(pattern.upper), lower: num(pattern.lower), projection: pattern.status === "confirmed" ? num(pattern.projection) : null };
+      upper: num(pattern.upper), lower: num(pattern.lower), projection: pattern.status === "confirmed" ? num(pattern.projection) : null,
+      ...(linesOf(pattern) ? { lines: linesOf(pattern) } : {}) };
   }
   return out;
 }
 const hasImage = (channel) => initialStatus(channel) === "needs_image";
+/** A pattern's two lines as the xauusd analysis gives them ({ from, to, upper: [start, end], lower: [...] }), checked. */
+function linesOf(p) {
+  const l = p?.lines;
+  const pair = (v) => Array.isArray(v) && v.length === 2 && v.every((x) => num(x) != null) ? v.map(num) : null;
+  if (!l || !Number.isFinite(Date.parse(l.from)) || !Number.isFinite(Date.parse(l.to)) || Date.parse(l.from) >= Date.parse(l.to)) return null;
+  const upper = pair(l.upper), lower = pair(l.lower);
+  return upper && lower ? { from: new Date(Date.parse(l.from)).toISOString(), to: new Date(Date.parse(l.to)).toISOString(), upper, lower } : null;
+}
 
 /**
  * Pure: the drafts of one run. `postedToday` is how many pattern drafts each channel already has today;

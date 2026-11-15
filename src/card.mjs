@@ -117,9 +117,14 @@ export function overlayPrices(overlay) {
   const out = [];
   for (const z of overlay?.zones ?? []) out.push(z.low, z.high);
   const p = overlay?.pattern;
-  if (p) out.push(p.upper, p.lower, p.projection);
+  if (p) out.push(p.upper, p.lower, p.projection, ...(p.lines ? [p.lines.upper?.[0], p.lines.lower?.[0]] : []));
   if (overlay?.price != null) out.push(overlay.price);
   return out.filter((x) => Number.isFinite(x));
+}
+/** The times an overlay anchors on (a pattern's lines: its start bar and its last bar, ISO close times). */
+export function overlayTimes(overlay) {
+  const l = overlay?.pattern?.lines;
+  return l && Number.isFinite(Date.parse(l.from)) && Number.isFinite(Date.parse(l.to)) ? [l.from, l.to] : [];
 }
 
 /**
@@ -127,12 +132,23 @@ export function overlayPrices(overlay) {
  * own price scale and time scale, widens the view so every price is visible with a future area on the right, and
  * returns the pixel mapping. Changes only the view (right offset, price range), never the data; draws nothing.
  */
-export function measureInChart({ prices, futureShare, bars = 70 }) {
+export function measureInChart({ prices, futureShare, bars = 70, times = [] }) {
   const w = window.chartWidget;
   if (!w || typeof w.model !== "function") return { error: "no chart model" };
   const m = w.model(), s = m.mainSeries(), ps = s.priceScale(), ts = m.timeScale();
   const last = s.bars().lastIndex();
   if (!Number.isFinite(last)) return { error: "no bars" };
+  // A time anchor (a bar's close time) is the last TradingView candle that opened before it; none: null.
+  const first = Math.max(0, last - 500);
+  const indexOf = (iso) => {
+    const close = Date.parse(iso);
+    if (!Number.isFinite(close)) return null;
+    for (let i = last; i >= first; i -= 1) { const v = s.bars().valueAt(i); if (v && v[0] * 1000 < close) return i === last && close - v[0] * 1000 > 7 * 86_400_000 ? null : i; }
+    return null;
+  };
+  const idx = times.map(indexOf);
+  const earliest = Math.min(...idx.filter((i) => i != null));
+  if (Number.isFinite(earliest)) bars = Math.min(400, Math.max(bars, last - earliest + 6));
   // The view: the last `bars` candles and a future area on the right; the price range covers those candles and
   // every level. Only the view changes; the candles' values are read here and never leave the browser.
   const spacing = Math.min(20, Math.max(4, (ts.width() * (1 - futureShare)) / bars));
@@ -152,6 +168,7 @@ export function measureInChart({ prices, futureShare, bars = 70 }) {
   return {
     pane: { x: pane.x, y: pane.y, w: pane.width, h: pane.height },
     xLast: ts.indexToCoordinate(last),
+    xs: idx.map((i) => (i == null ? null : ts.indexToCoordinate(i))),
     ys: prices.map((p) => ps.priceToCoordinate(p, fv)),
     range: { from: lo, to: hi }
   };
@@ -164,6 +181,7 @@ export function geometryProblem(geo, prices) {
   if (!pane || !(pane.w > 200 && pane.h > 200)) return "pane too small";
   if (!Number.isFinite(xLast) || xLast <= 0 || xLast >= pane.w) return "last bar off the pane";
   if (!Array.isArray(ys) || ys.length !== prices.length || ys.some((y) => !Number.isFinite(y) || y < 0 || y > pane.h)) return "a level is off the chart";
+  if ((geo.xs ?? []).some((x) => x != null && (!Number.isFinite(x) || x < 0 || x > pane.w))) return "a pattern point is off the chart";
   for (let i = 0; i < prices.length; i += 1) for (let j = 0; j < prices.length; j += 1) {
     if (prices[i] > prices[j] + 0.01 && !(ys[i] < ys[j])) return "the price scale is not monotonic";
   }
@@ -177,8 +195,9 @@ const ZONE_STYLE = {
   at_price: { fill: "#d4af37", label: "Price is in this zone" }
 };
 const GOLD = "#d4af37";
-/** "Supply zone · sell area 3898.00–3902.40 · 4H Camarilla H4": the zone and its main metric's name. */
-const zoneLabel = (z) => `${ZONE_STYLE[z.role]?.label ?? "Zone"} ${f2(z.low)}–${f2(z.high)}${z.metric ? ` · ${z.metric}` : ""}`;
+/** "Supply zone · sell area 3898.00–3902.40": on the chart the zone only (owner 2026-11-15: "di chart cukup zone tidak
+ * perlu membawa metrics"); the metric names stay in the text. */
+const zoneLabel = (z) => `${ZONE_STYLE[z.role]?.label ?? "Zone"} ${f2(z.low)}–${f2(z.high)}`;
 /** A text label with a dark backing (SVG has no text background); placed later by layoutLabels. */
 function tag(x, y, text, { color = "#e6e9ef", anchor = "start", size = 19, weight = 600, alts = [] } = {}) {
   const w = Math.round(text.length * size * 0.56) + 16, h = size + 12;
@@ -238,10 +257,23 @@ export function overlaySvg(overlay, geo, { frame = { x: 0, y: 0 } } = {}) {
     parts.push(tag(left + 12, top + h / 2, zoneLabel(z), { color: st.fill === GOLD ? GOLD : "#ffffff", size: 18, alts: [430] }));
   }
   if (p) {
-    const from = left + (now - left) * 0.42;
-    for (const [price, label, dy] of [[p.upper, `Upper line ${f2(p.upper)}`, -20], [p.lower, `Lower line ${f2(p.lower)}`, 20]]) {
-      parts.push(`<line x1="${from.toFixed(1)}" y1="${Y(price).toFixed(1)}" x2="${now.toFixed(1)}" y2="${Y(price).toFixed(1)}" stroke="${GOLD}" stroke-width="3"/>`);
-      parts.push(tag(now - 6, Y(price) + dy, label, { color: GOLD, anchor: "end", size: 18 }));
+    // The pattern's lines (owner 2026-11-15: "gambar juga garis pattern di chart"): from its start candle to its last,
+    // as fitted (a triangle's lines converge, a channel's slope), carried on to the current candle. Without anchors
+    // (an older analysis, or a start TradingView has not loaded) the levels are drawn flat over the recent candles.
+    const [x0, x1] = (geo.xs ?? []).map((x) => (x == null ? null : X(x)));
+    const anchored = p.lines && x0 != null && x1 != null && x1 > x0 + 4;
+    let from = left + (now - left) * 0.42;
+    for (const [side, price, label, dy] of [["upper", p.upper, `Upper line ${f2(p.upper)}`, -20], ["lower", p.lower, `Lower line ${f2(p.lower)}`, 20]]) {
+      let path;
+      if (anchored) {
+        const ya = Y(p.lines[side][0]), yb = Y(price);
+        const yNow = now > x1 ? yb + ((yb - ya) / (x1 - x0)) * (now - x1) : yb;
+        path = [[x0, ya], [Math.max(x1, now), yNow]];
+        from = x0;
+      } else path = [[from, Y(price)], [now, Y(price)]];
+      parts.push(`<line x1="${path[0][0].toFixed(1)}" y1="${path[0][1].toFixed(1)}" x2="${path[1][0].toFixed(1)}" y2="${path[1][1].toFixed(1)}" stroke="${GOLD}" stroke-width="3" stroke-linecap="round"/>`);
+      if (anchored) parts.push(`<circle cx="${x0.toFixed(1)}" cy="${path[0][1].toFixed(1)}" r="4" fill="${GOLD}"/>`);
+      parts.push(tag(now - 6, path[1][1] + dy, label, { color: GOLD, anchor: "end", size: 18 }));
     }
     parts.push(tag(from, frame.y + geo.pane.y + 54, `${p.name} · ${p.chart}`, { color: GOLD, size: 20, weight: 700 }));
     parts.push(`<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${GOLD}"/></marker></defs>`);
