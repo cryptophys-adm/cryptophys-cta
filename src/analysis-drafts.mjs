@@ -9,7 +9,7 @@
 // Never the system's decision, an entry, a stop, a take profit or BUY/SELL as a signal: the content guardian's
 // signal_words rule refuses them. Price levels are allowed here (allowLevels): they are the analysis itself.
 import { checkContentDraft } from "./guardian.mjs";
-import { dateId, SHORT_DISCLAIMER } from "./drafts.mjs";
+import { dateId, SHORT_DISCLAIMER, CHART_CREDIT } from "./drafts.mjs";
 import { CHANNELS, TEXT_LIMITS, initialStatus } from "./channels.mjs";
 
 export const ANALYSIS_DISCLAIMER = "Analisa edukasi dari sistem Cryptophys, bukan ajakan jual atau beli dan bukan saran investasi.";
@@ -24,7 +24,8 @@ const hhmm = (iso) => String(iso).slice(11, 16);
 
 function finish(lines, channel) {
   // X: the short disclaimer, so the analysis keeps its lines within 280 characters.
-  const tail = ["", channel === "x" ? SHORT_DISCLAIMER : ANALYSIS_DISCLAIMER, ANALYSIS_HASHTAGS[channel] ?? ANALYSIS_HASHTAGS.threads];
+  // Instagram: the post is the card with TradingView's chart, so the caption names it (the guardian's attribution).
+  const tail = ["", ...(channel === "instagram" ? [CHART_CREDIT] : []), channel === "x" ? SHORT_DISCLAIMER : ANALYSIS_DISCLAIMER, ANALYSIS_HASHTAGS[channel] ?? ANALYSIS_HASHTAGS.threads];
   const max = TEXT_LIMITS[channel] ?? 500;
   // Too long: drop body lines from the end (never the title or the disclaimer).
   let body = [...lines];

@@ -7,6 +7,8 @@ import { CHANNELS, TEXT_LIMITS, HASHTAGS, initialStatus } from "./channels.mjs";
 export { CHANNELS, TEXT_LIMITS, HASHTAGS };
 
 export const DRAFT_VERSION = "cryptophys.content-draft.v1";
+/** The caption line of a post whose image carries TradingView's chart (Instagram); the guardian requires it. */
+export const CHART_CREDIT = "Chart oleh TradingView.";
 export const DISCLAIMER = "Ini rekap edukasi dari sistem analisis kami, bukan ajakan jual atau beli dan bukan saran investasi.";
 
 const DAYS = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
@@ -71,7 +73,7 @@ export function dailyRecapText(summary, { channel = "threads", dayIso }) {
   if (summary.confirmed_patterns?.length) lines.push(`Pola yang terkonfirmasi: ${summary.confirmed_patterns.join(", ")}.`);
   const decided = summary.directional_hits + summary.directional_misses;
   if (decided) lines.push(`Dari ${decided} bacaan arah yang sudah dinilai satu jam kemudian, ${summary.directional_hits} sesuai arah dan ${summary.directional_misses} tidak.`);
-  lines.push("", DISCLAIMER, HASHTAGS[channel] ?? HASHTAGS.threads);
+  lines.push("", ...(channel === "instagram" ? [CHART_CREDIT] : []), DISCLAIMER, HASHTAGS[channel] ?? HASHTAGS.threads);
   const max = TEXT_LIMITS[channel] ?? 500;
   // Too long: drop the optional lines one at a time (the session, then the patterns, then the scored reads),
   // so the disclaimer is never cut.

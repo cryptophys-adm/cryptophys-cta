@@ -46,7 +46,10 @@
     "script": "cryptophys-cta",
     "config": "wrangler.jsonc",
     "entry": "src/index.mjs",
-    "build": "none",
+    "compatibility_flags": [
+      "nodejs_compat"
+    ],
+    "build": "npm ci (package-lock.json; one runtime dependency, @cloudflare/puppeteer, bundled by wrangler)",
     "tests": "node --test test/*.test.mjs",
     "dry_run": "wrangler deploy --dry-run",
     "custom_domains": [
@@ -79,6 +82,9 @@
         "entrypoint": "PublicProjection"
       }
     ],
+    "browser": {
+      "binding": "BROWSER"
+    },
     "entrypoints": [
       "OrganismDna",
       "CtaHealth"
@@ -92,7 +98,8 @@
       "CONTENT_CHANNELS",
       "PUBLIC_DELAY_HOURS",
       "ACCESS_TEAM_DOMAIN",
-      "ACCESS_AUD"
+      "ACCESS_AUD",
+      "PUBLIC_ORIGIN"
     ],
     "secrets_kept": [
       "THREADS_ACCESS_TOKEN",
@@ -122,6 +129,12 @@
         "path": "/api/public/profile",
         "expect_status": [
           200
+        ]
+      },
+      {
+        "path": "/media/00000000000000000000000000000000.jpg",
+        "expect_status": [
+          404
         ]
       }
     ]

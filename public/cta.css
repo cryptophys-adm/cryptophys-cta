@@ -16,6 +16,7 @@ h1{font-size:clamp(28px,5vw,46px);line-height:1.12;margin:14px 0 10px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
 .grid{display:grid;gap:14px}.grid.two{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
 .post{white-space:pre-wrap;font-size:14px;background:var(--panel2);border-radius:10px;padding:14px;border:1px solid var(--line)}
+.cardimg{display:block;width:100%;max-width:360px;aspect-ratio:4/5;margin-top:10px;border-radius:10px;border:1px solid var(--line);background:var(--panel2)}
 .meta{color:var(--muted);font-size:12px;margin-top:8px}
 .disclaimer{color:var(--muted);font-size:13px;border-left:3px solid var(--gold);padding:10px 14px;background:var(--panel);border-radius:0 10px 10px 0;margin:26px 0}
 h2{font-size:18px;margin:28px 0 12px}

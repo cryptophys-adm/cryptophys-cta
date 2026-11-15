@@ -12,7 +12,10 @@ export const BRANDS = Object.freeze({
     handles: Object.freeze({ threads: "xauusd-ai-cta" }),
     capacity: "edukasi",
     disclaimer: "Konten ini adalah edukasi dan analisa dari sistem Cryptophys, bukan ajakan jual atau beli dan bukan saran investasi. Keputusan dan risiko transaksi sepenuhnya milik Anda.",
-    chart_attribution: "Chart oleh TradingView"
+    chart_attribution: "Chart oleh TradingView",
+    // The symbol of TradingView's own chart widget on the Instagram card (TradingView draws it from its own data).
+    chart_symbol: "OANDA:XAUUSD",
+    card_disclaimer: "Edukasi dan analisa, bukan ajakan jual atau beli dan bukan saran investasi."
   })
 });
 export const DEFAULT_BRAND = "xauusd-ai-cta";

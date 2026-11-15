@@ -17,7 +17,11 @@ export const DESK_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, draft_id TEXT NOT NULL, action TEXT NOT NULL, actor TEXT NOT NULL, detail TEXT)`,
   `CREATE TABLE IF NOT EXISTS tokens (
-    channel TEXT PRIMARY KEY, access_token TEXT NOT NULL, refreshed_at TEXT NOT NULL, expires_at TEXT)`
+    channel TEXT PRIMARY KEY, access_token TEXT NOT NULL, refreshed_at TEXT NOT NULL, expires_at TEXT)`,
+  // The Instagram cards (src/card.mjs, src/render.mjs): one JPEG per draft, base64, served publicly only once its
+  // draft is approved or published (GET /media/<id>.jpg), to the studio at any time.
+  `CREATE TABLE IF NOT EXISTS media (
+    id TEXT PRIMARY KEY, draft_id TEXT NOT NULL, content_type TEXT NOT NULL, data TEXT NOT NULL, bytes INTEGER NOT NULL, created_at TEXT NOT NULL)`
 ];
 export const STATUSES = Object.freeze(["pending", "needs_image", "needs_video", "blocked", "approved", "rejected", "published", "failed"]);
 
@@ -26,6 +30,13 @@ const clip = (v, n) => (typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f]
 const iso = (ms) => new Date(ms).toISOString();
 
 export function ensureDesk(sql) { for (const q of DESK_SCHEMA) sql.exec(q); }
+
+/** Kinds whose text is the analysis itself, price levels included (the guardian's allowLevels). */
+export const LEVEL_KINDS = Object.freeze(["key_levels", "pattern"]);
+/** The guardian's check of a stored draft, the same way it was drafted: levels for analysis kinds, attribution with an image. */
+export function recheck(d, { delayHours = 24, now = Date.now() } = {}) {
+  return checkContentDraft({ text: d.text, chart: Boolean(d.image_url), decisionTimes: d.decision_times, delayHours, allowLevels: LEVEL_KINDS.includes(d.kind), now });
+}
 
 function event(sql, { at, id, action, actor, detail = null }) {
   sql.exec("INSERT INTO events (at, draft_id, action, actor, detail) VALUES (?, ?, ?, ?, ?)", at, id, action, actor, detail);
@@ -86,7 +97,7 @@ export function decideDraft(sql, { id, decision, actor, reason = "", delayHours 
   let status = decision === "approve" ? "approved" : "rejected";
   let guardian = d.guardian;
   if (decision === "approve") {
-    guardian = checkContentDraft({ text: d.text, chart: false, decisionTimes: d.decision_times, delayHours, now });
+    guardian = recheck(d, { delayHours, now });
     if (!guardian.pass) status = "blocked";
   }
   sql.exec("UPDATE drafts SET status = ?, guardian = ?, decided_at = ?, decided_by = ?, decision_reason = ? WHERE id = ?", status, JSON.stringify(guardian), iso(now), who, why || null, d.id);
@@ -136,4 +147,48 @@ export function publishedPosts(sql, { limit = 30 } = {}) {
   ensureDesk(sql);
   const n = Math.min(100, Math.max(1, Number(limit) || 30));
   return rows(sql, "SELECT id, kind, channel, text, published_at, remote_id FROM drafts WHERE status = 'published' ORDER BY published_at DESC LIMIT ?", n);
+}
+
+/** A card is tried this many times; then its draft waits for a person (the studio's "render now" still retries). */
+export const MAX_RENDER_ATTEMPTS = 3;
+/** Drafts waiting for their card, oldest first; a draft whose card failed MAX_RENDER_ATTEMPTS times only on `retry`. */
+export function draftsNeedingImage(sql, { limit = 3, retry = false } = {}) {
+  ensureDesk(sql);
+  const n = Math.min(20, Math.max(1, Number(limit) || 3));
+  return rows(sql, `SELECT * FROM drafts d WHERE status = 'needs_image'${retry ? "" : " AND (SELECT COUNT(*) FROM events e WHERE e.draft_id = d.id AND e.action = 'render_failed') < ?"} ORDER BY created_at ASC LIMIT ?`, ...(retry ? [n] : [MAX_RENDER_ATTEMPTS, n])).map(shape);
+}
+
+const MEDIA_ID = /^[0-9a-f]{32}$/;
+/**
+ * Stores a draft's card and moves the draft on: the guardian runs again with the image (TradingView's attribution
+ * is required), then the draft waits for a person ("pending") or is blocked. Only a draft that needs an image.
+ */
+export function attachImage(sql, { id, mediaId, data, bytes, imageUrl, contentType = "image/jpeg", delayHours = 24 }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  const d = getDraft(sql, id);
+  if (!d) return { ok: false, error: "no such draft" };
+  if (d.status !== "needs_image") return { ok: false, error: `the draft is ${d.status}, not needs_image` };
+  if (!MEDIA_ID.test(String(mediaId ?? ""))) return { ok: false, error: "bad media id" };
+  if (typeof data !== "string" || !data || !/^https:\/\/[^/]+\/media\/[0-9a-f]{32}\.jpg$/.test(String(imageUrl ?? ""))) return { ok: false, error: "bad image" };
+  sql.exec("INSERT INTO media (id, draft_id, content_type, data, bytes, created_at) VALUES (?, ?, ?, ?, ?, ?)", mediaId, d.id, contentType, data, Number(bytes) || 0, iso(now));
+  const guardian = recheck({ ...d, image_url: imageUrl }, { delayHours, now });
+  const status = guardian.pass ? "pending" : "blocked";
+  sql.exec("UPDATE drafts SET image_url = ?, guardian = ?, status = ? WHERE id = ?", imageUrl, JSON.stringify(guardian), status, d.id);
+  event(sql, { at: iso(now), id: d.id, action: "image_attached", actor: "content-engine", detail: `${mediaId} ${status}` });
+  return { ok: true, id: d.id, status, guardian };
+}
+
+/** A card with its draft's status (the public route serves it only once the draft is approved or published). */
+export function mediaOf(sql, mediaId) {
+  ensureDesk(sql);
+  if (!MEDIA_ID.test(String(mediaId ?? ""))) return null;
+  return rows(sql, "SELECT m.content_type, m.data, m.bytes, m.draft_id, d.status AS draft_status FROM media m JOIN drafts d ON d.id = m.draft_id WHERE m.id = ?", mediaId)[0] ?? null;
+}
+
+/** An engine note on a draft (a failed render), in its event history. */
+export function noteDraft(sql, { id, action, detail = null }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  if (!getDraft(sql, id)) return false;
+  event(sql, { at: iso(now), id: String(id), action: clip(action, 40), actor: "content-engine", detail: detail ? clip(String(detail), 300) : null });
+  return true;
 }
