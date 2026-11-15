@@ -58,8 +58,10 @@
     card.appendChild(head);
     card.appendChild(make("div", "post", d.text));
     // The Instagram card (TradingView's chart and the Cryptophys panel), as Instagram will get it.
-    const media = /\/media\/([0-9a-f]{32})\.jpg$/.exec(d.image_url || "");
-    if (media) { const img = make("img", "cardimg"); img.alt = "Kartu Instagram"; img.loading = "lazy"; img.src = `/api/studio/media?id=${media[1]}`; card.appendChild(img); }
+    const media = /\/media\/([0-9a-f]{32})\.(jpg|webm)$/.exec(d.image_url || "");
+    if (media && media[2] === "jpg") { const img = make("img", "cardimg"); img.alt = "Kartu Instagram"; img.loading = "lazy"; img.src = `/api/studio/media?id=${media[1]}`; card.appendChild(img); }
+    // The YouTube Shorts / TikTok video (9:16), as the platform will get it.
+    if (media && media[2] === "webm") { const v = make("video", "cardvid"); v.controls = true; v.preload = "metadata"; v.muted = true; v.src = `/api/studio/media?id=${media[1]}`; card.appendChild(v); }
     const g = d.guardian || {};
     const gl = make("div", "meta", g.pass ? "Guardian: semua cek lolos" : `Guardian: ${(g.failures || []).map((f) => `${f.check} (${f.detail})`).join(", ") || "belum dicek"}`);
     card.appendChild(gl);

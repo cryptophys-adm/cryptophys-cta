@@ -8,7 +8,8 @@ The Cryptophys content studio and public CTA page at **cta.cryptophys.work**.
   and TikTok, with each draft's guardian result, approval or rejection, a dry run of the publishing request, and
   each channel's status.
 - **Engine**: drafts from the xauusd AI Worker's public projection (daily recap after 24 hours; real-time key-level
-  map and chart-pattern posts), in fixed Indonesian templates, checked by the content guardian. Nothing is published
+  map and chart-pattern posts), in fixed English templates, checked by the content guardian; cards and short videos
+  made in Browser Run from TradingView's chart with our overlay. Nothing is published
   while `CONTENT_PUBLISH` is "off".
 
 Rules: `AGENTS.md`. Topology: `docs/SSOT.md`. Changes: `docs/CHANGELOG.md`.
