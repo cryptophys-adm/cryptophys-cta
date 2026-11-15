@@ -12,7 +12,7 @@ export const DESK_SCHEMA = [
     id TEXT PRIMARY KEY, kind TEXT NOT NULL, channel TEXT NOT NULL, text TEXT NOT NULL, image_url TEXT,
     window_from TEXT, window_to TEXT, decision_times TEXT NOT NULL DEFAULT '[]', guardian TEXT NOT NULL DEFAULT '{}',
     status TEXT NOT NULL, created_at TEXT NOT NULL, decided_at TEXT, decided_by TEXT, decision_reason TEXT,
-    published_at TEXT, remote_id TEXT, error TEXT)`,
+    published_at TEXT, remote_id TEXT, error TEXT, overlay TEXT)`,
   "CREATE INDEX IF NOT EXISTS drafts_status ON drafts (status, created_at)",
   `CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, draft_id TEXT NOT NULL, action TEXT NOT NULL, actor TEXT NOT NULL, detail TEXT)`,
@@ -49,16 +49,17 @@ export function addDrafts(sql, drafts, { now = Date.now() } = {}) {
   for (const d of drafts || []) {
     if (!d?.id || !d.text || !d.channel) continue;
     if (rows(sql, "SELECT 1 AS x FROM drafts WHERE id = ?", d.id).length) continue;
-    sql.exec("INSERT INTO drafts (id, kind, channel, text, image_url, window_from, window_to, decision_times, guardian, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    sql.exec("INSERT INTO drafts (id, kind, channel, text, image_url, window_from, window_to, decision_times, guardian, status, created_at, overlay) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       d.id, d.kind ?? "post", d.channel, d.text, d.image_url ?? null, d.window?.from ?? null, d.window?.to ?? null,
-      JSON.stringify(d.decision_times ?? []), JSON.stringify(d.guardian ?? {}), STATUSES.includes(d.status) ? d.status : "pending", iso(now));
+      JSON.stringify(d.decision_times ?? []), JSON.stringify(d.guardian ?? {}), STATUSES.includes(d.status) ? d.status : "pending", iso(now),
+      d.overlay ? JSON.stringify(d.overlay) : null);
     event(sql, { at: iso(now), id: d.id, action: "drafted", actor: "content-engine", detail: d.status ?? "pending" });
     added.push(d.id);
   }
   return added;
 }
 
-const shape = (r) => ({ ...r, decision_times: JSON.parse(r.decision_times || "[]"), guardian: JSON.parse(r.guardian || "{}") });
+const shape = (r) => ({ ...r, decision_times: JSON.parse(r.decision_times || "[]"), guardian: JSON.parse(r.guardian || "{}"), overlay: r.overlay ? JSON.parse(r.overlay) : null });
 
 /** The newest drafts, optionally of one status. */
 export function listDrafts(sql, { status = null, limit = 50 } = {}) {

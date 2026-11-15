@@ -2,7 +2,7 @@
 // is given the card page (src/card.mjs) and waits for TradingView's own widget to draw its chart, then for the
 // panel to fit; a card whose chart did not load, or whose text does not fit, is never stored. `launch` returns a
 // Puppeteer-style browser (the Worker passes `@cloudflare/puppeteer` over the BROWSER binding; the tests a fake).
-import { cardHtml, CARD_WIDTH, CARD_HEIGHT } from "./card.mjs";
+import { cardHtml, chartOf, CARD_WIDTH, CARD_HEIGHT, CARD_BARS, overlayPrices, measureInChart, geometryProblem, overlaySvg } from "./card.mjs";
 
 /** Instagram takes a JPEG up to 8 MB; a card under 20 KB is a blank page, not a chart. */
 export const MIN_CARD_BYTES = 20_000;
@@ -21,6 +21,21 @@ export async function renderCard(draft, brand, { launch, disclaimers = [], timeo
     if (!frame) throw new Error("the TradingView chart did not load");
     await frame.waitForSelector("canvas", { timeout: timeoutMs });
     await sleep(settleMs);
+    // The overlay: the chart's own price mapping (read in TradingView's frame), then our SVG layer over it.
+    const prices = overlayPrices(draft?.overlay);
+    if (prices.length) {
+      const confirmed = draft.overlay.pattern?.status === "confirmed" && draft.overlay.pattern.projection != null;
+      const geo = await frame.evaluate(measureInChart, { prices, futureShare: confirmed ? 0.3 : draft.overlay.pattern ? 0.22 : 0.08, bars: CARD_BARS[chartOf(draft)] ?? 70 });
+      const problem = geometryProblem(geo, prices);
+      if (problem) throw new Error(`the overlay cannot be placed (${problem})`);
+      const offset = await page.evaluate(() => {
+        const f = document.querySelector("#chart iframe")?.getBoundingClientRect(), c = document.getElementById("chart").getBoundingClientRect();
+        return f ? { x: f.x - c.x, y: f.y - c.y } : null;
+      });
+      if (!offset) throw new Error("the overlay cannot be placed (no chart frame)");
+      await page.evaluate((svg) => { document.getElementById("overlay").innerHTML = svg; }, overlaySvg(draft.overlay, geo, { frame: offset }));
+      await sleep(Math.min(settleMs, 800)); // TradingView repaints the widened view
+    }
     const fit = await page.evaluate(() => document.body.getAttribute("data-fit"));
     if (fit !== "ok") throw new Error(`the panel does not fit (${fit ?? "no fit result"})`);
     const shot = await page.screenshot({ type: "jpeg", quality: 85 });

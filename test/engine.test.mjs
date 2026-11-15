@@ -31,15 +31,15 @@ test("a day's recap: counts, main bias, confirmed patterns, the scored direction
   assert.deepEqual([summary.directional_hits, summary.directional_misses], [1, 1]);
   assert.deepEqual(drafts.map((d) => [d.channel, d.status, d.guardian.pass]), [["threads", "pending", true], ["instagram", "needs_image", true]]);
   const t = drafts[0].text;
-  assert.match(t, /^Edukasi · Rekap XAUUSD Senin, 16 November 2026/);
-  assert.match(t, /4 bar 15 menit: 1 kali condong beli, 1 kali condong jual, 2 kali memilih menunggu/);
-  assert.match(t, /Pola yang terkonfirmasi: wedge falling\./);
-  assert.match(t, /bukan ajakan jual atau beli/);
+  assert.match(t, /^Education · XAUUSD recap · Monday, 16 November 2026/);
+  assert.match(t, /read 4 15-minute bars: 1 leaning up, 1 leaning down, 2 choosing to wait/);
+  assert.match(t, /Confirmed patterns: wedge falling\./);
+  assert.match(t, /Not an invitation to buy or sell, and not financial advice\./);
   assert.ok(t.length <= TEXT_LIMITS.threads, `${t.length} characters`);
   assert.equal(drafts[0].id, "daily:2026-11-16:threads");
   assert.ok(!PRICE_LIKE.test(t.replace(/\b(19|20)\d{2}\b/g, "")), "no price-like number besides the year");
   assert.equal(dailyRecapText(summarizeDay([], { from: "2026-11-16T00:00:00Z", to: "2026-11-17T00:00:00Z" }), { dayIso: "2026-11-17T00:00:00Z" }), null, "no decision, no draft");
-  assert.equal(dateId("2026-11-20T10:00:00Z"), "Jumat, 20 November 2026");
+  assert.equal(dateId("2026-11-20T10:00:00Z"), "Friday, 20 November 2026");
 });
 
 function sqlite() {
@@ -63,7 +63,7 @@ test("the queue: a draft once, a person approves or rejects with a reason, the g
   assert.deepEqual([getDraft(sql, "daily:2026-11-16:threads").status, getDraft(sql, "daily:2026-11-16:threads").remote_id], ["published", "1789"]);
   assert.deepEqual(draftEvents(sql, "daily:2026-11-16:threads").map((e) => e.action), ["published", "approved", "drafted"]);
   // A draft whose text breaks a rule is blocked at approval, not published.
-  addDrafts(sql, [{ id: "x", channel: "threads", text: "Edukasi. Bukan ajakan jual atau beli. Sell now at 3870!", status: "pending", decision_times: [] }], { now: NOW });
+  addDrafts(sql, [{ id: "x", channel: "threads", text: "Education only. Not financial advice. Sell now at 3870!", status: "pending", decision_times: [] }], { now: NOW });
   const bad = decideDraft(sql, { id: "x", decision: "approve", actor: "owner" }, { now: NOW });
   assert.equal(bad.status, "blocked");
   assert.deepEqual(bad.guardian.failures.map((f) => f.check).sort(), ["instruction", "price_level"]);
@@ -94,7 +94,7 @@ const noSleep = async () => {};
 
 test("Threads: container, ready, publish; the token only in POST bodies; a dry run sends nothing and shows no token", async () => {
   const { calls, fetcher } = fakeMeta();
-  const r = await publishThreads({ account, text: "Edukasi. Bukan ajakan jual atau beli.", fetcher, sleep: noSleep });
+  const r = await publishThreads({ account, text: "Education only. Not financial advice.", fetcher, sleep: noSleep });
   assert.deepEqual(r, { remote_id: "p1", container_id: "c1" });
   assert.deepEqual(calls.map((c) => [c.method, c.url.split("?")[0]]), [["POST", `${THREADS_BASE}/42/threads`], ["GET", `${THREADS_BASE}/c1`], ["POST", `${THREADS_BASE}/42/threads_publish`]]);
   assert.deepEqual([calls[0].body.media_type, calls[2].body.creation_id], ["TEXT", "c1"]);
@@ -163,19 +163,19 @@ const AT = Date.parse("2026-11-16T06:09:00Z");
 test("the key-level map and the pattern posts pass the guardian with levels allowed, and carry no signal word", () => {
   const a = publicAnalysis(KEY_LEVELS, { structure: STRUCTURE, now: AT });
   const map = keyLevelsText(a, { channel: "threads" });
-  assert.match(map, /^Edukasi · Peta level kunci XAUUSD · Senin, 16 November 2026 06:09 UTC/);
-  assert.match(map, /Zona penawaran \(area jual\):\n• 3918\.33–3923\.09 \(kuat, 5 sumber\)\n• 3898\.09–3901\.12 \(sedang, 3 sumber\)/);
-  assert.match(map, /Zona permintaan \(area beli\):\n• 3864\.14–3867\.80 \(kuat, 4 sumber\)/);
-  assert.match(map, /Struktur: H4 turun \(LH\/LL\) · H1 turun \(LH\/LL\) · 15m naik \(HH\/HL\)/);
+  assert.match(map, /^Education · XAUUSD key-level map · Monday, 16 November 2026 06:09 UTC/);
+  assert.match(map, /Supply zones \(sell area\):\n• 3918\.33–3923\.09 \(strong, 5 sources\)\n• 3898\.09–3901\.12 \(moderate, 3 sources\)/);
+  assert.match(map, /Demand zones \(buy area\):\n• 3864\.14–3867\.80 \(strong, 4 sources\)/);
+  assert.match(map, /Structure: H4 down \(LH\/LL\) · H1 down \(LH\/LL\) · 15m up \(HH\/HL\)/);
   assert.ok(map.length <= 500, `${map.length}`);
   assert.ok(!/\n\n\n/.test(map), "no double blank line where an optional line was dropped");
   const [forming, confirmed] = postablePatterns(a);
   const f = patternText(forming, a), c = patternText(confirmed, a);
-  assert.match(f, /Pola terbentuk · XAUUSD H4\nThree Falling Peaks · katalog Bulkowski bab 45/);
-  assert.match(f, /terkonfirmasi naik bila candle H4 ditutup di atas 3927\.20, atau turun bila ditutup di bawah 3856\.70/);
-  assert.match(c, /Breakout pola · XAUUSD H4\nDescending Broadening Wedge .* arah naik/);
-  assert.match(c, /Pola batal bila candle H4 ditutup kembali di bawah 3719\.57/);
-  assert.match(c, /Proyeksi ukuran pola: 4020\.50 \(analisa, bukan sasaran transaksi\)/);
+  assert.match(f, /Pattern forming · XAUUSD H4\nThree Falling Peaks · Bulkowski catalogue ch\. 45/);
+  assert.match(f, /confirms upward on an H4 close above 3927\.20, or downward on a close below 3856\.70/);
+  assert.match(c, /Pattern breakout · XAUUSD H4\nDescending Broadening Wedge .* direction up/);
+  assert.match(c, /The pattern fails if an H4 candle closes back below 3719\.57/);
+  assert.match(c, /Measured projection: 4020\.50 \(analysis, not a trade objective\)/);
   const drafts = analysisDrafts(a, { now: AT, levelsRun: true, channels: ["threads"] });
   assert.deepEqual(drafts.map((d) => [d.kind, d.status, d.guardian.pass]), [["key_levels", "pending", true], ["pattern", "pending", true], ["pattern", "pending", true]], "H1 forming is not posted");
   for (const d of drafts) assert.ok(!/\b(entry|SL|TP\d?|BUY|SELL|stop loss|take profit)\b/.test(d.text), d.text);

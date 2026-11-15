@@ -15,14 +15,18 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
    (after the lawyer's check of POJK 6/2026). Every draft waits in the studio for a person's approval; an approval
    runs the guardian again. A service token can read the studio, never decide.
 3. **Content policy (owner 2026-11-14):**
-   - education and analysis only, with the capacity ("edukasi") and the disclaimer in every post;
+   - all public content in English (owner 2026-11-15: "Semua content in english"): posts, captions, cards, the
+     public page; the studio is the owner's tool and may stay Indonesian;
+   - education and analysis only, with the capacity ("Education") and the disclaimer in every post;
    - analytics and key levels are allowed; buy and sell zones as information only;
    - never buy/sell advice: no entry, stop loss, take profit, BUY/SELL/LONG/SHORT as a signal, lot or rating
      (the guardian's `signal_words` and `instruction` rules);
    - the system's decisions only as a recap after 24 hours; the analysis (zones, patterns, structure) in real time;
    - no promised return, no account data, never Nexus or Omega, never a secret;
    - chart images are TradingView charts with TradingView's attribution visible; never a chart drawn from Yahoo
-     data, the TradingView account's bars or the broker's MT5 bars (licensing);
+     data, the TradingView account's bars or the broker's MT5 bars (licensing). Our zones, pattern lines and
+     measured projection are drawn as an overlay over TradingView's chart, from its own price mapping (owner
+     2026-11-15: "Overlay on TradingView"); the overlay carries only the draft's own numbers;
    - news is never republished, only our own summary with the source named.
 4. **No model writes public text.** Drafts come from fixed templates over the xauusd `PublicProjection` (read-only
    RPC). Adding a model-written step needs the owner's approval and a guardian check after it.

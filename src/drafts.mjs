@@ -1,6 +1,7 @@
 // Daily recap drafts from the xauusd public projection (ported from xauusd-ai-trading-assistant
-// workers/xauusd-content; owner 2026-11-14: "persiapan engine post ke Instagram/threads"). Deterministic Indonesian templates, no model call: a language model never writes the
-// public text, so nothing can slip a price or an instruction into it. Every draft goes through the content
+// workers/xauusd-content; owner 2026-11-14: "persiapan engine post ke Instagram/threads"). Deterministic English templates, no model call: a language model never writes the
+// public text, so nothing can slip a price or an instruction into it. All public content is in English (owner
+// 2026-11-15: "Semua content in english"). Every draft goes through the content
 // guardian (src/content-guardian.mjs) before it can be queued, and again before it is published.
 import { checkContentDraft } from "./guardian.mjs";
 import { CHANNELS, TEXT_LIMITS, HASHTAGS, initialStatus } from "./channels.mjs";
@@ -8,15 +9,15 @@ export { CHANNELS, TEXT_LIMITS, HASHTAGS };
 
 export const DRAFT_VERSION = "cryptophys.content-draft.v1";
 /** The caption line of a post whose image carries TradingView's chart (Instagram); the guardian requires it. */
-export const CHART_CREDIT = "Chart oleh TradingView.";
-export const DISCLAIMER = "Ini rekap edukasi dari sistem analisis kami, bukan ajakan jual atau beli dan bukan saran investasi.";
+export const CHART_CREDIT = "Chart by TradingView.";
+export const DISCLAIMER = "This is an educational recap from our analysis system. Not an invitation to buy or sell, and not financial advice.";
 
-const DAYS = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
-const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-const BIAS_ID = { BULLISH: "condong naik", BEARISH: "condong turun", NEUTRAL: "netral" };
-const SESSION_ID = { asia: "Asia", london: "London", new_york: "New York", late: "penutupan" };
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const BIAS_ID = { BULLISH: "leaning up", BEARISH: "leaning down", NEUTRAL: "neutral" };
+const SESSION_ID = { asia: "Asian", london: "London", new_york: "New York", late: "closing" };
 
-/** "Senin, 16 November 2026" (UTC). */
+/** "Monday, 16 November 2026" (UTC). */
 export function dateId(iso) {
   const d = new Date(iso);
   return `${DAYS[d.getUTCDay()]}, ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
@@ -47,13 +48,13 @@ export function summarizeDay(recaps, { from, to }) {
 }
 
 /** The disclaimer of the short channels (X): the capacity and "not an invitation" in one line. */
-export const SHORT_DISCLAIMER = "Edukasi, bukan ajakan jual atau beli.";
+export const SHORT_DISCLAIMER = "Education only. Not financial advice.";
 
 /** Pure: X's short recap (280 characters): the counts, the main bias, the disclaimer. */
 function shortRecapText(summary, { dayIso }) {
   const d = new Date(dayIso);
-  const lines = [`Rekap XAUUSD ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()].slice(0, 3)}: ${summary.bars} bar 15m, ${summary.buy} condong beli, ${summary.sell} condong jual, ${summary.wait} menunggu.`];
-  if (summary.main_bias) lines.push(`Arah dominan: ${BIAS_ID[summary.main_bias]}.`);
+  const lines = [`XAUUSD recap ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()].slice(0, 3)}: ${summary.bars} 15m bars, ${summary.buy} leaning up, ${summary.sell} leaning down, ${summary.wait} waiting.`];
+  if (summary.main_bias) lines.push(`Dominant read: ${BIAS_ID[summary.main_bias]}.`);
   lines.push(SHORT_DISCLAIMER, HASHTAGS.x);
   return lines.join("\n");
 }
@@ -63,22 +64,22 @@ export function dailyRecapText(summary, { channel = "threads", dayIso }) {
   if (!summary?.bars) return null;
   if (channel === "x") return shortRecapText(summary, { dayIso });
   const lines = [
-    `Edukasi · Rekap XAUUSD ${dateId(dayIso)}`,
+    `Education · XAUUSD recap · ${dateId(dayIso)}`,
     "",
-    `Sistem analisis kami membaca ${summary.bars} bar 15 menit: ${summary.buy} kali condong beli, ${summary.sell} kali condong jual, ${summary.wait} kali memilih menunggu.`
+    `Our analysis system read ${summary.bars} 15-minute bars: ${summary.buy} leaning up, ${summary.sell} leaning down, ${summary.wait} choosing to wait.`
   ];
-  if (summary.main_bias) lines.push(`Arah yang paling sering terbaca: ${BIAS_ID[summary.main_bias]}.`);
+  if (summary.main_bias) lines.push(`Most frequent read: ${BIAS_ID[summary.main_bias]}.`);
   const busiest = Object.entries(summary.sessions || {}).map(([s, v]) => [s, (v.BUY || 0) + (v.SELL || 0)]).sort((a, b) => b[1] - a[1])[0];
-  if (busiest && busiest[1] > 0) lines.push(`Sinyal arah paling banyak muncul di sesi ${SESSION_ID[busiest[0]] ?? busiest[0]}.`);
-  if (summary.confirmed_patterns?.length) lines.push(`Pola yang terkonfirmasi: ${summary.confirmed_patterns.join(", ")}.`);
+  if (busiest && busiest[1] > 0) lines.push(`Most directional reads came in the ${SESSION_ID[busiest[0]] ?? busiest[0]} session.`);
+  if (summary.confirmed_patterns?.length) lines.push(`Confirmed patterns: ${summary.confirmed_patterns.join(", ")}.`);
   const decided = summary.directional_hits + summary.directional_misses;
-  if (decided) lines.push(`Dari ${decided} bacaan arah yang sudah dinilai satu jam kemudian, ${summary.directional_hits} sesuai arah dan ${summary.directional_misses} tidak.`);
+  if (decided) lines.push(`Of ${decided} directional reads scored one hour later, ${summary.directional_hits} matched the move and ${summary.directional_misses} did not.`);
   lines.push("", ...(channel === "instagram" ? [CHART_CREDIT] : []), DISCLAIMER, HASHTAGS[channel] ?? HASHTAGS.threads);
   const max = TEXT_LIMITS[channel] ?? 500;
   // Too long: drop the optional lines one at a time (the session, then the patterns, then the scored reads),
   // so the disclaimer is never cut.
   let keep = lines;
-  for (const prefix of ["Sinyal ", "Pola ", "Dari "]) {
+  for (const prefix of ["Most directional ", "Confirmed ", "Of "]) {
     if (keep.join("\n").length <= max) break;
     keep = keep.filter((l) => !l.startsWith(prefix));
   }
