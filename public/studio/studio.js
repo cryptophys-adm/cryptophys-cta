@@ -57,6 +57,9 @@
     head.appendChild(make("span", "meta count", `${d.text.length}${limit ? `/${limit}` : ""} karakter · ${when(d.created_at)}`));
     card.appendChild(head);
     card.appendChild(make("div", "post", d.text));
+    // The Instagram card (TradingView's chart and the Cryptophys panel), as Instagram will get it.
+    const media = /\/media\/([0-9a-f]{32})\.jpg$/.exec(d.image_url || "");
+    if (media) { const img = make("img", "cardimg"); img.alt = "Kartu Instagram"; img.loading = "lazy"; img.src = `/api/studio/media?id=${media[1]}`; card.appendChild(img); }
     const g = d.guardian || {};
     const gl = make("div", "meta", g.pass ? "Guardian: semua cek lolos" : `Guardian: ${(g.failures || []).map((f) => `${f.check} (${f.detail})`).join(", ") || "belum dicek"}`);
     card.appendChild(gl);
@@ -118,6 +121,13 @@
     $("draftnow").addEventListener("click", async (ev) => {
       ev.target.disabled = true;
       try { await call("/api/studio/draft-now", "POST", {}); await load(); } catch (e) { showErr(e); } finally { ev.target.disabled = false; }
+    });
+    $("rendernow").addEventListener("click", async (ev) => {
+      ev.target.disabled = true;
+      try {
+        const r = await call("/api/studio/render-now", "POST", {});
+        if (r.status === "no_browser") showErr("Browser Run belum terpasang"); else await load();
+      } catch (e) { showErr(e); } finally { ev.target.disabled = false; }
     });
     await load();
     setInterval(load, 120000);

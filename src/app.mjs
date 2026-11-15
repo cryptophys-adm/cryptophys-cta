@@ -6,6 +6,9 @@ import { CHANNELS, CHANNEL_SPECS } from "./channels.mjs";
 import { publishTo, publishingQuota, refreshToken, REFRESH_AFTER_DAYS } from "./publishers.mjs";
 import { verifyAccessJwt } from "./access.mjs";
 import { brandOf, profileLinks, DEFAULT_BRAND } from "./brands.mjs";
+import { renderCard, toBase64, fromBase64 } from "./render.mjs";
+import { DISCLAIMER } from "./drafts.mjs";
+import { ANALYSIS_DISCLAIMER } from "./analysis-drafts.mjs";
 
 export const RECAP_CRON = "17 22 * * 2-6";
 export const ANALYSIS_CRON = "9 * * * 1-5";
@@ -128,10 +131,42 @@ async function rpc(fn, failure) {
 }
 
 const isStudio = (path) => path === "/studio" || path.startsWith("/studio/") || path.startsWith("/api/studio/");
-const STUDIO_ROUTES = ["/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/whoami"];
+const STUDIO_ROUTES = ["/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
+/** The public origin of the cards Instagram fetches (GET /media/<id>.jpg). */
+export const originOf = (env) => String(env?.PUBLIC_ORIGIN || "https://cta.cryptophys.work").replace(/\/+$/, "");
+const MEDIA_PATH = /^\/media\/([0-9a-f]{32})\.jpg$/;
+const randomHex = (n) => [...crypto.getRandomValues(new Uint8Array(n))].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+/**
+ * Renders the cards of the drafts waiting for one (oldest first, at most `limit` a run) and attaches them; each
+ * draft then waits for a person. A card that fails (the chart did not load, the text does not fit) leaves its
+ * draft waiting, with the reason in its history. `launch` opens a browser (Browser Run over BROWSER).
+ */
+export async function renderImages(env, { now = Date.now(), launch, limit = 3, retry = false, render = renderCard } = {}) {
+  if (typeof launch !== "function") return { status: "no_browser" };
+  const d = desk(env);
+  const waiting = await d.needingImage(limit, retry);
+  const brand = brandOf(DEFAULT_BRAND);
+  const out = [];
+  for (const draft of waiting) {
+    try {
+      const bytes = await render(draft, brand, { launch, disclaimers: [DISCLAIMER, ANALYSIS_DISCLAIMER] });
+      const mediaId = randomHex(16);
+      const r = await d.attachImage({ id: draft.id, mediaId, data: toBase64(bytes), bytes: bytes.length, imageUrl: `${originOf(env)}/media/${mediaId}.jpg`, delayHours: delayOf(env) }, now);
+      out.push({ id: draft.id, status: r.ok ? r.status : "error", ...(r.ok ? {} : { error: r.error }) });
+    } catch (error) {
+      const reason = String(error?.message ?? error).slice(0, 200);
+      await d.note({ id: draft.id, action: "render_failed", detail: reason }, now).catch(() => {});
+      out.push({ id: draft.id, status: "render_failed", error: reason });
+    }
+  }
+  return { waiting: waiting.length, rendered: out };
+}
+
+const image = (m, cache) => new Response(fromBase64(m.data), { status: 200, headers: { "content-type": m.content_type, "cache-control": cache, "x-content-type-options": "nosniff" } });
 
 /** The HTTP face. `deps` lets tests inject the desk, the clock and the JWT check's fetch. */
-export async function handle(request, env, { fetchImpl = fetch, now } = {}) {
+export async function handle(request, env, { fetchImpl = fetch, now, launch } = {}) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   const route = `${request.method} ${path}`;
@@ -141,6 +176,13 @@ export async function handle(request, env, { fetchImpl = fetch, now } = {}) {
   if (route === "GET /api/public/profile") {
     const brand = brandOf(DEFAULT_BRAND);
     return json({ brand: { id: brand.id, name: brand.name, tagline: brand.tagline, capacity: brand.capacity, disclaimer: brand.disclaimer }, links: profileLinks(brand) });
+  }
+  // A card, for Instagram to fetch: only once its draft is approved (Instagram fetches it at publishing) or published.
+  const media = request.method === "GET" ? MEDIA_PATH.exec(path) : null;
+  if (media) {
+    const m = await desk(env).media(media[1]).catch(() => null);
+    if (!m || (m.draft_status !== "approved" && m.draft_status !== "published")) return json({ error: "not_found" }, 404);
+    return image(m, "public, max-age=86400");
   }
   if (route === "GET /api/public/archive") {
     return rpc(async () => ({ posts: await desk(env).archive(Number(url.searchParams.get("limit")) || 30) }), "archive_failed");
@@ -182,6 +224,15 @@ export async function handle(request, env, { fetchImpl = fetch, now } = {}) {
           if (!out.ok || out.status !== "approved") return out;
           return { ...out, publish: await publishDraft(env, await desk(env).get(out.id), { now: at }) };
         }, "decide_failed");
+      }
+      if (route === "GET /api/studio/media") {
+        const m = await desk(env).media(String(url.searchParams.get("id") || "")).catch(() => null);
+        return m ? image(m, "private, no-store") : json({ error: "not_found" }, 404);
+      }
+      if (route === "POST /api/studio/render-now") {
+        const r = await personJson(request, url, identity, 256);
+        if (r.response) return r.response;
+        return rpc(() => renderImages(env, { launch, retry: true, now: now ? now * 1000 : Date.now() }), "render_failed");
       }
       if (route === "POST /api/studio/draft-now") {
         const r = await personJson(request, url, identity, 256);

@@ -13,6 +13,13 @@ Bindings:
 - `CONTENT_DESK` → Durable Object `ContentDesk` (SQLite): the drafts, their events, the refreshed tokens, the
   published archive.
 - `ASSETS` → `public/` (the CTA page and the studio page; no build step).
+- `BROWSER` → Browser Run: the Instagram cards (`src/card.mjs`, `src/render.mjs`). A card is 1080 × 1350: TradingView's
+  own Advanced Chart widget (`OANDA:XAUUSD`, the draft's timeframe; TradingView draws it from its own data, this
+  Worker sends it no bar, price or drawing) above the Cryptophys panel, which is the draft's own guardian-checked
+  text, with "Chart oleh TradingView" and the disclaimer in the footer. It is rendered right after each drafting run
+  (about 7 seconds a card, at most 3 a run), kept in the Desk (`media`, base64), and the draft then waits for a person.
+  A card whose chart did not load or whose text does not fit is not kept; its draft stays `needs_image` with the
+  reason in its history. `@cloudflare/puppeteer` is the one runtime dependency (`nodejs_compat`).
 
 Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (drift checks).
 
@@ -22,10 +29,13 @@ Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (dr
 |---|---|---|
 | `GET /health` | anyone | `{ ok, service, publish }` |
 | `GET /`, `GET /api/public/profile`, `GET /api/public/archive` | anyone | the brand, its links, the disclaimer, published posts |
+| `GET /media/<id>.jpg` | anyone, only once the card's draft is approved or published | the Instagram card (Instagram fetches it at publishing); 404 before |
 | `GET /studio` | Access JWT | the studio page |
 | `GET /api/studio/whoami`, `status`, `drafts`, `draft`, `preview` | Access JWT (person or service token) | read the queue; `preview` is a dry run with tokens redacted |
 | `POST /api/studio/decide` | a person, same origin, JSON | approve or reject (a reason is required to reject); an approval publishes at once only while `CONTENT_PUBLISH` is "on" |
 | `POST /api/studio/draft-now` | a person, same origin, JSON | runs the drafting now |
+| `GET /api/studio/media?id=` | Access JWT | a card at any status (the studio's preview) |
+| `POST /api/studio/render-now` | a person, same origin, JSON | renders the waiting cards now |
 
 The Worker verifies the Access JWT itself (team `cryptophys.cloudflareaccess.com`; audience `ACCESS_AUD`, a plain var in
 `wrangler.jsonc`: the tag of the platform's Access application, not a secret). For the edge to ask for sign-in, the platform's `provision-access.yml` covers
@@ -44,7 +54,7 @@ rest of the host stays public.
 | Channel | Media | Publisher | Secrets |
 |---|---|---|---|
 | Threads (`xauusd-ai-cta`) | text | built | `THREADS_ACCESS_TOKEN`, `THREADS_USER_ID` |
-| Instagram | image (TradingView chart + Cryptophys panel; not built yet: drafts wait as `needs_image`) | built | `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_USER_ID` |
+| Instagram | image: the card (TradingView chart + Cryptophys panel), rendered by Browser Run; the caption names TradingView | built | `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_USER_ID` |
 | X | text, 280 characters (short recap) | built (billed per post by X) | `X_ACCESS_TOKEN` |
 | Telegram channel | text | built (Bot API; the bot is a channel admin) | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
 | YouTube Shorts | video (later phase: `needs_video`) | planned | — |

@@ -3,6 +3,8 @@
   "name": "cryptophys-cta",
   "main": "src/index.mjs",
   "compatibility_date": "2026-10-31",
+  // nodejs_compat: @cloudflare/puppeteer (Browser Run) needs Node's built-ins.
+  "compatibility_flags": ["nodejs_compat"],
   // cta.cryptophys.work (owner 2026-11-14/15): the content studio (behind Cloudflare Access; the Worker verifies the
   // JWT itself, fail closed) and the public CTA page. No workers.dev or preview URL.
   "workers_dev": false,
@@ -15,6 +17,9 @@
   "services": [
     { "binding": "PROJECTION", "service": "xauusd-ai-trading-assistant", "entrypoint": "PublicProjection" }
   ],
+  // Browser Run: the Instagram cards (TradingView's own chart widget plus the Cryptophys panel, src/card.mjs),
+  // screenshotted right after drafting. 10 browser hours a month are included; a card takes about 7 seconds.
+  "browser": { "binding": "BROWSER" },
   // The approval queue, the published archive and the refreshed tokens: one Durable Object with SQLite storage.
   "durable_objects": {
     "bindings": [
@@ -38,7 +43,9 @@
     "ACCESS_TEAM_DOMAIN": "cryptophys.cloudflareaccess.com",
     // The audience tag of the platform's Access application (the one that covers nexus., ai. and the studio paths
     // here); read from its login redirect (kid). Not a secret. A plain var, so the deploy needs no Access read right.
-    "ACCESS_AUD": "33c6d911ba06a57f6dbe2fa3c1c62a5850dba526b4458fc92bad394136668965"
+    "ACCESS_AUD": "33c6d911ba06a57f6dbe2fa3c1c62a5850dba526b4458fc92bad394136668965",
+    // The origin of the public card URLs Instagram fetches (GET /media/<id>.jpg, only once a draft is approved).
+    "PUBLIC_ORIGIN": "https://cta.cryptophys.work"
   },
   // The public page and the studio page (no build step). run_worker_first: the JWT is checked before any studio asset.
   "assets": {

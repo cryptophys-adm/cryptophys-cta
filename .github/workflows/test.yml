@@ -19,5 +19,7 @@ jobs:
           node-version: "22"
       - name: Tests
         run: node --test test/*.test.mjs
+      - name: Install (the lockfile; @cloudflare/puppeteer is bundled into the Worker)
+        run: npm ci --no-audit --no-fund
       - name: Validate the Worker bundle
         run: npx --yes wrangler@4.45.0 deploy --dry-run

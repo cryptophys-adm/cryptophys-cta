@@ -5,9 +5,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { handle, accountOf, publishDraft, SECRETS, channelsOf } from "../src/app.mjs";
+import { handle, accountOf, publishDraft, SECRETS, channelsOf, renderImages } from "../src/app.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
-import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts } from "../src/desk.mjs";
+import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft } from "../src/desk.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
 
@@ -37,7 +37,9 @@ function deskStub() {
     get: async (id) => { const d = getDraft(sql, id); return d ? { ...d, events: draftEvents(sql, id) } : null; },
     decide: async (i, now) => decideDraft(sql, i, { now }), published: async (i, now) => recordPublish(sql, i, { now }),
     counts: async () => deskCounts(sql), token: async (c) => storedToken(sql, c), saveToken: async (c, t, now) => { storeToken(sql, c, t, { now }); return true; },
-    idsWithPrefix: async (p) => draftIdsWithPrefix(sql, p), kindCounts: async (k, s) => kindCountsSince(sql, k, s), archive: async (n) => publishedPosts(sql, { limit: n })
+    idsWithPrefix: async (p) => draftIdsWithPrefix(sql, p), kindCounts: async (k, s) => kindCountsSince(sql, k, s), archive: async (n) => publishedPosts(sql, { limit: n }),
+    needingImage: async (n, retry) => draftsNeedingImage(sql, { limit: n, retry }), attachImage: async (i, now) => attachImage(sql, i, { now }),
+    media: async (id) => mediaOf(sql, id), note: async (i, now) => noteDraft(sql, i, { now })
   };
   return { sql, api, ns: { idFromName: () => "desk", get: () => api } };
 }
@@ -171,6 +173,10 @@ test("the native deploy block in organism.json equals wrangler.jsonc, and the or
   assert.deepEqual(d.durable_objects, cfg.durable_objects.bindings.map(({ name, class_name }) => ({ binding: name, class_name })));
   assert.deepEqual(d.do_migrations, cfg.migrations);
   assert.deepEqual(d.services, cfg.services);
+  assert.deepEqual(d.browser, cfg.browser);
+  assert.deepEqual(d.compatibility_flags, cfg.compatibility_flags);
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  assert.deepEqual(Object.keys(pkg.dependencies ?? {}), ["@cloudflare/puppeteer"], "one runtime dependency, declared in the deploy block");
   assert.deepEqual(d.crons, cfg.triggers.crons);
   assert.deepEqual(d.secrets_kept, Object.values(SECRETS).flatMap((s) => Object.values(s)));
   const src = readFileSync(new URL("../src/index.mjs", import.meta.url), "utf8");
@@ -179,4 +185,61 @@ test("the native deploy block in organism.json equals wrangler.jsonc, and the or
   assert.deepEqual(d.vars, Object.keys(cfg.vars), "every var is declared, and every non-secret value is a plain var");
   assert.match(cfg.vars.ACCESS_AUD, /^[0-9a-f]{64}$/, "the Access audience is a plain var, not resolved at deploy");
   assert.ok(d.secrets_kept.every((s) => !(s in cfg.vars)), "a secret is never a var");
+});
+
+
+test("Instagram cards: rendered for drafts that need one, then served publicly only once the draft is approved", async () => {
+  resetKeyCacheForTests();
+  const { d, env: e } = env({ PUBLIC_ORIGIN: "https://cta.cryptophys.work" });
+  const text = "Edukasi · Pola terbentuk · XAUUSD H4\nAscending Triangle\n\nGaris atas 4098.20 · garis bawah 4071.60\n\nChart oleh TradingView.\nAnalisa edukasi dari sistem Cryptophys, bukan ajakan jual atau beli dan bukan saran investasi.\n#XAUUSD";
+  addDrafts(d.sql, [
+    { id: "pattern:H4:asc:forming:4098:4072:instagram", kind: "pattern", channel: "instagram", text, status: "needs_image" },
+    { id: "pattern:H4:bad:forming:4098:4072:instagram", kind: "pattern", channel: "instagram", text: text + "\nx", status: "needs_image" }
+  ], { now: Date.now() - 1000 });
+  const jpeg = new Uint8Array(30_000); jpeg[0] = 0xff; jpeg[1] = 0xd8;
+  let rendered = 0;
+  const render = async (draft) => { rendered += 1; if (draft.id.includes(":bad:")) throw new Error("the TradingView chart did not load"); return jpeg; };
+  assert.deepEqual(await renderImages(e, {}), { status: "no_browser" });
+  const r = await renderImages(e, { launch: () => ({}), render });
+  assert.equal(rendered, 2);
+  assert.deepEqual(r.rendered.map((x) => x.status), ["pending", "render_failed"]);
+  const ok = getDraft(d.sql, "pattern:H4:asc:forming:4098:4072:instagram");
+  assert.equal(ok.status, "pending");
+  assert.ok(ok.guardian.pass, JSON.stringify(ok.guardian));
+  const m = /^https:\/\/cta\.cryptophys\.work\/media\/([0-9a-f]{32})\.jpg$/.exec(ok.image_url);
+  assert.ok(m, ok.image_url);
+  const failed = getDraft(d.sql, "pattern:H4:bad:forming:4098:4072:instagram");
+  assert.equal(failed.status, "needs_image", "a failed card leaves its draft waiting");
+  assert.equal(draftEvents(d.sql, failed.id)[0].action, "render_failed");
+  // A card is tried three times by the schedule; then only the studio's "render now" (retry) tries it again.
+  await renderImages(e, { launch: () => ({}), render }); await renderImages(e, { launch: () => ({}), render });
+  assert.equal(rendered, 4);
+  assert.deepEqual(await renderImages(e, { launch: () => ({}), render }), { waiting: 0, rendered: [] });
+  assert.equal((await renderImages(e, { launch: () => ({}), render, retry: true })).waiting, 1);
+
+  // Before approval: not public; the studio sees it.
+  assert.equal((await handle(req(`/media/${m[1]}.jpg`), e, opts)).status, 404);
+  assert.equal((await handle(req(`/api/studio/media?id=${m[1]}`), e, opts)).status, 403);
+  const studio = await handle(req(`/api/studio/media?id=${m[1]}`, { token: await jwt({ email: "owner@example.com", sub: "u1" }) }), e, opts);
+  assert.equal(studio.status, 200);
+  assert.equal(studio.headers.get("content-type"), "image/jpeg");
+  assert.equal(studio.headers.get("cache-control"), "private, no-store");
+  // Approved (with levels: an analysis draft is not blocked for its price levels): public.
+  const approved = decideDraft(d.sql, { id: ok.id, decision: "approve", actor: "owner@example.com" });
+  assert.equal(approved.status, "approved", JSON.stringify(approved.guardian));
+  const pub = await handle(req(`/media/${m[1]}.jpg`), e, opts);
+  assert.equal(pub.status, 200);
+  assert.deepEqual([...new Uint8Array(await pub.arrayBuffer())].slice(0, 2), [0xff, 0xd8]);
+  assert.equal((await handle(req(`/media/${"0".repeat(32)}.jpg`), e, opts)).status, 404);
+});
+
+test("the studio's render-now: a person only, same origin", async () => {
+  resetKeyCacheForTests();
+  const { env: e } = env();
+  const person = await jwt({ email: "owner@example.com", sub: "u1" });
+  const service = await jwt({ common_name: "svc.access", sub: "" });
+  assert.equal((await handle(req("/api/studio/render-now", { token: service, method: "POST", body: {} }), e, opts)).status, 403);
+  assert.equal((await handle(req("/api/studio/render-now", { token: person, method: "POST", body: {}, origin: "https://evil.example" }), e, opts)).status, 403);
+  const r = await handle(req("/api/studio/render-now", { token: person, method: "POST", body: {} }), e, { ...opts, launch: null });
+  assert.deepEqual(await r.json(), { status: "no_browser" });
 });

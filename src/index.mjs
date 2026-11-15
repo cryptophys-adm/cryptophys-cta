@@ -14,8 +14,9 @@
 // by the guardian; every draft waits for a person; publishing only while CONTENT_PUBLISH is "on".
 // Kernel: the OrganismDna and CtaHealth entrypoints serve the platform's census and drift checks.
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
-import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts } from "./desk.mjs";
-import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, ANALYSIS_CRON } from "./app.mjs";
+import puppeteer from "@cloudflare/puppeteer";
+import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft } from "./desk.mjs";
+import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, ANALYSIS_CRON } from "./app.mjs";
 import ORGANISM from "../organism.json" with { type: "json" };
 
 /** The queue: one Durable Object (SQLite storage), named "desk". */
@@ -32,6 +33,10 @@ export class ContentDesk extends DurableObject {
   async idsWithPrefix(prefix) { return draftIdsWithPrefix(this.sql, prefix); }
   async kindCounts(kind, sinceIso) { return kindCountsSince(this.sql, kind, sinceIso); }
   async archive(limit) { return publishedPosts(this.sql, { limit }); }
+  async needingImage(limit, retry) { return draftsNeedingImage(this.sql, { limit, retry }); }
+  async attachImage(input, now) { return attachImage(this.sql, input, { now }); }
+  async media(id) { return mediaOf(this.sql, id); }
+  async note(input, now) { return noteDraft(this.sql, input, { now }); }
 }
 /** The platform's census: this organ's DNA (agents, AI tasks), read through the Forge (EXT_ORGANISM_CTA). */
 export class OrganismDna extends WorkerEntrypoint {
@@ -45,17 +50,28 @@ export class CtaHealth extends WorkerEntrypoint {
   }
 }
 
+/** Browser Run (BROWSER): one browser per render run, for the Instagram cards (src/render.mjs). */
+const launcher = (env) => (env.BROWSER ? () => puppeteer.launch(env.BROWSER) : null);
+
 export default {
-  fetch(request, env) { return handle(request, env); },
+  fetch(request, env) { return handle(request, env, { launch: launcher(env) }); },
   async scheduled(event, env) {
     const fail = (e) => ({ status: "error", message: String(e?.message ?? e).slice(0, 200) });
     if (event?.cron === ANALYSIS_CRON) {
       const drafted = await draftAnalysis(env, { now: event.scheduledTime || Date.now() }).catch(fail);
       if (drafted?.added?.length || drafted?.status === "error") console.log("cta_analysis_drafts", JSON.stringify(drafted));
+      await cards(env, fail);
       return;
     }
     console.log("cta_recap_drafts", JSON.stringify(await draftDay(env).catch(fail)));
+    await cards(env, fail);
     const tokens = await refreshTokens(env).catch(fail);
     if (tokens?.status !== "publishing_off") console.log("cta_tokens", JSON.stringify(tokens));
   }
 };
+
+/** The cards of the drafts waiting for one, right after drafting (the chart is read close to the analysis). */
+async function cards(env, fail) {
+  const r = await renderImages(env, { launch: launcher(env) }).catch(fail);
+  if (r?.waiting || r?.status === "error") console.log("cta_cards", JSON.stringify(r));
+}
