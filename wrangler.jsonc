@@ -1,0 +1,47 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cryptophys-cta",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-10-31",
+  // cta.cryptophys.work (owner 2026-11-14/15): the content studio (behind Cloudflare Access; the Worker verifies the
+  // JWT itself, fail closed) and the public CTA page. No workers.dev or preview URL.
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    { "pattern": "cta.cryptophys.work", "custom_domain": true }
+  ],
+  // The only data source: the xauusd AI Worker's PublicProjection (recaps after 24 hours; real-time analysis with
+  // key levels and patterns; never a decision, plan or account). Read-only RPC over a Service Binding.
+  "services": [
+    { "binding": "PROJECTION", "service": "xauusd-ai-trading-assistant", "entrypoint": "PublicProjection" }
+  ],
+  // The approval queue, the published archive and the refreshed tokens: one Durable Object with SQLite storage.
+  "durable_objects": {
+    "bindings": [
+      { "name": "CONTENT_DESK", "class_name": "ContentDesk" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["ContentDesk"] }
+  ],
+  // The recap Tuesday to Saturday at 22:17 UTC (05:17 WIB); the analysis every hour at :09 Monday to Friday, with the
+  // key-level map at 06:09 UTC (13:09 WIB).
+  "triggers": {
+    "crons": ["17 22 * * 2-6", "9 * * * 1-5"]
+  },
+  "vars": {
+    // Nothing is published while this is "off": an approved draft waits. Turning it on is an owner PR, after the
+    // lawyer's check of POJK 6/2026 and once the accounts' secrets are in.
+    "CONTENT_PUBLISH": "off",
+    "CONTENT_CHANNELS": "threads,instagram,x,telegram,youtube,tiktok",
+    "PUBLIC_DELAY_HOURS": "24",
+    "ACCESS_TEAM_DOMAIN": "cryptophys.cloudflareaccess.com"
+  },
+  // The public page and the studio page (no build step). run_worker_first: the JWT is checked before any studio asset.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "observability": { "enabled": true }
+}

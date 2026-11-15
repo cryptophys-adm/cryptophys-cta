@@ -1,0 +1,13 @@
+{
+  "name": "cryptophys-cta",
+  "private": true,
+  "type": "module",
+  "description": "Cryptophys CTA: the content studio and public CTA page at cta.cryptophys.work",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "check": "wrangler deploy --dry-run"
+  },
+  "devDependencies": {
+    "wrangler": "^4.45.0"
+  }
+}

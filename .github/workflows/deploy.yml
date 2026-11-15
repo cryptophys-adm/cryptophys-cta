@@ -1,0 +1,96 @@
+name: Deploy cryptophys-cta
+
+# Deploys cryptophys-cta (cta.cryptophys.work) on main, the only way it is deployed (never by hand).
+# The Worker verifies the Cloudflare Access JWT of the studio itself (fail closed): ACCESS_AUD is resolved here when
+# the token can read Access applications; otherwise the signature, issuer and expiry are still checked.
+# The channels' account secrets are set here from GitHub secrets the owner adds (never in chat, never by hand);
+# a missing one is skipped and the studio shows that channel as not connected.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-cta
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Require Cloudflare deploy credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then echo "::error::CLOUDFLARE_API_TOKEN is not configured in this repository's secrets."; exit 1; fi
+
+      - name: Tests
+        run: node --test test/*.test.mjs
+
+      - name: Resolve the Access audience (best effort)
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_ACCESS_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -uo pipefail
+          api() { curl --silent --show-error --proto '=https' --max-time 20 --retry 3 --header "Authorization: Bearer ${TOKEN}" "https://api.cloudflare.com/client/v4$1"; }
+          account="$(api /accounts | jq -r 'if .success then (.result | if length == 1 then .[0].id else empty end) else empty end' 2>/dev/null || true)"
+          aud=""
+          if [ -n "$account" ]; then
+            aud="$(api "/accounts/${account}/access/apps?per_page=1000" | jq -r '[.result[]? | select(.name == "cryptophys-cloud-platform")] | if length == 1 then .[0].aud else empty end' 2>/dev/null || true)"
+          fi
+          if [[ "$aud" =~ ^[0-9a-f]{64}$ ]]; then echo "ACCESS_AUD=${aud}" >> "$GITHUB_ENV"; echo "Access audience resolved: the Worker checks it."; else echo "::warning::The Access audience could not be resolved; the Worker still verifies the JWT signature, issuer and expiry."; fi
+
+      - name: Validate the Worker bundle
+        run: npx --yes wrangler@4.45.0 deploy --dry-run
+
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${ACCESS_AUD:-}" ]; then npx --yes wrangler@4.45.0 deploy --var "ACCESS_AUD:${ACCESS_AUD}"; else npx --yes wrangler@4.45.0 deploy; fi
+
+      - name: Set the channel secrets the owner added (skips the missing ones)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+          THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          for name in THREADS_ACCESS_TOKEN THREADS_USER_ID INSTAGRAM_ACCESS_TOKEN INSTAGRAM_USER_ID X_ACCESS_TOKEN TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID; do
+            value="${!name:-}"
+            if [ -z "$value" ]; then echo "$name: not set in GitHub secrets, skipped"; continue; fi
+            printf '%s' "$value" | npx --yes wrangler@4.45.0 secret put "$name" >/dev/null
+            echo "$name: set"
+          done
+
+      - name: Smoke test
+        run: |
+          set -uo pipefail
+          ok=""
+          for i in $(seq 1 18); do
+            body="$(curl --silent --max-time 20 https://cta.cryptophys.work/health || true)"
+            if jq -e '.ok == true and .service == "cryptophys-cta"' <<< "$body" >/dev/null 2>&1; then ok=1; break; fi
+            sleep 10
+          done
+          [ -n "$ok" ] || { echo "::error::cta.cryptophys.work/health did not answer"; exit 1; }
+          echo "health: $body"
+          code="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 20 https://cta.cryptophys.work/api/studio/drafts)"
+          case "$code" in
+            403|302) echo "studio without sign-in: HTTP $code (refused or sent to Access login, as it must be)";;
+            *) echo "::error::the studio answered HTTP $code without sign-in"; exit 1;;
+          esac
+          curl --silent --fail --max-time 20 https://cta.cryptophys.work/api/public/profile | jq -e '.brand.id == "xauusd-ai-cta"' >/dev/null || { echo "::error::public profile missing"; exit 1; }
