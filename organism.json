@@ -99,7 +99,8 @@
       "PUBLIC_DELAY_HOURS",
       "ACCESS_TEAM_DOMAIN",
       "ACCESS_AUD",
-      "PUBLIC_ORIGIN"
+      "PUBLIC_ORIGIN",
+      "CONTENT_INSIGHTS"
     ],
     "secrets_kept": [
       "THREADS_ACCESS_TOKEN",

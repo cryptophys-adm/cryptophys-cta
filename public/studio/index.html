@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -18,24 +18,32 @@
 </header>
 <main class="wrap">
   <section>
-    <h2>Kanal</h2>
+    <h2>Channels</h2>
     <div class="ch" id="channels"></div>
   </section>
   <section>
     <div class="row">
-      <h2>Antrean konten</h2>
+      <h2>Performance</h2>
+      <span class="grow"></span>
+      <button class="act" id="insightsnow" type="button" title="Read each recent post's metrics from the platforms now">Read metrics now</button>
+    </div>
+    <div class="ch" id="perf"><div class="empty">Loading…</div></div>
+  </section>
+  <section>
+    <div class="row">
+      <h2>Content queue</h2>
     </div>
     <div class="row">
       <div class="tabs" id="tabs"></div>
       <span class="grow"></span>
-      <button class="act" id="draftnow" type="button">Buat draf sekarang</button>
-      <button class="act" id="rendernow" type="button" title="Kartu Instagram: chart TradingView + panel Cryptophys">Buat gambar sekarang</button>
+      <button class="act" id="draftnow" type="button">Draft now</button>
+      <button class="act" id="rendernow" type="button" title="Cards and videos: TradingView chart + our overlay + Cryptophys panel">Render media now</button>
     </div>
     <div class="err" id="err"></div>
-    <div id="queue"><div class="empty">Memuat…</div></div>
+    <div id="queue"><div class="empty">Loading…</div></div>
   </section>
 </main>
-<footer>Cryptophys CTA · setiap draf menunggu persetujuan · publikasi berjalan hanya bila diaktifkan owner</footer>
+<footer>Cryptophys CTA · every draft waits for approval · publishing runs only when the owner turns it on</footer>
 <script src="/studio/studio.js"></script>
 </body>
 </html>

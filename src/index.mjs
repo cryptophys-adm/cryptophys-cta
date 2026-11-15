@@ -15,8 +15,8 @@
 // Kernel: the OrganismDna and CtaHealth entrypoints serve the platform's census and drift checks.
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import puppeteer from "@cloudflare/puppeteer";
-import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft } from "./desk.mjs";
-import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, ANALYSIS_CRON } from "./app.mjs";
+import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics } from "./desk.mjs";
+import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, collectInsights, ANALYSIS_CRON } from "./app.mjs";
 import ORGANISM from "../organism.json" with { type: "json" };
 
 /** The queue: one Durable Object (SQLite storage), named "desk". */
@@ -37,6 +37,8 @@ export class ContentDesk extends DurableObject {
   async attachImage(input, now) { return attachImage(this.sql, input, { now }); }
   async media(id) { return mediaOf(this.sql, id); }
   async note(input, now) { return noteDraft(this.sql, input, { now }); }
+  async publishedSince(sinceIso, limit) { return publishedSince(this.sql, sinceIso, { limit }); }
+  async saveMetrics(input, now) { return saveMetrics(this.sql, input, { now }); }
 }
 /** The platform's census: this organ's DNA (agents, AI tasks), read through the Forge (EXT_ORGANISM_CTA). */
 export class OrganismDna extends WorkerEntrypoint {
@@ -67,6 +69,8 @@ export default {
     await cards(env, fail);
     const tokens = await refreshTokens(env).catch(fail);
     if (tokens?.status !== "publishing_off") console.log("cta_tokens", JSON.stringify(tokens));
+    // Once a day: the metrics of the last two weeks' posts (only while publishing is on: before, there are none).
+    if (publishOn(env)) console.log("cta_insights", JSON.stringify(await collectInsights(env).catch(fail)));
   }
 };
 

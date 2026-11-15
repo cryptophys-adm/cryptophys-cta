@@ -5,9 +5,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { handle, accountOf, publishDraft, SECRETS, channelsOf, renderImages } from "../src/app.mjs";
+import { handle, accountOf, publishDraft, SECRETS, channelsOf, renderImages, collectInsights } from "../src/app.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
-import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft } from "../src/desk.mjs";
+import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics } from "../src/desk.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
 
@@ -39,7 +39,8 @@ function deskStub() {
     counts: async () => deskCounts(sql), token: async (c) => storedToken(sql, c), saveToken: async (c, t, now) => { storeToken(sql, c, t, { now }); return true; },
     idsWithPrefix: async (p) => draftIdsWithPrefix(sql, p), kindCounts: async (k, s) => kindCountsSince(sql, k, s), archive: async (n) => publishedPosts(sql, { limit: n }),
     needingImage: async (n, retry) => draftsNeedingImage(sql, { limit: n, retry }), attachImage: async (i, now) => attachImage(sql, i, { now }),
-    media: async (id) => mediaOf(sql, id), note: async (i, now) => noteDraft(sql, i, { now })
+    media: async (id) => mediaOf(sql, id), note: async (i, now) => noteDraft(sql, i, { now }),
+    publishedSince: async (s, n) => publishedSince(sql, s, { limit: n }), saveMetrics: async (i, now) => saveMetrics(sql, i, { now })
   };
   return { sql, api, ns: { idFromName: () => "desk", get: () => api } };
 }
@@ -265,4 +266,34 @@ test("video drafts: rendered as a WebM after their card, served as video only on
   assert.equal(res.headers.get("content-type"), "video/webm");
   assert.equal(new Uint8Array(await res.arrayBuffer()).length, webm.length, "the chunks come back whole");
   assert.equal((await handle(req(`/media/${id}.jpg`), e, opts)).status, 404, "a video is never served as an image");
+});
+
+
+test("the performance report: metrics read for the last two weeks' posts, shown to the studio; a person asks for a read now", async () => {
+  resetKeyCacheForTests();
+  const { d, env: e } = env({ THREADS_ACCESS_TOKEN: "T", THREADS_USER_ID: "U", TELEGRAM_BOT_TOKEN: "B", TELEGRAM_CHAT_ID: "@c", CONTENT_INSIGHTS: "threads" });
+  const at = Date.now();
+  addDrafts(d.sql, [
+    { id: "p1", channel: "threads", kind: "pattern", text: "Education only. Not financial advice.", status: "pending" },
+    { id: "p2", channel: "telegram", kind: "pattern", text: "Education only. Not financial advice.", status: "pending" },
+    { id: "p3", channel: "threads", kind: "pattern", text: "Education only. Not financial advice.", status: "pending" }
+  ], { now: at - 40 * 86_400_000 });
+  for (const id of ["p1", "p2", "p3"]) decideDraft(d.sql, { id, decision: "approve", actor: "owner" }, { now: at - 30 * 86_400_000 });
+  recordPublish(d.sql, { id: "p1", remoteId: "th1" }, { now: at - 86_400_000 });
+  recordPublish(d.sql, { id: "p2", remoteId: "tg1" }, { now: at - 86_400_000 });
+  recordPublish(d.sql, { id: "p3", remoteId: "th-old" }, { now: at - 20 * 86_400_000 });
+  const fetcher = async (url) => { assert.match(String(url), /\/th1\/insights/); return new Response(JSON.stringify({ data: [{ name: "views", values: [{ value: 640 }] }, { name: "likes", values: [{ value: 12 }] }] })); };
+  const r = await collectInsights(e, { now: at, fetcher });
+  assert.deepEqual([r.posts, r.read, r.skipped, r.failed], [2, 1, { telegram: "not_read" }, []], "the old post is past the window; Telegram has no metrics");
+  const person = await jwt({ email: "owner@example.com", sub: "u1" });
+  const perf = await (await handle(req("/api/studio/performance", { token: person }), e, opts)).json();
+  assert.deepEqual([perf.channels.threads.views, perf.channels.threads.likes, perf.channels.telegram.posts], [640, 12, 1]);
+  assert.equal(perf.posts.find((p) => p.id === "p1").metrics.views, 640);
+  assert.equal((await handle(req("/api/studio/performance"), e, opts)).status, 403);
+  const drafts = await (await handle(req("/api/studio/drafts?status=published", { token: person }), e, opts)).json();
+  assert.equal(drafts.drafts.find((x) => x.id === "p1").metrics.likes, 12, "the queue shows each post's metrics");
+  const service = await jwt({ common_name: "svc.access", sub: "" });
+  assert.equal((await handle(req("/api/studio/insights-now", { token: service, method: "POST", body: {} }), e, opts)).status, 403);
+  const now2 = await (await handle(req("/api/studio/insights-now", { token: person, method: "POST", body: {} }), e, { ...opts, fetchImpl: fetcher })).json();
+  assert.equal(now2.read, 1);
 });
