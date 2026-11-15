@@ -3,7 +3,7 @@
   const el = (id) => document.getElementById(id);
   const text = (node, value) => { node.textContent = value; return node; };
   const make = (tag, cls, value) => { const n = document.createElement(tag); if (cls) n.className = cls; if (value != null) n.textContent = value; return n; };
-  const when = (iso) => (iso ? new Date(iso).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : "");
+  const when = (iso) => (iso ? new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }) + " UTC" : "");
   fetch("/api/public/profile").then((r) => r.json()).then((p) => {
     if (p?.brand) {
       text(el("name"), p.brand.name);
@@ -13,7 +13,7 @@
     }
     const links = el("links");
     for (const l of p?.links ?? []) {
-      const a = make("a", "btn" + (l.channel === "threads" ? " primary" : ""), `Ikuti di ${l.label}`);
+      const a = make("a", "btn" + (l.channel === "threads" ? " primary" : ""), `Follow on ${l.label}`);
       a.href = l.url; a.rel = "noopener"; a.target = "_blank";
       links.appendChild(a);
     }

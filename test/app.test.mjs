@@ -66,7 +66,7 @@ test("the public face: health, the brand's profile and links, the empty archive,
   assert.deepEqual(await (await handle(req("/health"), e, opts)).json(), { ok: true, service: "cryptophys-cta", publish: "off" });
   const p = await (await handle(req("/api/public/profile"), e, opts)).json();
   assert.equal(p.brand.id, "xauusd-ai-cta");
-  assert.match(p.brand.disclaimer, /bukan ajakan jual atau beli/);
+  assert.match(p.brand.disclaimer, /not an invitation to buy or sell and not financial advice/);
   assert.deepEqual(p.links, [{ channel: "threads", label: "Threads", url: "https://www.threads.net/@xauusd-ai-cta" }]);
   assert.deepEqual(await (await handle(req("/api/public/archive"), e, opts)).json(), { posts: [] });
   const page = await handle(req("/"), e, opts);
@@ -117,13 +117,13 @@ test("publishing on: an approved Telegram draft goes out with the channel's secr
   assert.deepEqual(await accountOf(e, "telegram"), { bot_token: "123:SECRET", chat_id: "@xauusd_ai_cta", refreshed_at: null });
   assert.equal(await accountOf(e, "threads"), null);
   assert.equal(await accountOf(e, "youtube"), null);
-  addDrafts(d.sql, [{ id: "t1", channel: "telegram", kind: "daily_recap", text: "Edukasi. Bukan ajakan jual atau beli.", status: "pending" }, { id: "y1", channel: "youtube", kind: "daily_recap", text: "Edukasi. Bukan ajakan jual atau beli.", status: "pending" }]);
+  addDrafts(d.sql, [{ id: "t1", channel: "telegram", kind: "daily_recap", text: "Education only. Not financial advice.", status: "pending" }, { id: "y1", channel: "youtube", kind: "daily_recap", text: "Education only. Not financial advice.", status: "pending" }]);
   for (const id of ["t1", "y1"]) decideDraft(d.sql, { id, decision: "approve", actor: "owner" });
   const calls = [];
   const fetcher = async (url, init) => { calls.push({ url, body: JSON.parse(init.body) }); return Response.json({ ok: true, result: { message_id: 77 } }); };
   const r = await publishDraft(e, getDraft(d.sql, "t1"), { fetcher });
   assert.equal(r.status, "published");
-  assert.deepEqual(calls[0].body, { chat_id: "@xauusd_ai_cta", text: "Edukasi. Bukan ajakan jual atau beli.", disable_web_page_preview: true });
+  assert.deepEqual(calls[0].body, { chat_id: "@xauusd_ai_cta", text: "Education only. Not financial advice.", disable_web_page_preview: true });
   assert.equal(getDraft(d.sql, "t1").remote_id, "77");
   assert.deepEqual(await publishDraft(e, getDraft(d.sql, "y1"), { fetcher }), { status: "approved", held: "publisher_not_built" });
   assert.deepEqual(await (await handle(req("/api/public/archive"), e, opts)).json().then((a) => a.posts.map((p) => p.id)), ["t1"], "the archive shows what was published");
@@ -191,7 +191,7 @@ test("the native deploy block in organism.json equals wrangler.jsonc, and the or
 test("Instagram cards: rendered for drafts that need one, then served publicly only once the draft is approved", async () => {
   resetKeyCacheForTests();
   const { d, env: e } = env({ PUBLIC_ORIGIN: "https://cta.cryptophys.work" });
-  const text = "Edukasi · Pola terbentuk · XAUUSD H4\nAscending Triangle\n\nGaris atas 4098.20 · garis bawah 4071.60\n\nChart oleh TradingView.\nAnalisa edukasi dari sistem Cryptophys, bukan ajakan jual atau beli dan bukan saran investasi.\n#XAUUSD";
+  const text = "Education · Pattern forming · XAUUSD H4\nAscending Triangle\n\nUpper line 4098.20 · lower line 4071.60\n\nChart by TradingView.\nEducational analysis from the Cryptophys system. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD";
   addDrafts(d.sql, [
     { id: "pattern:H4:asc:forming:4098:4072:instagram", kind: "pattern", channel: "instagram", text, status: "needs_image" },
     { id: "pattern:H4:bad:forming:4098:4072:instagram", kind: "pattern", channel: "instagram", text: text + "\nx", status: "needs_image" }

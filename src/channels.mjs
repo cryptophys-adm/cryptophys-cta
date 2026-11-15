@@ -13,12 +13,12 @@ export const CHANNEL_SPECS = Object.freeze({
 export const CHANNELS = Object.freeze(Object.keys(CHANNEL_SPECS));
 export const TEXT_LIMITS = Object.freeze(Object.fromEntries(Object.entries(CHANNEL_SPECS).map(([k, v]) => [k, v.text_limit])));
 export const HASHTAGS = Object.freeze({
-  threads: "#XAUUSD #emas #edukasi",
-  instagram: "#XAUUSD #emas #gold #edukasi #analisisteknikal",
+  threads: "#XAUUSD #gold #education",
+  instagram: "#XAUUSD #gold #goldprice #technicalanalysis #education",
   x: "#XAUUSD #gold",
-  telegram: "#XAUUSD #emas",
-  youtube: "#XAUUSD #emas #shorts #edukasi",
-  tiktok: "#XAUUSD #emas #edukasi #trading"
+  telegram: "#XAUUSD #gold",
+  youtube: "#XAUUSD #gold #shorts #education",
+  tiktok: "#XAUUSD #gold #education #trading"
 });
 
 /** The status a new draft starts in, once the guardian passed: what the channel still needs. */

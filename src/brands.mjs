@@ -5,17 +5,18 @@ export const BRANDS = Object.freeze({
   "xauusd-ai-cta": Object.freeze({
     id: "xauusd-ai-cta",
     name: "XAUUSD AI · Cryptophys",
-    tagline: "Analisa emas (XAUUSD) dari sistem AI Cryptophys: level kunci, pola chart, dan rekap harian. Edukasi, bukan ajakan transaksi.",
+    // All public content is in English (owner 2026-11-15: "Semua content in english").
+    tagline: "Gold (XAUUSD) analysis from the Cryptophys AI system: key levels, chart patterns and the daily recap. Education, not an invitation to trade.",
     // The analysis source: the xauusd AI Worker's PublicProjection (recaps after 24 hours; real-time analysis).
     source: "xauusd",
     // Public handles (not secrets). The numeric ids and tokens are Worker secrets.
     handles: Object.freeze({ threads: "xauusd-ai-cta" }),
-    capacity: "edukasi",
-    disclaimer: "Konten ini adalah edukasi dan analisa dari sistem Cryptophys, bukan ajakan jual atau beli dan bukan saran investasi. Keputusan dan risiko transaksi sepenuhnya milik Anda.",
-    chart_attribution: "Chart oleh TradingView",
+    capacity: "education",
+    disclaimer: "This content is education and analysis from the Cryptophys system. It is not an invitation to buy or sell and not financial advice. Trading decisions and their risks are entirely your own.",
+    chart_attribution: "Chart by TradingView",
     // The symbol of TradingView's own chart widget on the Instagram card (TradingView draws it from its own data).
     chart_symbol: "OANDA:XAUUSD",
-    card_disclaimer: "Edukasi dan analisa, bukan ajakan jual atau beli dan bukan saran investasi."
+    card_disclaimer: "Education and analysis. Not an invitation to buy or sell, and not financial advice."
   })
 });
 export const DEFAULT_BRAND = "xauusd-ai-cta";
