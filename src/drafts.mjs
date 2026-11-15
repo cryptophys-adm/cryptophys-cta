@@ -74,7 +74,7 @@ export function dailyRecapText(summary, { channel = "threads", dayIso }) {
   if (summary.confirmed_patterns?.length) lines.push(`Confirmed patterns: ${summary.confirmed_patterns.join(", ")}.`);
   const decided = summary.directional_hits + summary.directional_misses;
   if (decided) lines.push(`Of ${decided} directional reads scored one hour later, ${summary.directional_hits} matched the move and ${summary.directional_misses} did not.`);
-  lines.push("", ...(channel === "instagram" ? [CHART_CREDIT] : []), DISCLAIMER, HASHTAGS[channel] ?? HASHTAGS.threads);
+  lines.push("", ...(["instagram", "youtube", "tiktok"].includes(channel) ? [CHART_CREDIT] : []), DISCLAIMER, HASHTAGS[channel] ?? HASHTAGS.threads);
   const max = TEXT_LIMITS[channel] ?? 500;
   // Too long: drop the optional lines one at a time (the session, then the patterns, then the scored reads),
   // so the disclaimer is never cut.

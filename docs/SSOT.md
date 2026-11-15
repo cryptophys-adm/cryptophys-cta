@@ -35,6 +35,63 @@ Bindings:
   - Rendered right after each drafting run (about 7–8 seconds a card, at most 3 a run, 3 tries per draft), kept in
     the Desk (`media`, base64); the draft then waits for a person. `@cloudflare/puppeteer` is the one runtime
     dependency (`nodejs_compat`).
+  - The video (YouTube Shorts, TikTok; `src/video.mjs`): the same card, then a 9:16 1080 × 1920 recording of
+    `VIDEO_SECONDS` (14 s): the brand, the card slowly closing in with the draft's own lines appearing one by one,
+    and an end card with "Chart by TradingView", the disclaimer and cta.cryptophys.work. Drawn on a canvas and
+    recorded by the browser's MediaRecorder (WebM VP9/VP8, about 30 fps, about 4 MB); the recorder writes no duration,
+    so `src/webm.mjs` adds it to the Segment Info. About 22 seconds of browser time a video. A video is larger than
+    a Desk row may be, so it is kept in `media_chunks` (1 MB of base64 each).
+
+Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (drift checks).
+
+## 2. Routes
+
+| Route | Who | What |
+|---|---|---|
+| `GET /health` | anyone | `{ ok, service, publish }` |
+| `GET /`, `GET /api/public/profile`, `GET /api/public/archive` | anyone | the brand, its links, the disclaimer, published posts |
+| `GET /media/<id>.jpg`, `GET /media/<id>.webm` | anyone, only once the draft is approved or published | the Instagram card (Instagram fetches it at publishing), the video; 404 before, and a video is never served as `.jpg` |
+| `GET /studio` | Access JWT | the studio page |
+| `GET /api/studio/whoami`, `status`, `drafts`, `draft`, `preview` | Access JWT (person or service token) | read the queue; `preview` is a dry run with tokens redacted |
+| `POST /api/studio/decide` | a person, same origin, JSON | approve or reject (a reason is required to reject); an approval publishes at once only while `CONTENT_PUBLISH` is "on" |
+| `POST /api/studio/draft-now` | a person, same origin, JSON | runs the drafting now |
+| `GET /api/studio/media?id=` | Access JWT | a card or video at any status (the studio's preview) |
+| `POST /api/studio/render-now` | a person, same origin, JSON | renders the waiting cards and videos now |
+
+The Worker verifies the Access JWT itself (team `cryptophys.cloudflareaccess.com`; audience `ACCESS_AUD`, a plain var in
+`wrangler.jsonc`: the tag of the platform's Access application, not a secret). For the edge to ask for sign-in, the platform's `provision-access.yml` covers
+`cta.cryptophys.work/studio*` and `cta.cryptophys.work/api/studio/*` as public paths of its Access application; the
+rest of the host stays public.
+
+## 3. Schedule (UTC)
+
+| Cron | What |
+|---|---|
+| `9 * * * 1-5` | pattern posts (confirmed on H1/H4/D1, forming on H4/D1; once each; at most four a day per channel); at 06:09 the key-level map |
+| `17 22 * * 2-6` | the recap of the trading day that ended 24 hours earlier; token refresh (only while publishing is on: Threads and Instagram long-lived tokens, TikTok's rotating refresh token) |
+
+## 4. Channels
+
+| Channel | Media | Publisher | Secrets |
+|---|---|---|---|
+| Threads (`xauusd-ai-cta`) | text | built | `THREADS_ACCESS_TOKEN`, `THREADS_USER_ID` |
+| Instagram | image: the card (TradingView chart + our overlay + Cryptophys panel), rendered by Browser Run; the caption names TradingView | built | `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_USER_ID` |
+| X | text, 280 characters (short recap) | built (billed per post by X) | `X_ACCESS_TOKEN` |
+| Telegram channel | text | built (Bot API; the bot is a channel admin) | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
+| YouTube Shorts | video (WebM, 9:16, 14 s) from the card; the description names TradingView | built: resumable upload, public asked; private until Google verifies the API project | `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN` |
+| TikTok | the same video | built: Direct Post, FILE_UPLOAD in one chunk, the most public privacy the creator allows; private (SELF_ONLY) until TikTok audits the app | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REFRESH_TOKEN` (TikTok rotates it; the Desk keeps the newest) |
+
+Meta's endpoint shapes follow the published guides (Meta's own pages were unreachable from the build session).
+YouTube's resumable upload and TikTok's Direct Post and media transfer follow their guides, read on 2026-11-15; the
+two token refreshes (Google's token endpoint, TikTok's `/v2/oauth/token/`) follow the standard flows. One dry run and
+one real post on a test account per channel confirm them before `CONTENT_PUBLISH` is turned on. Daily quotas are read
+from Meta's limit endpoints at run time.
+
+## 5. Kernel and platform
+
+External organ, `organism.json` (`cta-organism.v1`): one portal organ `cryptophys-cta`, agents `cta-editor` and
+`cta-guardian` (tier 1, `signals.observe` and `reports.publish`, no seat), no AI task. Platform-side, still to be done
+in `cryptophys-cloud-platform` (its own PRs and consensus):
 - an `EXTERNAL_ORIGINS` entry `{ origin: "cta", schema: "cta-organism.v1", binding: "EXT_ORGANISM_CTA", services: ["cryptophys-cta"] }`
   and the Forge binding `EXT_ORGANISM_CTA` → `cryptophys-cta` `OrganismDna`;
 - the drift binding `EXT_CRYPTOPHYS_CTA` → `cryptophys-cta` `CtaHealth`;

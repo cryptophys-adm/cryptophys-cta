@@ -125,7 +125,7 @@ test("publishing on: an approved Telegram draft goes out with the channel's secr
   assert.equal(r.status, "published");
   assert.deepEqual(calls[0].body, { chat_id: "@xauusd_ai_cta", text: "Education only. Not financial advice.", disable_web_page_preview: true });
   assert.equal(getDraft(d.sql, "t1").remote_id, "77");
-  assert.deepEqual(await publishDraft(e, getDraft(d.sql, "y1"), { fetcher }), { status: "approved", held: "publisher_not_built" });
+  assert.deepEqual(await publishDraft(e, getDraft(d.sql, "y1"), { fetcher }), { status: "approved", held: "account_not_configured" }, "YouTube is built; without its OAuth app it waits");
   assert.deepEqual(await (await handle(req("/api/public/archive"), e, opts)).json().then((a) => a.posts.map((p) => p.id)), ["t1"], "the archive shows what was published");
 });
 
@@ -139,9 +139,10 @@ test("X and Telegram publishers: the token only in the header (X), a dry run sho
   for (const p of [publishX({ account: { access_token: "XSECRET" }, text: "x", dryRun: true }), publishTelegram({ account: { bot_token: "TSECRET", chat_id: "@c" }, text: "x", dryRun: true })]) assert.ok(!JSON.stringify(await p).includes("SECRET"));
   await assert.rejects(publishX({ account: {}, text: "x", fetcher: fx }), /not configured/);
   await assert.rejects(publishTelegram({ account: { bot_token: "t" }, text: "x", fetcher: fx }), /not configured/);
-  await assert.rejects(publishTo("tiktok", { draft: { text: "x" } }), /not built yet/);
+  await assert.rejects(publishTo("tiktok", { draft: { text: "x" }, media: async () => ({ bytes: new Uint8Array(10), mime: "video/webm" }) }), /tiktok account not configured/);
+  await assert.rejects(publishTo("myspace", { draft: { text: "x" } }), /not built yet/);
   assert.deepEqual(Object.keys(SECRETS), CHANNELS);
-  assert.deepEqual(CHANNELS.filter((c) => CHANNEL_SPECS[c].publisher === "built"), ["threads", "instagram", "x", "telegram"]);
+  assert.deepEqual(CHANNELS.filter((c) => CHANNEL_SPECS[c].publisher === "built"), ["threads", "instagram", "x", "telegram", "youtube", "tiktok"]);
   assert.deepEqual(channelsOf({ CONTENT_CHANNELS: "threads, bogus, x" }), ["threads", "x"]);
 });
 
@@ -242,4 +243,26 @@ test("the studio's render-now: a person only, same origin", async () => {
   assert.equal((await handle(req("/api/studio/render-now", { token: person, method: "POST", body: {}, origin: "https://evil.example" }), e, opts)).status, 403);
   const r = await handle(req("/api/studio/render-now", { token: person, method: "POST", body: {} }), e, { ...opts, launch: null });
   assert.deepEqual(await r.json(), { status: "no_browser" });
+});
+
+test("video drafts: rendered as a WebM after their card, served as video only once approved, never as a .jpg", async () => {
+  resetKeyCacheForTests();
+  const { d, env: e } = env({ PUBLIC_ORIGIN: "https://cta.cryptophys.work" });
+  const text = "Education · Pattern forming · XAUUSD H4\nAscending Triangle\n\nChart by TradingView.\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD";
+  addDrafts(d.sql, [{ id: "pattern:H4:asc:forming:4098:4072:youtube", kind: "pattern", channel: "youtube", text, status: "needs_video" }], { now: Date.now() - 1000 });
+  const webm = new Uint8Array(1_200_000); webm.set([0x1a, 0x45, 0xdf, 0xa3]);
+  const calls = [];
+  const r = await renderImages(e, { launch: () => ({}), render: async () => { calls.push("card"); return new Uint8Array(1); }, renderMovie: async () => { calls.push("video"); return { bytes: webm, mime: "video/webm" }; } });
+  assert.deepEqual(calls, ["video"], "a video channel renders the video (which makes its own card)");
+  assert.equal(r.rendered[0].status, "pending");
+  const draft = getDraft(d.sql, "pattern:H4:asc:forming:4098:4072:youtube");
+  const id = /\/media\/([0-9a-f]{32})\.webm$/.exec(draft.image_url)?.[1];
+  assert.ok(id, draft.image_url);
+  assert.equal((await handle(req(`/media/${id}.webm`), e, opts)).status, 404, "not before approval");
+  decideDraft(d.sql, { id: draft.id, decision: "approve", actor: "owner@example.com" });
+  const res = await handle(req(`/media/${id}.webm`), e, opts);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("content-type"), "video/webm");
+  assert.equal(new Uint8Array(await res.arrayBuffer()).length, webm.length, "the chunks come back whole");
+  assert.equal((await handle(req(`/media/${id}.jpg`), e, opts)).status, 404, "a video is never served as an image");
 });

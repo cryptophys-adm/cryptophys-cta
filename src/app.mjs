@@ -3,10 +3,10 @@
 import { dailyDrafts } from "./drafts.mjs";
 import { analysisDrafts } from "./analysis-drafts.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "./channels.mjs";
-import { publishTo, publishingQuota, refreshToken, REFRESH_AFTER_DAYS } from "./publishers.mjs";
+import { publishTo, publishingQuota, refreshToken, tiktokAccessToken, REFRESH_AFTER_DAYS } from "./publishers.mjs";
 import { verifyAccessJwt } from "./access.mjs";
 import { brandOf, profileLinks, DEFAULT_BRAND } from "./brands.mjs";
-import { renderCard, toBase64, fromBase64 } from "./render.mjs";
+import { renderCard, renderVideo, toBase64, fromBase64 } from "./render.mjs";
 import { DISCLAIMER } from "./drafts.mjs";
 import { ANALYSIS_DISCLAIMER } from "./analysis-drafts.mjs";
 
@@ -14,7 +14,7 @@ export const RECAP_CRON = "17 22 * * 2-6";
 export const ANALYSIS_CRON = "9 * * * 1-5";
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" };
 export const SECURITY_HEADERS = Object.freeze({
-  "content-security-policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; connect-src 'self'; font-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+  "content-security-policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; media-src 'self'; connect-src 'self'; font-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
   "x-content-type-options": "nosniff",
   "referrer-policy": "strict-origin-when-cross-origin",
   "x-frame-options": "DENY",
@@ -31,8 +31,9 @@ export const SECRETS = Object.freeze({
   instagram: { access_token: "INSTAGRAM_ACCESS_TOKEN", user_id: "INSTAGRAM_USER_ID" },
   x: { access_token: "X_ACCESS_TOKEN" },
   telegram: { bot_token: "TELEGRAM_BOT_TOKEN", chat_id: "TELEGRAM_CHAT_ID" },
-  youtube: {},
-  tiktok: {}
+  // OAuth apps the owner creates; the refresh tokens seed the desk, which keeps TikTok's rotated ones.
+  youtube: { client_id: "YOUTUBE_CLIENT_ID", client_secret: "YOUTUBE_CLIENT_SECRET", refresh_token: "YOUTUBE_REFRESH_TOKEN" },
+  tiktok: { client_key: "TIKTOK_CLIENT_KEY", client_secret: "TIKTOK_CLIENT_SECRET", refresh_token: "TIKTOK_REFRESH_TOKEN" }
 });
 
 export const desk = (env) => env.CONTENT_DESK.get(env.CONTENT_DESK.idFromName("desk"));
@@ -44,6 +45,8 @@ export async function accountOf(env, channel, { stored = null } = {}) {
   if (!keys.length) return null;
   const account = Object.fromEntries(keys.map((k) => [k, env?.[names[k]] || null]));
   if (stored?.access_token && "access_token" in account) account.access_token = stored.access_token;
+  // TikTok rotates its refresh token: the one the desk stored last wins over the secret that seeded it.
+  if (stored?.refresh_token && "refresh_token" in account) account.refresh_token = stored.refresh_token;
   return keys.every((k) => account[k]) ? { ...account, refreshed_at: stored?.refreshed_at ?? null } : null;
 }
 
@@ -55,11 +58,20 @@ export async function publishDraft(env, draft, { now = Date.now(), fetcher } = {
   const account = await accountOf(env, draft.channel, { stored: await desk(env).token(draft.channel).catch(() => null) });
   if (!account) return { status: "approved", held: "account_not_configured" };
   try {
-    const r = await publishTo(draft.channel, { account, draft, fetcher });
+    const r = await publishTo(draft.channel, { account, draft, fetcher, media: () => mediaBytes(env, draft),
+      saveToken: (token) => desk(env).saveToken(draft.channel, token, now) });
     return desk(env).published({ id: draft.id, remoteId: r.remote_id }, now);
   } catch (error) {
     return desk(env).published({ id: draft.id, error: String(error?.message ?? error) }, now);
   }
+}
+
+/** A draft's own media from the desk ({ bytes, mime }), for the video publishers (they upload the bytes). */
+export async function mediaBytes(env, draft) {
+  const id = /\/media\/([0-9a-f]{32})\.(?:jpg|webm)$/.exec(String(draft?.image_url ?? ""))?.[1];
+  const m = id ? await desk(env).media(id) : null;
+  if (!m) throw new Error("the draft has no media");
+  return { bytes: fromBase64(m.data), mime: m.content_type };
 }
 
 /** The daily recap drafts (decisions older than 24 hours), queued once. */
@@ -92,6 +104,17 @@ export async function refreshTokens(env, { now = Date.now() } = {}) {
     if (age < REFRESH_AFTER_DAYS * 86_400_000) { out[channel] = "fresh"; continue; }
     try { await desk(env).saveToken(channel, await refreshToken({ channel, token: account.access_token }), now); out[channel] = "refreshed"; }
     catch (e) { out[channel] = `failed: ${String(e?.message ?? e).slice(0, 120)}`; }
+  }
+  // TikTok's refresh token lives 180 days and rotates on use: refreshed here too when no post used it lately.
+  if (channelsOf(env).includes("tiktok")) {
+    const account = await accountOf(env, "tiktok", { stored: await desk(env).token("tiktok").catch(() => null) });
+    const age = account?.refreshed_at ? now - Date.parse(account.refreshed_at) : Infinity;
+    if (!account) out.tiktok = "not_configured";
+    else if (age < REFRESH_AFTER_DAYS * 86_400_000) out.tiktok = "fresh";
+    else {
+      try { await desk(env).saveToken("tiktok", await tiktokAccessToken({ account, fetcher: (...a) => fetch(...a) }), now); out.tiktok = "refreshed"; }
+      catch (e) { out.tiktok = `failed: ${String(e?.message ?? e).slice(0, 120)}`; }
+    }
   }
   return out;
 }
@@ -134,7 +157,7 @@ const isStudio = (path) => path === "/studio" || path.startsWith("/studio/") || 
 const STUDIO_ROUTES = ["/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
 /** The public origin of the cards Instagram fetches (GET /media/<id>.jpg). */
 export const originOf = (env) => String(env?.PUBLIC_ORIGIN || "https://cta.cryptophys.work").replace(/\/+$/, "");
-const MEDIA_PATH = /^\/media\/([0-9a-f]{32})\.jpg$/;
+const MEDIA_PATH = /^\/media\/([0-9a-f]{32})\.(jpg|webm)$/;
 const randomHex = (n) => [...crypto.getRandomValues(new Uint8Array(n))].map((b) => b.toString(16).padStart(2, "0")).join("");
 
 /**
@@ -142,7 +165,7 @@ const randomHex = (n) => [...crypto.getRandomValues(new Uint8Array(n))].map((b) 
  * draft then waits for a person. A card that fails (the chart did not load, the text does not fit) leaves its
  * draft waiting, with the reason in its history. `launch` opens a browser (Browser Run over BROWSER).
  */
-export async function renderImages(env, { now = Date.now(), launch, limit = 3, retry = false, render = renderCard } = {}) {
+export async function renderImages(env, { now = Date.now(), launch, limit = 3, retry = false, render = renderCard, renderMovie = renderVideo } = {}) {
   if (typeof launch !== "function") return { status: "no_browser" };
   const d = desk(env);
   const waiting = await d.needingImage(limit, retry);
@@ -150,9 +173,13 @@ export async function renderImages(env, { now = Date.now(), launch, limit = 3, r
   const out = [];
   for (const draft of waiting) {
     try {
-      const bytes = await render(draft, brand, { launch, disclaimers: [DISCLAIMER, ANALYSIS_DISCLAIMER] });
+      const disclaimers = [DISCLAIMER, ANALYSIS_DISCLAIMER];
+      // A video channel (YouTube, TikTok): the card, then the 9:16 video made from it; otherwise the card.
+      const video = draft.status === "needs_video" ? await renderMovie(draft, brand, { launch, disclaimers }) : null;
+      const bytes = video ? video.bytes : await render(draft, brand, { launch, disclaimers });
       const mediaId = randomHex(16);
-      const r = await d.attachImage({ id: draft.id, mediaId, data: toBase64(bytes), bytes: bytes.length, imageUrl: `${originOf(env)}/media/${mediaId}.jpg`, delayHours: delayOf(env) }, now);
+      const r = await d.attachImage({ id: draft.id, mediaId, data: toBase64(bytes), bytes: bytes.length, contentType: video ? video.mime : "image/jpeg",
+        imageUrl: `${originOf(env)}/media/${mediaId}.${video ? "webm" : "jpg"}`, delayHours: delayOf(env) }, now);
       out.push({ id: draft.id, status: r.ok ? r.status : "error", ...(r.ok ? {} : { error: r.error }) });
     } catch (error) {
       const reason = String(error?.message ?? error).slice(0, 200);
@@ -182,6 +209,7 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
   if (media) {
     const m = await desk(env).media(media[1]).catch(() => null);
     if (!m || (m.draft_status !== "approved" && m.draft_status !== "published")) return json({ error: "not_found" }, 404);
+    if ((media[2] === "webm") !== (m.content_type === "video/webm")) return json({ error: "not_found" }, 404);
     return image(m, "public, max-age=86400");
   }
   if (route === "GET /api/public/archive") {
@@ -206,7 +234,7 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
           if (!d) return { ok: false, error: "no such draft" };
           if (CHANNEL_SPECS[d.channel]?.publisher !== "built") return { ok: true, id: d.id, channel: d.channel, dry_run: true, requests: [], note: "publisher not built yet" };
           const account = { user_id: "<user>", access_token: "[token]", bot_token: "[token]", chat_id: "<channel>" };
-          return { ok: true, id: d.id, channel: d.channel, ...(await publishTo(d.channel, { account, draft: d, dryRun: true })) };
+          return { ok: true, id: d.id, channel: d.channel, ...(await publishTo(d.channel, { account, draft: d, dryRun: true, media: () => mediaBytes(env, d) })) };
         }, "preview_failed");
       }
       if (route === "POST /api/studio/decide") {

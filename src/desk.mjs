@@ -17,12 +17,17 @@ export const DESK_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, draft_id TEXT NOT NULL, action TEXT NOT NULL, actor TEXT NOT NULL, detail TEXT)`,
   `CREATE TABLE IF NOT EXISTS tokens (
-    channel TEXT PRIMARY KEY, access_token TEXT NOT NULL, refreshed_at TEXT NOT NULL, expires_at TEXT)`,
+    channel TEXT PRIMARY KEY, access_token TEXT NOT NULL, refreshed_at TEXT NOT NULL, expires_at TEXT, refresh_token TEXT)`,
   // The Instagram cards (src/card.mjs, src/render.mjs): one JPEG per draft, base64, served publicly only once its
   // draft is approved or published (GET /media/<id>.jpg), to the studio at any time.
   `CREATE TABLE IF NOT EXISTS media (
-    id TEXT PRIMARY KEY, draft_id TEXT NOT NULL, content_type TEXT NOT NULL, data TEXT NOT NULL, bytes INTEGER NOT NULL, created_at TEXT NOT NULL)`
+    id TEXT PRIMARY KEY, draft_id TEXT NOT NULL, content_type TEXT NOT NULL, data TEXT NOT NULL, bytes INTEGER NOT NULL, created_at TEXT NOT NULL)`,
+  // A video (YouTube, TikTok) is larger than a row may be (2 MB): its base64 is kept in chunks, `media.data` empty.
+  `CREATE TABLE IF NOT EXISTS media_chunks (
+    media_id TEXT NOT NULL, seq INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (media_id, seq))`
 ];
+/** A media chunk: 1 MB of base64 per row (a Durable Object's SQLite row holds up to 2 MB). */
+export const MEDIA_CHUNK = 1_000_000;
 export const STATUSES = Object.freeze(["pending", "needs_image", "needs_video", "blocked", "approved", "rejected", "published", "failed"]);
 
 const rows = (sql, q, ...b) => sql.exec(q, ...b).toArray();
@@ -124,12 +129,13 @@ export function deskCounts(sql) {
 /** A refreshed token kept by the desk (newer than the secret it started from), or null. */
 export function storedToken(sql, channel) {
   ensureDesk(sql);
-  return rows(sql, "SELECT access_token, refreshed_at, expires_at FROM tokens WHERE channel = ?", channel)[0] ?? null;
+  return rows(sql, "SELECT access_token, refreshed_at, expires_at, refresh_token FROM tokens WHERE channel = ?", channel)[0] ?? null;
 }
-export function storeToken(sql, channel, { access_token, expires_in = null }, { now = Date.now() } = {}) {
+/** Stores a refreshed token; a rotated refresh token (TikTok) replaces the stored one, which the secret only seeded. */
+export function storeToken(sql, channel, { access_token, expires_in = null, refresh_token = null }, { now = Date.now() } = {}) {
   ensureDesk(sql);
-  sql.exec("INSERT INTO tokens (channel, access_token, refreshed_at, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT(channel) DO UPDATE SET access_token = excluded.access_token, refreshed_at = excluded.refreshed_at, expires_at = excluded.expires_at",
-    channel, access_token, iso(now), expires_in ? iso(now + expires_in * 1000) : null);
+  sql.exec("INSERT INTO tokens (channel, access_token, refreshed_at, expires_at, refresh_token) VALUES (?, ?, ?, ?, ?) ON CONFLICT(channel) DO UPDATE SET access_token = excluded.access_token, refreshed_at = excluded.refreshed_at, expires_at = excluded.expires_at, refresh_token = COALESCE(excluded.refresh_token, tokens.refresh_token)",
+    channel, access_token, iso(now), expires_in ? iso(now + expires_in * 1000) : null, refresh_token);
 }
 
 /** The ids of drafts whose id starts with `prefix` (dedupe), and how many drafts of a kind each channel got since `sinceIso`. */
@@ -152,11 +158,14 @@ export function publishedPosts(sql, { limit = 30 } = {}) {
 
 /** A card is tried this many times; then its draft waits for a person (the studio's "render now" still retries). */
 export const MAX_RENDER_ATTEMPTS = 3;
-/** Drafts waiting for their card, oldest first; a draft whose card failed MAX_RENDER_ATTEMPTS times only on `retry`. */
+/**
+ * Drafts waiting for their media (a card, or a video), oldest first; a draft whose media failed MAX_RENDER_ATTEMPTS
+ * times only on `retry`.
+ */
 export function draftsNeedingImage(sql, { limit = 3, retry = false } = {}) {
   ensureDesk(sql);
   const n = Math.min(20, Math.max(1, Number(limit) || 3));
-  return rows(sql, `SELECT * FROM drafts d WHERE status = 'needs_image'${retry ? "" : " AND (SELECT COUNT(*) FROM events e WHERE e.draft_id = d.id AND e.action = 'render_failed') < ?"} ORDER BY created_at ASC LIMIT ?`, ...(retry ? [n] : [MAX_RENDER_ATTEMPTS, n])).map(shape);
+  return rows(sql, `SELECT * FROM drafts d WHERE status IN ('needs_image', 'needs_video')${retry ? "" : " AND (SELECT COUNT(*) FROM events e WHERE e.draft_id = d.id AND e.action = 'render_failed') < ?"} ORDER BY created_at ASC LIMIT ?`, ...(retry ? [n] : [MAX_RENDER_ATTEMPTS, n])).map(shape);
 }
 
 const MEDIA_ID = /^[0-9a-f]{32}$/;
@@ -168,10 +177,18 @@ export function attachImage(sql, { id, mediaId, data, bytes, imageUrl, contentTy
   ensureDesk(sql);
   const d = getDraft(sql, id);
   if (!d) return { ok: false, error: "no such draft" };
-  if (d.status !== "needs_image") return { ok: false, error: `the draft is ${d.status}, not needs_image` };
+  const video = contentType === "video/webm";
+  const want = video ? "needs_video" : "needs_image";
+  if (d.status !== want) return { ok: false, error: `the draft is ${d.status}, not ${want}` };
   if (!MEDIA_ID.test(String(mediaId ?? ""))) return { ok: false, error: "bad media id" };
-  if (typeof data !== "string" || !data || !/^https:\/\/[^/]+\/media\/[0-9a-f]{32}\.jpg$/.test(String(imageUrl ?? ""))) return { ok: false, error: "bad image" };
-  sql.exec("INSERT INTO media (id, draft_id, content_type, data, bytes, created_at) VALUES (?, ?, ?, ?, ?, ?)", mediaId, d.id, contentType, data, Number(bytes) || 0, iso(now));
+  const ext = video ? "webm" : "jpg";
+  if (typeof data !== "string" || !data || !new RegExp(`^https://[^/]+/media/[0-9a-f]{32}\\.${ext}$`).test(String(imageUrl ?? ""))) return { ok: false, error: `bad ${video ? "video" : "image"}` };
+  if (data.length <= MEDIA_CHUNK) {
+    sql.exec("INSERT INTO media (id, draft_id, content_type, data, bytes, created_at) VALUES (?, ?, ?, ?, ?, ?)", mediaId, d.id, contentType, data, Number(bytes) || 0, iso(now));
+  } else {
+    sql.exec("INSERT INTO media (id, draft_id, content_type, data, bytes, created_at) VALUES (?, ?, ?, '', ?, ?)", mediaId, d.id, contentType, Number(bytes) || 0, iso(now));
+    for (let i = 0, seq = 0; i < data.length; i += MEDIA_CHUNK, seq += 1) sql.exec("INSERT INTO media_chunks (media_id, seq, data) VALUES (?, ?, ?)", mediaId, seq, data.slice(i, i + MEDIA_CHUNK));
+  }
   const guardian = recheck({ ...d, image_url: imageUrl }, { delayHours, now });
   const status = guardian.pass ? "pending" : "blocked";
   sql.exec("UPDATE drafts SET image_url = ?, guardian = ?, status = ? WHERE id = ?", imageUrl, JSON.stringify(guardian), status, d.id);
@@ -183,7 +200,9 @@ export function attachImage(sql, { id, mediaId, data, bytes, imageUrl, contentTy
 export function mediaOf(sql, mediaId) {
   ensureDesk(sql);
   if (!MEDIA_ID.test(String(mediaId ?? ""))) return null;
-  return rows(sql, "SELECT m.content_type, m.data, m.bytes, m.draft_id, d.status AS draft_status FROM media m JOIN drafts d ON d.id = m.draft_id WHERE m.id = ?", mediaId)[0] ?? null;
+  const m = rows(sql, "SELECT m.content_type, m.data, m.bytes, m.draft_id, d.status AS draft_status FROM media m JOIN drafts d ON d.id = m.draft_id WHERE m.id = ?", mediaId)[0] ?? null;
+  if (m && !m.data) m.data = rows(sql, "SELECT data FROM media_chunks WHERE media_id = ? ORDER BY seq", mediaId).map((r) => r.data).join("");
+  return m;
 }
 
 /** An engine note on a draft (a failed render), in its event history. */

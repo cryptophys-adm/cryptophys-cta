@@ -27,8 +27,9 @@ const an = (chart) => `${/^[HM]/.test(String(chart)) ? "an" : "a"} ${chart}`;
 
 function finish(lines, channel) {
   // X: the short disclaimer, so the analysis keeps its lines within 280 characters.
-  // Instagram: the post is the card with TradingView's chart, so the caption names it (the guardian's attribution).
-  const tail = ["", ...(channel === "instagram" ? [CHART_CREDIT] : []), channel === "x" ? SHORT_DISCLAIMER : ANALYSIS_DISCLAIMER, ANALYSIS_HASHTAGS[channel] ?? ANALYSIS_HASHTAGS.threads];
+  // Instagram, YouTube, TikTok: the post is the card (or its video) with TradingView's chart, so the caption names it
+  // (the guardian's attribution).
+  const tail = ["", ...(["instagram", "youtube", "tiktok"].includes(channel) ? [CHART_CREDIT] : []), channel === "x" ? SHORT_DISCLAIMER : ANALYSIS_DISCLAIMER, ANALYSIS_HASHTAGS[channel] ?? ANALYSIS_HASHTAGS.threads];
   const max = TEXT_LIMITS[channel] ?? 500;
   // Too long: drop body lines from the end (never the title or the disclaimer).
   let body = [...lines];
@@ -122,7 +123,8 @@ export function overlayOf(analysis, { pattern = null, maxZones = 2 } = {}) {
   }
   return out;
 }
-const hasImage = (channel) => initialStatus(channel) === "needs_image";
+/** Channels whose post is media made from the card (Instagram: the card; YouTube and TikTok: the video). */
+const hasImage = (channel) => initialStatus(channel) === "needs_image" || initialStatus(channel) === "needs_video";
 /** A pattern's two lines as the xauusd analysis gives them ({ from, to, upper: [start, end], lower: [...] }), checked. */
 function linesOf(p) {
   const l = p?.lines;

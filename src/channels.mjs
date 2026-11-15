@@ -7,8 +7,8 @@ export const CHANNEL_SPECS = Object.freeze({
   instagram: Object.freeze({ name: "Instagram", text_limit: 2200, media: "image", publisher: "built", note: "Instagram Graph API, image post; needs a public JPEG URL." }),
   x: Object.freeze({ name: "X", text_limit: 280, media: "none", publisher: "built", note: "X API v2 POST /2/tweets with a user token; billed per post." }),
   telegram: Object.freeze({ name: "Telegram channel", text_limit: 4096, media: "none", publisher: "built", note: "Bot API sendMessage to the channel; the bot must be a channel admin." }),
-  youtube: Object.freeze({ name: "YouTube Shorts", text_limit: 5000, media: "video", publisher: "planned", note: "YouTube Data API upload; a short video from the chart card (later phase)." }),
-  tiktok: Object.freeze({ name: "TikTok", text_limit: 2200, media: "video", publisher: "planned", note: "TikTok Content Posting API; an unaudited app posts privately only (later phase)." })
+  youtube: Object.freeze({ name: "YouTube Shorts", text_limit: 5000, media: "video", publisher: "built", note: "YouTube Data API resumable upload of the 9:16 card video (WebM); private until the API project is verified by Google." }),
+  tiktok: Object.freeze({ name: "TikTok", text_limit: 2200, media: "video", publisher: "built", note: "TikTok Content Posting API, Direct Post with FILE_UPLOAD (one chunk); private (SELF_ONLY) until the app passes TikTok's audit." })
 });
 export const CHANNELS = Object.freeze(Object.keys(CHANNEL_SPECS));
 export const TEXT_LIMITS = Object.freeze(Object.fromEntries(Object.entries(CHANNEL_SPECS).map(([k, v]) => [k, v.text_limit])));
