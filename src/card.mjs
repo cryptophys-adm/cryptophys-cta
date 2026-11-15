@@ -177,6 +177,8 @@ const ZONE_STYLE = {
   at_price: { fill: "#d4af37", label: "Price is in this zone" }
 };
 const GOLD = "#d4af37";
+/** "Supply zone · sell area 3898.00–3902.40 · 4H Camarilla H4": the zone and its main metric's name. */
+const zoneLabel = (z) => `${ZONE_STYLE[z.role]?.label ?? "Zone"} ${f2(z.low)}–${f2(z.high)}${z.metric ? ` · ${z.metric}` : ""}`;
 /** A text label with a dark backing (SVG has no text background); placed later by layoutLabels. */
 function tag(x, y, text, { color = "#e6e9ef", anchor = "start", size = 19, weight = 600, alts = [] } = {}) {
   const w = Math.round(text.length * size * 0.56) + 16, h = size + 12;
@@ -204,7 +206,7 @@ const drawLabel = (l) => `<rect x="${l.x.toFixed(1)}" y="${l.y.toFixed(1)}" widt
 /** The words the overlay writes on the chart (checked by the guardian in the tests). */
 export function overlayLabels(overlay) {
   const out = [];
-  for (const z of overlay?.zones ?? []) out.push(`${ZONE_STYLE[z.role]?.label ?? "Zone"} ${f2(z.low)}–${f2(z.high)}`);
+  for (const z of overlay?.zones ?? []) out.push(zoneLabel(z));
   const p = overlay?.pattern;
   if (p) {
     out.push(`${p.name} · ${p.chart}`, `Upper line ${f2(p.upper)}`, `Lower line ${f2(p.lower)}`);
@@ -233,7 +235,7 @@ export function overlaySvg(overlay, geo, { frame = { x: 0, y: 0 } } = {}) {
     const st = ZONE_STYLE[z.role] ?? ZONE_STYLE.at_price;
     const top = Y(z.high), bottom = Y(z.low), h = Math.max(4, bottom - top);
     parts.push(`<rect x="${left.toFixed(1)}" y="${top.toFixed(1)}" width="${(right - left).toFixed(1)}" height="${h.toFixed(1)}" fill="${st.fill}" fill-opacity="0.2" stroke="${st.fill}" stroke-opacity="0.65" stroke-width="1.5"/>`);
-    parts.push(tag(left + 12, top + h / 2, `${st.label} ${f2(z.low)}–${f2(z.high)}`, { color: st.fill === GOLD ? GOLD : "#ffffff", size: 18, alts: [430] }));
+    parts.push(tag(left + 12, top + h / 2, zoneLabel(z), { color: st.fill === GOLD ? GOLD : "#ffffff", size: 18, alts: [430] }));
   }
   if (p) {
     const from = left + (now - left) * 0.42;

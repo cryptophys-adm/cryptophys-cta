@@ -145,10 +145,11 @@ test("the overlay data: the zones nearest the price and the pattern's own number
 });
 
 test("the overlay's words pass the guardian (levels allowed): zones as information, no signal word, no instruction", () => {
-  const o = overlayOf({ price: 3884.7, zones: [{ role: "supply", low: 3898, high: 3902.4 }, { role: "demand", low: 3861.1, high: 3866.8 }, { role: "at_price", low: 3880, high: 3886 }] }, { pattern: CONFIRMED });
+  const o = overlayOf({ price: 3884.7, zones: [{ role: "supply", low: 3898, high: 3902.4, metrics: ["4H Camarilla H4", "daily pivot"] }, { role: "demand", low: 3861.1, high: 3866.8 }, { role: "at_price", low: 3880, high: 3886 }] }, { pattern: CONFIRMED });
   const forming = overlayOf({ price: 3884.7, zones: [] }, { pattern: { ...CONFIRMED, status: "forming" } });
   const words = [...overlayLabels(o), ...overlayLabels(forming)].join("\n");
-  assert.match(words, /Supply zone · sell area 3898\.00–3902\.40/);
+  assert.match(words, /Supply zone · sell area 3898\.00–3902\.40 · 4H Camarilla H4\n/);
+  assert.match(words, /Demand zone · buy area 3861\.10–3866\.80\n/);
   assert.match(words, /Measured projection 3820\.40/);
   assert.match(words, /Close above 3905\.20 confirms up/);
   const g = checkContentDraft({ text: `Education. Not financial advice. Chart by TradingView.\n${words}`, chart: true, allowLevels: true });

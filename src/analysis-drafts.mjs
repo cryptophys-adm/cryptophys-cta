@@ -5,7 +5,7 @@
 //   - the key-level map, once a weekday at 06:09 UTC (13:09 WIB, before London): the demand zones ("buy area")
 //     and supply zones ("sell area") as information, the price when read, the structure per chart;
 //   - a pattern post when an H1, H4 or D1 pattern is confirmed (its breakout), or an H4 or D1 pattern is forming:
-//     its catalogue name and chapter, its lines, what undoes it, the measured projection as analysis.
+//     its name (no catalogue reference: owner 2026-11-15), its lines, what undoes it, the measured projection as analysis.
 // Never the system's decision, an entry, a stop, a take profit or BUY/SELL as a signal: the content guardian's
 // signal_words rule refuses them. Price levels are allowed here (allowLevels): they are the analysis itself.
 // Each draft also carries its `overlay`: the numbers the Instagram card draws on TradingView's chart (src/card.mjs).
@@ -13,7 +13,7 @@ import { checkContentDraft } from "./guardian.mjs";
 import { dateId, SHORT_DISCLAIMER, CHART_CREDIT } from "./drafts.mjs";
 import { CHANNELS, TEXT_LIMITS, initialStatus } from "./channels.mjs";
 
-export const ANALYSIS_DISCLAIMER = "Educational analysis from the Cryptophys system. Not an invitation to buy or sell, and not financial advice.";
+export const ANALYSIS_DISCLAIMER = "Educational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.";
 export { HASHTAGS as ANALYSIS_HASHTAGS } from "./channels.mjs";
 import { HASHTAGS as ANALYSIS_HASHTAGS } from "./channels.mjs";
 /** At most this many pattern drafts a day per channel (the queue stays readable; each still needs approval). */
@@ -39,8 +39,16 @@ function finish(lines, channel) {
   return text.length <= max ? text : null;
 }
 
-function zoneLine(z) {
-  const meta = [STRENGTH_ID[z.strength] ?? null, z.sources ? `${z.sources} sources` : null].filter(Boolean).join(", ");
+/**
+ * How many of a zone's metric names each channel shows (owner 2026-11-15: "tidak perlu dicantumkan sumber playbook,
+ * cukup nama metrics sumbernya"): the names, not a count; fewer where the text limit is short.
+ */
+export const METRICS_PER_ZONE = Object.freeze({ threads: 1, instagram: 3, x: 0, telegram: 3, youtube: 3, tiktok: 3 });
+/** "• 3898.00–3902.40 (strong: 4H Camarilla H4, daily pivot)". */
+export function zoneLine(z, { channel = "threads" } = {}) {
+  const names = (Array.isArray(z.metrics) ? z.metrics : []).filter((n) => typeof n === "string" && n.trim()).slice(0, METRICS_PER_ZONE[channel] ?? 2);
+  const strength = STRENGTH_ID[z.strength] ?? null;
+  const meta = strength && names.length ? `${strength}: ${names.join(", ")}` : strength ?? names.join(", ");
   return `• ${f2(z.low)}–${f2(z.high)}${meta ? ` (${meta})` : ""}`;
 }
 
@@ -52,28 +60,27 @@ export function keyLevelsText(analysis, { channel = "threads" } = {}) {
   if (!supply.length && !demand.length) return null;
   const lines = [`Education · XAUUSD key-level map · ${dateId(analysis.at)} ${hhmm(analysis.at)} UTC`];
   if (analysis.price != null) lines.push(`Price when read: ${f2(analysis.price)}`);
-  if (supply.length) lines.push("", "Supply zones (sell area):", ...supply.map(zoneLine));
+  const line = (z) => zoneLine(z, { channel });
+  if (supply.length) lines.push("", "Supply zones (sell area):", ...supply.map(line));
   const at = zones.find((z) => z.role === "at_price");
   if (at) lines.push("", `Price is inside the zone ${f2(at.low)}–${f2(at.high)}.`);
-  if (demand.length) lines.push("", "Demand zones (buy area):", ...demand.map(zoneLine));
+  if (demand.length) lines.push("", "Demand zones (buy area):", ...demand.map(line));
   const st = Object.entries(analysis.structure ?? {}).filter(([, s]) => s.trend).map(([c, s]) => `${c} ${TREND_ID[s.trend] ?? s.trend}${s.label ? ` (${s.label})` : ""}`);
   if (st.length) lines.push("", `Structure: ${st.join(" · ")}`);
-  lines.push("", "Zone = where key levels from several charts stack up (Cryptophys Key Level Agent).");
   return finish(lines, channel);
 }
 
 /** Pure: one pattern's text for one channel. */
 export function patternText(p, analysis, { channel = "threads" } = {}) {
-  const ref = p.chapter ? ` · Bulkowski catalogue ch. ${p.chapter}` : "";
   const lines = [];
   if (p.status === "forming") {
-    lines.push(`Education · Pattern forming · XAUUSD ${p.chart}`, `${p.name}${ref}`, "",
+    lines.push(`Education · Pattern forming · XAUUSD ${p.chart}`, `${p.name}`, "",
       `Upper line ${f2(p.upper)} · lower line ${f2(p.lower)}`,
       `The pattern confirms upward on ${an(p.chart)} close above ${f2(p.upper)}, or downward on a close below ${f2(p.lower)}.`);
   } else {
     const up = p.direction === "up";
     const line = up ? p.upper : p.lower, undo = up ? p.lower : p.upper;
-    lines.push(`Education · Pattern breakout · XAUUSD ${p.chart}`, `${p.name}${ref} · direction ${up ? "up" : p.direction === "down" ? "down" : "unclear"}`, "",
+    lines.push(`Education · Pattern breakout · XAUUSD ${p.chart}`, `${p.name} · direction ${up ? "up" : p.direction === "down" ? "down" : "unclear"}`, "",
       `Breakout line ${f2(line)}`,
       `The pattern fails if ${an(p.chart)} candle closes back ${up ? "below" : "above"} ${f2(undo)}.`);
     if (p.projection != null) lines.push(`Measured projection: ${f2(p.projection)} (analysis, not a trade objective).`);
@@ -94,7 +101,7 @@ function draft({ id, kind, channel, text, now, overlay = null }) {
 }
 
 const num = (x) => (Number.isFinite(Number(x)) ? Math.round(Number(x) * 100) / 100 : null);
-const zoneOf = (z) => ({ role: z.role, low: num(z.low), high: num(z.high), strength: z.strength ?? null });
+const zoneOf = (z) => ({ role: z.role, low: num(z.low), high: num(z.high), strength: z.strength ?? null, metric: Array.isArray(z.metrics) && typeof z.metrics[0] === "string" ? z.metrics[0].slice(0, 40) : null });
 /**
  * Pure: what the Instagram card draws on TradingView's chart (src/card.mjs). The same numbers as the text, never
  * more: the price when read, the zones nearest to it (at most two supply above and two demand below, and the zone the
