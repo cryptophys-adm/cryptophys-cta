@@ -175,5 +175,8 @@ test("the native deploy block in organism.json equals wrangler.jsonc, and the or
   assert.deepEqual(d.secrets_kept, Object.values(SECRETS).flatMap((s) => Object.values(s)));
   const src = readFileSync(new URL("../src/index.mjs", import.meta.url), "utf8");
   for (const e of [...d.entrypoints, ...d.durable_objects.map((o) => o.class_name)]) assert.match(src, new RegExp(`export class ${e}\\b`));
-  for (const v of Object.keys(d.deploy_time_vars)) assert.ok(!(v in (cfg.vars ?? {})), `${v} is set at deploy, not in vars`);
+  assert.equal(d.via, "forge");
+  assert.deepEqual(d.vars, Object.keys(cfg.vars), "every var is declared, and every non-secret value is a plain var");
+  assert.match(cfg.vars.ACCESS_AUD, /^[0-9a-f]{64}$/, "the Access audience is a plain var, not resolved at deploy");
+  assert.ok(d.secrets_kept.every((s) => !(s in cfg.vars)), "a secret is never a var");
 });

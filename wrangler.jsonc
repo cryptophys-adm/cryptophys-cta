@@ -35,7 +35,10 @@
     "CONTENT_PUBLISH": "off",
     "CONTENT_CHANNELS": "threads,instagram,x,telegram,youtube,tiktok",
     "PUBLIC_DELAY_HOURS": "24",
-    "ACCESS_TEAM_DOMAIN": "cryptophys.cloudflareaccess.com"
+    "ACCESS_TEAM_DOMAIN": "cryptophys.cloudflareaccess.com",
+    // The audience tag of the platform's Access application (the one that covers nexus., ai. and the studio paths
+    // here); read from its login redirect (kid). Not a secret. A plain var, so the deploy needs no Access read right.
+    "ACCESS_AUD": "33c6d911ba06a57f6dbe2fa3c1c62a5850dba526b4458fc92bad394136668965"
   },
   // The public page and the studio page (no build step). run_worker_first: the JWT is checked before any studio asset.
   "assets": {

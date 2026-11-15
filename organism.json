@@ -40,8 +40,9 @@
     }
   ],
   "deploy": {
-    "$comment": "What the platform's native deploy (Forge + Deployment Orchestrator, owner 2026-11-15: 'gunakan native deployment pakai forge') needs to deploy this organ. wrangler.jsonc is the source of truth; test/app.test.mjs keeps this block equal to it. The organ's own deploy_unit stays null: the census refuses an external organ that claims a platform unit.",
+    "$comment": "What the platform's native deploy (Forge + Deployment Orchestrator, owner 2026-11-15: 'gunakan native deployment pakai forge') needs to deploy this organ (ADR-0018 repository contract). Every non-secret value is a plain var in wrangler.jsonc. wrangler.jsonc is the source of truth; test/app.test.mjs keeps this block equal to it. The organ's own deploy_unit stays null: the census refuses an external organ that claims a platform unit.",
     "unit": "cryptophys-cta",
+    "via": "forge",
     "script": "cryptophys-cta",
     "config": "wrangler.jsonc",
     "entry": "src/index.mjs",
@@ -86,9 +87,13 @@
       "17 22 * * 2-6",
       "9 * * * 1-5"
     ],
-    "deploy_time_vars": {
-      "ACCESS_AUD": "the aud of the Cloudflare Access application named cryptophys-cloud-platform (64 hex); when it is missing the Worker still checks the JWT's signature, issuer and expiry"
-    },
+    "vars": [
+      "CONTENT_PUBLISH",
+      "CONTENT_CHANNELS",
+      "PUBLIC_DELAY_HOURS",
+      "ACCESS_TEAM_DOMAIN",
+      "ACCESS_AUD"
+    ],
     "secrets_kept": [
       "THREADS_ACCESS_TOKEN",
       "THREADS_USER_ID",

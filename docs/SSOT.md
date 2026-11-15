@@ -27,8 +27,8 @@ Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (dr
 | `POST /api/studio/decide` | a person, same origin, JSON | approve or reject (a reason is required to reject); an approval publishes at once only while `CONTENT_PUBLISH` is "on" |
 | `POST /api/studio/draft-now` | a person, same origin, JSON | runs the drafting now |
 
-The Worker verifies the Access JWT itself (team `cryptophys.cloudflareaccess.com`; audience when `ACCESS_AUD` is set
-at deploy, `organism.json` `deploy.deploy_time_vars`). For the edge to ask for sign-in, the platform's `provision-access.yml` covers
+The Worker verifies the Access JWT itself (team `cryptophys.cloudflareaccess.com`; audience `ACCESS_AUD`, a plain var in
+`wrangler.jsonc`: the tag of the platform's Access application, not a secret). For the edge to ask for sign-in, the platform's `provision-access.yml` covers
 `cta.cryptophys.work/studio*` and `cta.cryptophys.work/api/studio/*` as public paths of its Access application; the
 rest of the host stays public.
 
