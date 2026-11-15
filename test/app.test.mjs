@@ -158,3 +158,22 @@ test("the organ's DNA: one portal organ within the platform's external ceiling, 
   }
   assert.deepEqual(o.engines, [], "no model writes public text");
 });
+
+test("the native deploy block in organism.json equals wrangler.jsonc, and the organ claims no platform unit", () => {
+  const dna = JSON.parse(readFileSync(new URL("../organism.json", import.meta.url), "utf8"));
+  const cfg = JSON.parse(readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8").replace(/^\s*\/\/.*$/gm, ""));
+  const d = dna.deploy;
+  assert.equal(dna.organs[0].deploy_unit, null, "the census refuses an external organ that claims a platform deploy unit");
+  assert.deepEqual([d.unit, d.script, d.config, d.entry], [cfg.name, cfg.name, "wrangler.jsonc", cfg.main]);
+  assert.deepEqual(d.custom_domains, cfg.routes.filter((r) => r.custom_domain).map((r) => r.pattern));
+  assert.equal(d.workers_dev, cfg.workers_dev);
+  assert.deepEqual(d.assets, cfg.assets);
+  assert.deepEqual(d.durable_objects, cfg.durable_objects.bindings.map(({ name, class_name }) => ({ binding: name, class_name })));
+  assert.deepEqual(d.do_migrations, cfg.migrations);
+  assert.deepEqual(d.services, cfg.services);
+  assert.deepEqual(d.crons, cfg.triggers.crons);
+  assert.deepEqual(d.secrets_kept, Object.values(SECRETS).flatMap((s) => Object.values(s)));
+  const src = readFileSync(new URL("../src/index.mjs", import.meta.url), "utf8");
+  for (const e of [...d.entrypoints, ...d.durable_objects.map((o) => o.class_name)]) assert.match(src, new RegExp(`export class ${e}\\b`));
+  for (const v of Object.keys(d.deploy_time_vars)) assert.ok(!(v in (cfg.vars ?? {})), `${v} is set at deploy, not in vars`);
+});

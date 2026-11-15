@@ -4,9 +4,13 @@ cryptophys-cta is the Cryptophys content studio and public CTA page at `cta.cryp
 "aplikasi cta.cryptophys.work sesuai standar profesional expert digital marketing & content creator yang terhubung
 kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Topology and data flow: `docs/SSOT.md`.
 
-1. **Deploy only by merging a PR into `main`.** `deploy.yml` deploys the one Worker, `cryptophys-cta`. Never
-   `wrangler deploy`, `wrangler delete` or `wrangler secret put` by hand. Account tokens reach the Worker only as
-   GitHub secrets that `deploy.yml` sets; never paste a secret into a chat, an issue or a file.
+1. **Deploy only through the platform's native deploy (owner 2026-11-15: "gunakan native deployment pakai forge").**
+   A PR merged into `main` is picked up by the Forge (cryptophys-cloud-platform) and deployed by the Deployment
+   Orchestrator by consensus; `organism.json` `deploy` declares what it deploys, and `test/app.test.mjs` keeps that
+   block equal to `wrangler.jsonc`. This repository has no deploy workflow and holds no Cloudflare token (`test.yml`
+   runs the tests and a dry run only, with no secret). Never `wrangler deploy`, `wrangler delete` or
+   `wrangler secret put` by hand. Account tokens reach the Worker only as Worker secrets the owner sets through the
+   platform; the native deploy keeps them. Never paste a secret into a chat, an issue or a file.
 2. **Nothing is published without the owner.** `CONTENT_PUBLISH` stays "off" until the owner turns it on in a PR
    (after the lawyer's check of POJK 6/2026). Every draft waits in the studio for a person's approval; an approval
    runs the guardian again. A service token can read the studio, never decide.

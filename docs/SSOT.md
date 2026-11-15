@@ -4,7 +4,7 @@
 
 | Worker | Source | Deployed by | Role |
 |---|---|---|---|
-| `cryptophys-cta` | `src/`, `public/`, `wrangler.jsonc` | `.github/workflows/deploy.yml` (push to `main`) | `cta.cryptophys.work`: the public CTA page and the content studio; the content engine (drafts, guardian, queue, publishers). |
+| `cryptophys-cta` | `src/`, `public/`, `wrangler.jsonc` the platform's native deploy (Forge + Deployment Orchestrator, consensus `deploy_commit`; `organism.json` `deploy`) | `cta.cryptophys.work`: the public CTA page and the content studio; the content engine (drafts, guardian, queue, publishers). |
 
 Bindings:
 - `PROJECTION` → `xauusd-ai-trading-assistant` entrypoint `PublicProjection` (read-only RPC): `recaps({days})`
@@ -28,7 +28,7 @@ Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (dr
 | `POST /api/studio/draft-now` | a person, same origin, JSON | runs the drafting now |
 
 The Worker verifies the Access JWT itself (team `cryptophys.cloudflareaccess.com`; audience when `ACCESS_AUD` is set
-by the deploy workflow). For the edge to ask for sign-in, the platform's `provision-access.yml` covers
+at deploy, `organism.json` `deploy.deploy_time_vars`). For the edge to ask for sign-in, the platform's `provision-access.yml` covers
 `cta.cryptophys.work/studio*` and `cta.cryptophys.work/api/studio/*` as public paths of its Access application; the
 rest of the host stays public.
 
@@ -63,4 +63,9 @@ in `cryptophys-cloud-platform` (its own PRs and consensus):
   and the Forge binding `EXT_ORGANISM_CTA` → `cryptophys-cta` `OrganismDna`;
 - the drift binding `EXT_CRYPTOPHYS_CTA` → `cryptophys-cta` `CtaHealth`;
 - Access paths `cta.cryptophys.work/studio*` and `cta.cryptophys.work/api/studio/*` in `provision-access.yml`.
+- the native deploy of an external organ (owner 2026-11-15: "gunakan native deployment pakai forge"): the Forge
+  mirrors and checks this repository, and the Orchestrator does the first full script upload (the Durable Object
+  migration `v1`, the custom domain, the assets), then code and config versions, keeping the Worker secrets.
+  `organism.json` `deploy` is what it reads; the organ's own `deploy_unit` stays `null`, because the census refuses an
+  external organ that claims a platform unit. Until that path is live, `cryptophys-cta` is not deployed.
 Until the Forge registers the agents, the Worker does not bind the kernel (`AGENTS`).

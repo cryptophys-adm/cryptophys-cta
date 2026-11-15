@@ -10,12 +10,115 @@
       "deploy_unit": null,
       "access": false,
       "rollback": false,
-      "drift": { "via": "rpc", "binding": "EXT_CRYPTOPHYS_CTA" },
+      "drift": {
+        "via": "rpc",
+        "binding": "EXT_CRYPTOPHYS_CTA"
+      },
       "agents": [
-        { "id": "cta-editor", "display_name": "CTA Editor", "capabilities": ["signals.observe", "reports.publish"], "tier_max": 1, "voter": false },
-        { "id": "cta-guardian", "display_name": "CTA Content Guardian", "capabilities": ["signals.observe", "reports.publish"], "tier_max": 1, "voter": false }
+        {
+          "id": "cta-editor",
+          "display_name": "CTA Editor",
+          "capabilities": [
+            "signals.observe",
+            "reports.publish"
+          ],
+          "tier_max": 1,
+          "voter": false
+        },
+        {
+          "id": "cta-guardian",
+          "display_name": "CTA Content Guardian",
+          "capabilities": [
+            "signals.observe",
+            "reports.publish"
+          ],
+          "tier_max": 1,
+          "voter": false
+        }
       ],
       "engines": []
     }
-  ]
+  ],
+  "deploy": {
+    "$comment": "What the platform's native deploy (Forge + Deployment Orchestrator, owner 2026-11-15: 'gunakan native deployment pakai forge') needs to deploy this organ. wrangler.jsonc is the source of truth; test/app.test.mjs keeps this block equal to it. The organ's own deploy_unit stays null: the census refuses an external organ that claims a platform unit.",
+    "unit": "cryptophys-cta",
+    "script": "cryptophys-cta",
+    "config": "wrangler.jsonc",
+    "entry": "src/index.mjs",
+    "build": "none",
+    "tests": "node --test test/*.test.mjs",
+    "dry_run": "wrangler deploy --dry-run",
+    "custom_domains": [
+      "cta.cryptophys.work"
+    ],
+    "workers_dev": false,
+    "assets": {
+      "directory": "./public",
+      "binding": "ASSETS",
+      "run_worker_first": true
+    },
+    "durable_objects": [
+      {
+        "binding": "CONTENT_DESK",
+        "class_name": "ContentDesk"
+      }
+    ],
+    "do_migrations": [
+      {
+        "tag": "v1",
+        "new_sqlite_classes": [
+          "ContentDesk"
+        ]
+      }
+    ],
+    "services": [
+      {
+        "binding": "PROJECTION",
+        "service": "xauusd-ai-trading-assistant",
+        "entrypoint": "PublicProjection"
+      }
+    ],
+    "entrypoints": [
+      "OrganismDna",
+      "CtaHealth"
+    ],
+    "crons": [
+      "17 22 * * 2-6",
+      "9 * * * 1-5"
+    ],
+    "deploy_time_vars": {
+      "ACCESS_AUD": "the aud of the Cloudflare Access application named cryptophys-cloud-platform (64 hex); when it is missing the Worker still checks the JWT's signature, issuer and expiry"
+    },
+    "secrets_kept": [
+      "THREADS_ACCESS_TOKEN",
+      "THREADS_USER_ID",
+      "INSTAGRAM_ACCESS_TOKEN",
+      "INSTAGRAM_USER_ID",
+      "X_ACCESS_TOKEN",
+      "TELEGRAM_BOT_TOKEN",
+      "TELEGRAM_CHAT_ID"
+    ],
+    "health": {
+      "path": "/health",
+      "expect": {
+        "ok": true,
+        "service": "cryptophys-cta"
+      }
+    },
+    "smoke": [
+      {
+        "path": "/api/studio/drafts",
+        "expect_status": [
+          302,
+          403
+        ]
+      },
+      {
+        "path": "/api/public/profile",
+        "expect_status": [
+          200
+        ]
+      }
+    ]
+  }
 }
