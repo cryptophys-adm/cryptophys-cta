@@ -191,7 +191,7 @@ test("the native deploy block in organism.json equals wrangler.jsonc, and the or
 test("Instagram cards: rendered for drafts that need one, then served publicly only once the draft is approved", async () => {
   resetKeyCacheForTests();
   const { d, env: e } = env({ PUBLIC_ORIGIN: "https://cta.cryptophys.work" });
-  const text = "Education · Pattern forming · XAUUSD H4\nAscending Triangle\n\nUpper line 4098.20 · lower line 4071.60\n\nChart by TradingView.\nEducational analysis from the Cryptophys system. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD";
+  const text = "Education · Pattern forming · XAUUSD H4\nAscending Triangle\n\nUpper line 4098.20 · lower line 4071.60\n\nChart by TradingView.\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD";
   addDrafts(d.sql, [
     { id: "pattern:H4:asc:forming:4098:4072:instagram", kind: "pattern", channel: "instagram", text, status: "needs_image" },
     { id: "pattern:H4:bad:forming:4098:4072:instagram", kind: "pattern", channel: "instagram", text: text + "\nx", status: "needs_image" }

@@ -136,7 +136,7 @@ function publicAnalysis(kl, { structure = null, now = Date.now() } = {}) {
   const CH = { "60": "H1", "240": "H4", D: "D1" };
   return {
     at: new Date(now).toISOString(), price: kl.price,
-    zones: kl.candidates.map((z) => ({ role: ROLE[z.role], low: z.low, high: z.high, strength: z.strength, sources: z.sources })).sort((a, b) => b.high - a.high),
+    zones: kl.candidates.map((z) => ({ role: ROLE[z.role], low: z.low, high: z.high, strength: z.strength, sources: z.sources, metrics: z.metrics })).sort((a, b) => b.high - a.high),
     patterns: kl.patterns.filter((p) => CH[p.tf]).map((p) => ({ chart: CH[p.tf], pattern: p.id, name: NAMES[p.id]?.[0] ?? p.id, chapter: NAMES[p.id]?.[1] ?? null, status: p.status, direction: p.direction > 0 ? "up" : p.direction < 0 ? "down" : "undetermined", upper: p.upper, lower: p.lower, projection: p.status === "confirmed" ? p.target ?? null : null })),
     structure: structure ? { H4: structure.h4, H1: structure.h1, "15m": structure.m15 } : {}
   };
@@ -144,9 +144,9 @@ function publicAnalysis(kl, { structure = null, now = Date.now() } = {}) {
 const KEY_LEVELS = {
   price: 3887.6, atr_h1: 8.2,
   candidates: [
-    { role: "resistance", low: 3918.33, high: 3923.09, price: 3920, strength: "strong", sources: 5, label: "4H flag line", candidate: true },
-    { role: "resistance", low: 3898.09, high: 3901.12, price: 3900, strength: "moderate", sources: 3, label: "1H swing high", candidate: true },
-    { role: "support", low: 3864.14, high: 3867.8, price: 3866, strength: "strong", sources: 4, label: "4H Camarilla L4", candidate: true },
+    { role: "resistance", low: 3918.33, high: 3923.09, price: 3920, strength: "strong", sources: 5, label: "4H flag line", candidate: true, metrics: ["4H Camarilla H4", "weekly pivot", "4H Flag: upper breakout line"] },
+    { role: "resistance", low: 3898.09, high: 3901.12, price: 3900, strength: "moderate", sources: 3, label: "1H swing high", candidate: true, metrics: ["1H swing high", "round number"] },
+    { role: "support", low: 3864.14, high: 3867.8, price: 3866, strength: "strong", sources: 4, label: "4H Camarilla L4", candidate: true, metrics: ["4H Camarilla L4", "daily CPR bottom", "previous day low"] },
     { role: "support", low: 3846.49, high: 3850, price: 3848, strength: "weak", sources: 3, label: "daily low", candidate: true }
   ],
   patterns: [
@@ -164,14 +164,18 @@ test("the key-level map and the pattern posts pass the guardian with levels allo
   const a = publicAnalysis(KEY_LEVELS, { structure: STRUCTURE, now: AT });
   const map = keyLevelsText(a, { channel: "threads" });
   assert.match(map, /^Education · XAUUSD key-level map · Monday, 16 November 2026 06:09 UTC/);
-  assert.match(map, /Supply zones \(sell area\):\n• 3918\.33–3923\.09 \(strong, 5 sources\)\n• 3898\.09–3901\.12 \(moderate, 3 sources\)/);
-  assert.match(map, /Demand zones \(buy area\):\n• 3864\.14–3867\.80 \(strong, 4 sources\)/);
+  assert.match(map, /Supply zones \(sell area\):\n• 3918\.33–3923\.09 \(strong: 4H Camarilla H4\)\n• 3898\.09–3901\.12 \(moderate: 1H swing high\)/);
+  assert.doesNotMatch(map, /sources|Bulkowski|catalogue/);
+  assert.match(keyLevelsText(a, { channel: "instagram" }), /3918\.33–3923\.09 \(strong: 4H Camarilla H4, weekly pivot, 4H Flag: upper breakout line\)/);
+  assert.match(map, /Demand zones \(buy area\):\n• 3864\.14–3867\.80 \(strong: 4H Camarilla L4\)/);
+  assert.match(map, /• 3846\.49–3850\.00 \(weak\)/, "no metric names (an older analysis): the strength alone");
   assert.match(map, /Structure: H4 down \(LH\/LL\) · H1 down \(LH\/LL\) · 15m up \(HH\/HL\)/);
   assert.ok(map.length <= 500, `${map.length}`);
   assert.ok(!/\n\n\n/.test(map), "no double blank line where an optional line was dropped");
   const [forming, confirmed] = postablePatterns(a);
   const f = patternText(forming, a), c = patternText(confirmed, a);
-  assert.match(f, /Pattern forming · XAUUSD H4\nThree Falling Peaks · Bulkowski catalogue ch\. 45/);
+  assert.match(f, /Pattern forming · XAUUSD H4\nThree Falling Peaks\n/);
+  assert.doesNotMatch(f + c, /Bulkowski|catalogue|ch\. \d/);
   assert.match(f, /confirms upward on an H4 close above 3927\.20, or downward on a close below 3856\.70/);
   assert.match(c, /Pattern breakout · XAUUSD H4\nDescending Broadening Wedge .* direction up/);
   assert.match(c, /The pattern fails if an H4 candle closes back below 3719\.57/);
