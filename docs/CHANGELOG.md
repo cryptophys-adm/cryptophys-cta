@@ -1,0 +1,4 @@
+# Changelog
+
+## 2026-11-15
+- feat: cryptophys-cta, the content studio and public CTA page at cta.cryptophys.work (owner 2026-11-14: "aplikasi cta.cryptophys.work ... terhubung kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"; 2026-11-15: "pindah content queue ke cta, nexus hanya khusus war room"). The content engine moves here from xauusd-ai-trading-assistant's `xauusd-content` Worker (drafts, guardian, approval queue, Threads and Instagram publishers), with X and Telegram publishers added and YouTube/TikTok declared (video, later phase); the studio replaces the Nexus "Content queue" page; the public page shows the brand, its channels, the disclaimer and the published archive. The Worker verifies the Access JWT of the studio itself (fail closed). `organism.json` declares the organ for the platform census. Publishing stays off.

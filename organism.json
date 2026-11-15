@@ -1,0 +1,21 @@
+{
+  "$comment": "The CTA organ's DNA for the Cryptophys platform census (owner 2026-11-14: cryptophys-cta 'terhubung kernel'; ADR-0013 external organs). Served read-only by the OrganismDna RPC entrypoint (src/index.mjs) to the platform Forge over EXT_ORGANISM_CTA. External ceiling: tier 1, no council seat, signals.observe and reports.publish only. No AI task: no model writes public text here.",
+  "schema": "cta-organism.v1",
+  "organs": [
+    {
+      "$schema_version": 1,
+      "service": "cryptophys-cta",
+      "display_name": "Cryptophys CTA · content studio",
+      "kind": "portal",
+      "deploy_unit": null,
+      "access": false,
+      "rollback": false,
+      "drift": { "via": "rpc", "binding": "EXT_CRYPTOPHYS_CTA" },
+      "agents": [
+        { "id": "cta-editor", "display_name": "CTA Editor", "capabilities": ["signals.observe", "reports.publish"], "tier_max": 1, "voter": false },
+        { "id": "cta-guardian", "display_name": "CTA Content Guardian", "capabilities": ["signals.observe", "reports.publish"], "tier_max": 1, "voter": false }
+      ],
+      "engines": []
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+name: Test
+
+# Every pull request and every push to main: the tests and the Worker bundle (no deploy, no secret).
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Tests
+        run: node --test test/*.test.mjs
+      - name: Validate the Worker bundle
+        run: npx --yes wrangler@4.45.0 deploy --dry-run
