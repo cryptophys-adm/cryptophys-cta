@@ -116,7 +116,8 @@
       "YOUTUBE_REFRESH_TOKEN",
       "TIKTOK_CLIENT_KEY",
       "TIKTOK_CLIENT_SECRET",
-      "TIKTOK_REFRESH_TOKEN"
+      "TIKTOK_REFRESH_TOKEN",
+      "STUDIO_APPROVERS"
     ],
     "health": {
       "path": "/health",

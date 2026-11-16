@@ -57,7 +57,7 @@ Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (dr
 | `GET /studio` | Access JWT | the studio page; without a valid JWT the sign-in page (`/signin`, 403) |
 | `GET /`, `/archive`, `/about`, `/disclaimer` | none | the public pages (static; the archive and profile from `/api/public/*`) |
 | `GET /api/studio/whoami`, `status`, `drafts`, `draft`, `preview` | Access JWT (person or service token) | read the queue; `preview` is a dry run with tokens redacted |
-| `POST /api/studio/decide` | a person, same origin, JSON | approve or reject (a reason is required to reject); an approval publishes at once only while `CONTENT_PUBLISH` is "on" |
+| `POST /api/studio/decide` | an approver (a person, same origin, JSON) | approve or reject (a reason is required to reject); an approval publishes at once only while `CONTENT_PUBLISH` is "on" |
 | `POST /api/studio/draft-now` | a person, same origin, JSON | runs the drafting now |
 | `GET /api/studio/media?id=` | Access JWT | a card or video at any status (the studio's preview) |
 | `POST /api/studio/render-now` | a person, same origin, JSON | renders the waiting cards and videos now |
@@ -103,6 +103,13 @@ rest of the host stays public.
 | Telegram channel | text | built (Bot API; the bot is a channel admin) | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
 | YouTube Shorts | video (WebM, 9:16, 14 s) from the card; the description names TradingView | built: resumable upload, public asked; private until Google verifies the API project | `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN` |
 | TikTok | the same video | built: Direct Post, FILE_UPLOAD in one chunk, the most public privacy the creator allows; private (SELF_ONLY) until TikTok audits the app | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REFRESH_TOKEN` (TikTok rotates it; the Desk keeps the newest) |
+
+Team roles (owner 2026-11-16, pro marketing extras; `roleOf` in `src/app.mjs`). `STUDIO_APPROVERS` is a Worker secret
+set through the platform (comma-separated sign-in emails; never in the repository; `organism.json` `deploy.secrets_kept`).
+Unset: every signed-in person approves, as before. Set: a listed person is an approver; anyone else signed in is an
+editor, who writes, edits and copies drafts and manages links and hashtag sets, but never approves or rejects, and
+never changes channel settings (the schedule included) or the content-mix targets (`approver_only`, 403). A service
+token only reads. `GET /api/studio/whoami` gives the role; the history names who wrote and who approved.
 
 Growth (`src/growth.mjs`, the Performance page): A/B captions (Create's "Add variant B": a second text for a channel,
 checked the same way and never equal to A; both drafts wait for approval and are paired in `ab_tests`; the higher
