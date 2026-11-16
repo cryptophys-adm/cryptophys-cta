@@ -22,7 +22,7 @@ import ORGANISM from "../organism.json" with { type: "json" };
 /** The queue: one Durable Object (SQLite storage), named "desk". */
 export class ContentDesk extends DurableObject {
   get sql() { return this.ctx.storage.sql; }
-  async add(drafts, now) { return addDrafts(this.sql, drafts, { now }); }
+  async add(drafts, now, actor) { return addDrafts(this.sql, drafts, { now, ...(actor ? { actor } : {}) }); }
   async list(input) { return listDrafts(this.sql, input ?? {}); }
   async get(id) { const d = getDraft(this.sql, id); return d ? { ...d, events: draftEvents(this.sql, id) } : null; }
   async decide(input, now) { return decideDraft(this.sql, input, { now }); }

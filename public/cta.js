@@ -7,7 +7,7 @@
   const when = (iso) => (iso ? new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }) + " UTC" : "");
   const day = (iso) => (iso ? new Date(iso).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) : "");
   const initial = (s) => String(s || "?").trim().charAt(0).toUpperCase();
-  const KIND = { key_levels: "Key-level map", pattern: "Chart pattern", daily_recap: "Daily recap" };
+  const KIND = { key_levels: "Key-level map", pattern: "Chart pattern", daily_recap: "Daily recap", custom: "Post" };
   const label = {};
 
   const profile = fetch("/api/public/profile").then((r) => r.json()).then((p) => {

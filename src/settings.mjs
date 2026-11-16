@@ -149,3 +149,11 @@ export function wibDayStart(now = Date.now()) {
   const offset = 7 * 3_600_000;
   return new Date(Math.floor((now + offset) / 86_400_000) * 86_400_000 - offset).toISOString();
 }
+
+/** A text with the channel's hashtag line in place of the default one (unchanged if it does not end with it). */
+export function swapHashtags(text, channel, hashtags) {
+  const base = HASHTAGS[channel];
+  if (!text || !base || !hashtags || hashtags === base || !text.endsWith(base)) return text;
+  const out = (text.slice(0, text.length - base.length) + hashtags).trimEnd();
+  return out.length <= CHANNEL_SPECS[channel].text_limit ? out : text;
+}

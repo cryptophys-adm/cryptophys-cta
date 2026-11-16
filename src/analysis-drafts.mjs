@@ -94,7 +94,7 @@ export function patternText(p, analysis, { channel = "threads" } = {}) {
 export function postablePatterns(analysis) {
   return (analysis?.patterns ?? []).filter((p) => (p.status === "confirmed" && ["H1", "H4", "D1"].includes(p.chart)) || (p.status === "forming" && ["H4", "D1"].includes(p.chart)));
 }
-const patternKey = (p) => `${p.chart}:${p.pattern}:${p.status}:${Math.round(p.upper)}:${Math.round(p.lower)}`;
+export const patternKey = (p) => `${p.chart}:${p.pattern}:${p.status}:${Math.round(p.upper)}:${Math.round(p.lower)}`;
 
 function draft({ id, kind, channel, text, now, overlay = null }) {
   const guardian = checkContentDraft({ text, chart: false, decisionTimes: [], allowLevels: true, now });
@@ -124,7 +124,7 @@ export function overlayOf(analysis, { pattern = null, maxZones = 2 } = {}) {
   return out;
 }
 /** Channels whose post is media made from the card (Instagram: the card; YouTube and TikTok: the video). */
-const hasImage = (channel) => initialStatus(channel) === "needs_image" || initialStatus(channel) === "needs_video";
+export const hasImage = (channel) => initialStatus(channel) === "needs_image" || initialStatus(channel) === "needs_video";
 /** A pattern's two lines as the xauusd analysis gives them ({ from, to, upper: [start, end], lower: [...] }), checked. */
 function linesOf(p) {
   const l = p?.lines;

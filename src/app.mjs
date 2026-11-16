@@ -12,6 +12,7 @@ import { postInsights, performanceReport, insightChannelsOf, INSIGHTS_DAYS } fro
 import { ANALYSIS_DISCLAIMER } from "./analysis-drafts.mjs";
 import { effectiveSettings, normalizeSettings, draftingChannels, applySettings, wibDayStart, FORMATS, PLANNED_FORMATS, KINDS, KIND_NAMES, DAYS, TIMEZONE, MAX_PER_DAY, MAX_SLOTS } from "./settings.mjs";
 import { recheck } from "./desk.mjs";
+import { templateTexts, checkPost, composeDrafts, overlayFor, recapWindow, COMPOSE_KINDS, COMPOSE_KIND_NAMES } from "./compose.mjs";
 
 export const RECAP_CRON = "17 22 * * 2-6";
 export const ANALYSIS_CRON = "9 * * * 1-5";
@@ -191,6 +192,20 @@ export async function studioStatus(env) {
   return { publish: publishOn(env) ? "on" : "off", brand: { id: brand.id, name: brand.name, handles: brand.handles }, delay_hours: delayOf(env), channels, counts: await desk(env).counts() };
 }
 
+/**
+ * What a composed post needs from the projection: the recap window's decision times (the guardian's delay rule) for
+ * a recap, the analysis for a template's card (the same numbers as its text).
+ */
+async function composeContext(env, kind, { now, analysis = false }) {
+  if (kind === "daily_recap") {
+    const p = await env.PROJECTION.recaps({ days: 3 });
+    return { recaps: p?.recaps ?? [], decisionTimes: recapWindow(p?.recaps ?? [], now).summary?.decision_times ?? [] };
+  }
+  if (analysis && (kind === "key_levels" || kind === "pattern")) return { analysis: await env.PROJECTION.analysis(), decisionTimes: [] };
+  return { decisionTimes: [] };
+}
+const textOf = (v) => (typeof v === "string" ? v.slice(0, 6000) : "");
+
 /** Reads a same-origin JSON body from a person; returns { body } or { response }. */
 async function personJson(request, url, identity, maxBytes = 4096) {
   if (identity.type !== "user") return { response: json({ error: "forbidden", hint: "a person decides, never a service token" }, 403) };
@@ -210,7 +225,7 @@ async function rpc(fn, failure) {
 }
 
 const isStudio = (path) => path === "/studio" || path.startsWith("/studio/") || path.startsWith("/api/studio/");
-const STUDIO_ROUTES = ["/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
+const STUDIO_ROUTES = ["/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
 /** The public origin of the cards Instagram fetches (GET /media/<id>.jpg). */
 export const originOf = (env) => String(env?.PUBLIC_ORIGIN || "https://cta.cryptophys.work").replace(/\/+$/, "");
 const MEDIA_PATH = /^\/media\/([0-9a-f]{32})\.(jpg|webm)$/;
@@ -314,6 +329,46 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
           if (!out.ok || out.status !== "approved") return out;
           return { ...out, publish: await publishDraft(env, await desk(env).get(out.id), { now: at }) };
         }, "decide_failed");
+      }
+      // Create: a template filled with the current analysis (or a blank post), each channel's text checked by the
+      // guardian as it is typed, and the post sent to the queue (a person only; every channel must pass).
+      if (route === "GET /api/studio/templates") {
+        const kind = url.searchParams.get("kind") || "custom";
+        if (!COMPOSE_KINDS.includes(kind)) return json({ error: `kind must be one of ${COMPOSE_KINDS.join(", ")}` }, 400);
+        const channels = String(url.searchParams.get("channels") || "").split(",").filter((c) => channelsOf(env).includes(c));
+        return rpc(async () => {
+          const at = now ? now * 1000 : Date.now();
+          const ctx = await composeContext(env, kind, { now: at, analysis: true });
+          const { settings } = await channelSettings(env);
+          return { ...templateTexts(kind, { channels, settings, analysis: ctx.analysis, recaps: ctx.recaps, ref: url.searchParams.get("ref"), now: at }), kinds: COMPOSE_KINDS, kind_names: COMPOSE_KIND_NAMES };
+        }, "template_failed");
+      }
+      if (route === "POST /api/studio/check") {
+        const r = await personJson(request, url, identity, 16_000);
+        if (r.response) return r.response;
+        const kind = String(r.body.kind ?? ""), channel = String(r.body.channel ?? "");
+        return rpc(async () => {
+          const at = now ? now * 1000 : Date.now();
+          const ctx = COMPOSE_KINDS.includes(kind) ? await composeContext(env, kind, { now: at }) : { decisionTimes: [] };
+          const c = checkPost({ channel, kind, text: textOf(r.body.text), decisionTimes: ctx.decisionTimes, delayHours: delayOf(env), now: at });
+          return { channel: c.channel, length: c.length, limit: c.limit, guardian: c.guardian };
+        }, "check_failed");
+      }
+      if (route === "POST /api/studio/compose") {
+        const r = await personJson(request, url, identity, 48_000);
+        if (r.response) return r.response;
+        const kind = String(r.body.kind ?? "");
+        const ref = typeof r.body.ref === "string" ? r.body.ref.slice(0, 160) : null;
+        const posts = Array.isArray(r.body.posts) ? r.body.posts.map((p) => ({ channel: String(p?.channel ?? ""), text: textOf(p?.text) })) : null;
+        return rpc(async () => {
+          const at = now ? now * 1000 : Date.now();
+          const ctx = COMPOSE_KINDS.includes(kind) ? await composeContext(env, kind, { now: at, analysis: true }) : { decisionTimes: [] };
+          const made = composeDrafts({ kind, posts, allowed: channelsOf(env), decisionTimes: ctx.decisionTimes, delayHours: delayOf(env), now: at,
+            overlay: () => overlayFor(kind, ctx.analysis, ref), id: randomHex(4) });
+          if (!made.ok) return made;
+          const added = await desk(env).add(made.drafts, at, identity.subject);
+          return { ok: true, added, drafts: made.drafts.map((d) => ({ id: d.id, channel: d.channel, status: d.status })) };
+        }, "compose_failed");
       }
       // The Channels page: each channel's settings, what it can take, and who changed them last. Never a token.
       if (route === "GET /api/studio/settings") {
