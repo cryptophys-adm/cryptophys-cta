@@ -13,6 +13,7 @@ import { ANALYSIS_DISCLAIMER } from "./analysis-drafts.mjs";
 import { effectiveSettings, normalizeSettings, draftingChannels, applySettings, wibDayStart, FORMATS, PLANNED_FORMATS, KINDS, KIND_NAMES, DAYS, TIMEZONE, MAX_PER_DAY, MAX_SLOTS } from "./settings.mjs";
 import { recheck } from "./desk.mjs";
 import { dueSlots, nextSlots } from "./scheduler.mjs";
+import { bestTimes, abResult, evergreen, EVERGREEN_MIN_DAYS } from "./growth.mjs";
 import { linkHosts, normalizeLink, randomSlug, shortUrl, redirectTarget, GO_PATH, normalizeHashtagSet, MAX_SETS, normalizeMix, DEFAULT_MIX, MIX_KINDS, wibWeek, mixReport } from "./marketing.mjs";
 import { templateTexts, checkPost, composeDrafts, overlayFor, recapWindow, COMPOSE_KINDS, COMPOSE_KIND_NAMES } from "./compose.mjs";
 
@@ -275,7 +276,7 @@ async function rpc(fn, failure) {
 }
 
 const isStudio = (path) => path === "/studio" || path.startsWith("/studio/") || path.startsWith("/api/studio/");
-const STUDIO_ROUTES = ["/api/studio/links", "/api/studio/hashtag-sets", "/api/studio/mix", "/api/studio/schedule", "/api/studio/library", "/api/studio/edit", "/api/studio/duplicate", "/api/studio/calendar", "/api/studio/media-library", "/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
+const STUDIO_ROUTES = ["/api/studio/growth", "/api/studio/links", "/api/studio/hashtag-sets", "/api/studio/mix", "/api/studio/schedule", "/api/studio/library", "/api/studio/edit", "/api/studio/duplicate", "/api/studio/calendar", "/api/studio/media-library", "/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
 /** The public origin of the cards Instagram fetches (GET /media/<id>.jpg). */
 export const originOf = (env) => String(env?.PUBLIC_ORIGIN || "https://cta.cryptophys.work").replace(/\/+$/, "");
 const MEDIA_PATH = /^\/media\/([0-9a-f]{32})\.(jpg|webm)$/;
@@ -389,6 +390,17 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
           return { ...out, publish: await publishDraft(env, await desk(env).get(out.id), { now: at }) };
         }, "decide_failed");
       }
+      // Growth (src/growth.mjs): A/B results, best posting times per channel, evergreen suggestions.
+      if (route === "GET /api/studio/growth") {
+        return rpc(async () => {
+          const at = now ? now * 1000 : Date.now();
+          const d = desk(env);
+          const posts = await d.measuredPosts();
+          const copied = new Set(await d.copiedSince(new Date(at - EVERGREEN_MIN_DAYS * 86_400_000).toISOString()));
+          return { ab: (await d.abTests()).map((g) => ({ grp: g.grp, channel: g.channel, created_at: g.created_at, ...abResult(g.a, g.b), text_a: g.a?.text?.slice(0, 160) ?? null, text_b: g.b?.text?.slice(0, 160) ?? null })),
+            best_times: bestTimes(posts), evergreen: evergreen(posts, { now: at, copiedSince: copied }), measured: posts.length };
+        }, "growth_failed");
+      }
       // Marketing (src/marketing.mjs): tracked links, hashtag sets, the weekly content mix.
       if (route === "GET /api/studio/links") {
         return rpc(async () => ({ links: (await desk(env).links()).map((l) => ({ ...l, short: Object.fromEntries(channelsOf(env).map((c) => [c, shortUrl(originOf(env), l.slug, c)])) })),
@@ -485,7 +497,7 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
         if (r.response) return r.response;
         const kind = String(r.body.kind ?? "");
         const ref = typeof r.body.ref === "string" ? r.body.ref.slice(0, 160) : null;
-        const posts = Array.isArray(r.body.posts) ? r.body.posts.map((p) => ({ channel: String(p?.channel ?? ""), text: textOf(p?.text) })) : null;
+        const posts = Array.isArray(r.body.posts) ? r.body.posts.map((p) => ({ channel: String(p?.channel ?? ""), text: textOf(p?.text), ...(typeof p?.text_b === "string" ? { text_b: textOf(p.text_b) } : {}) })) : null;
         return rpc(async () => {
           const at = now ? now * 1000 : Date.now();
           const ctx = COMPOSE_KINDS.includes(kind) ? await composeContext(env, kind, { now: at, analysis: true }) : { decisionTimes: [] };
@@ -493,7 +505,8 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
             overlay: () => overlayFor(kind, ctx.analysis, ref), id: randomHex(4) });
           if (!made.ok) return made;
           const added = await desk(env).add(made.drafts, at, identity.subject);
-          return { ok: true, added, drafts: made.drafts.map((d) => ({ id: d.id, channel: d.channel, status: d.status })) };
+          for (const t of made.ab) await desk(env).addAbTest(t, at);
+          return { ok: true, added, drafts: made.drafts.map((d) => ({ id: d.id, channel: d.channel, status: d.status })), ab: made.ab };
         }, "compose_failed");
       }
       // The Channels page: each channel's settings, what it can take, and who changed them last. Never a token.

@@ -34,7 +34,7 @@
     for (const id of VIEWS) $(`view-${id}`).hidden = id !== v;
     for (const a of $("nav").querySelectorAll("a[data-view]")) a.classList.toggle("on", a.dataset.view === v);
     if (v === "queue") load();
-    if (v === "performance") loadPerformance();
+    if (v === "performance") { loadPerformance(); loadGrowth(); }
     if (v === "channels") loadChannels();
     if (v === "create") loadCreate();
     if (v === "library") loadLibrary(true);
@@ -403,6 +403,81 @@
 
 
 
+
+  // ---- growth: best times, A/B tests, evergreen (GET /api/studio/growth) ----
+  const DAY_LONG = { mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday", fri: "Friday", sat: "Saturday", sun: "Sunday" };
+  async function addSlot(channel, day, time) {
+    const cfg = await call("/api/studio/settings");
+    const s = cfg.settings[channel];
+    if (s.schedule.some((x) => x.time === time && x.days.includes(day))) return "already in the schedule";
+    await call("/api/studio/settings", "POST", { channel, settings: { ...s, schedule: [...s.schedule, { days: [day], time }] } });
+    return "added to the schedule";
+  }
+  async function loadGrowth() {
+    try {
+      const g = await call("/api/studio/growth");
+      const bt = $("besttimes"); bt.textContent = "";
+      const chans = Object.entries(g.best_times ?? {});
+      if (!chans.some(([, x]) => x.best.length)) bt.appendChild(make("div", "empty", `Not enough measured posts yet (${g.measured} measured; an hour needs two). Metrics are read once publishing is on.`));
+      else {
+        const table = make("table", "data");
+        const head = make("tr");
+        for (const h of ["Channel", "When (WIB)", "Posts", "Avg views", "Avg engagement", ""]) head.appendChild(make("th", null, h));
+        table.appendChild(make("thead")).appendChild(head);
+        const body = table.appendChild(make("tbody"));
+        for (const [c, x] of chans) for (const b of x.best) {
+          const tr = make("tr");
+          tr.appendChild(make("td", null, status?.channels?.[c]?.name ?? c));
+          tr.appendChild(make("td", null, `${DAY_LONG[b.day]} ${b.time}`));
+          tr.appendChild(make("td", null, String(b.posts)));
+          tr.appendChild(make("td", null, fmt(b.views)));
+          tr.appendChild(make("td", null, String(b.engagement)));
+          const td = make("td");
+          if (canDecide) {
+            const add = make("button", "btn sm outline", "Add to schedule"); add.type = "button";
+            add.addEventListener("click", async () => { add.disabled = true; try { add.textContent = await addSlot(c, b.day, b.time); } catch (e) { add.textContent = e.message; } });
+            td.appendChild(add);
+          }
+          tr.appendChild(td);
+          body.appendChild(tr);
+        }
+        bt.appendChild(table);
+      }
+      const ab = $("abtests"); ab.textContent = "";
+      if (!g.ab.length) ab.appendChild(make("div", "empty", "No A/B test yet. On the Create page, add a variant B to a channel."));
+      for (const t of g.ab) {
+        const card = make("article", "draft");
+        const row = make("div", "row");
+        row.appendChild(badge("purple", status?.channels?.[t.channel]?.name ?? t.channel));
+        row.appendChild(badge(t.state === "measured" ? "green" : "", t.state === "measured" ? (t.winner === "tie" ? "Tie" : `Winner: ${t.winner}`) : "Waiting for both to be published and measured"));
+        row.appendChild(make("span", "grow"));
+        row.appendChild(make("span", "meta", when(t.created_at)));
+        card.appendChild(row);
+        for (const [v, x, txt] of [["A", t.a, t.text_a], ["B", t.b, t.text_b]]) {
+          card.appendChild(make("div", "meta", `${v}: ${LABEL[x?.status] ?? x?.status ?? "?"}${x?.views ? ` · ${fmt(x.views)} views` : ""}${x?.engagement ? ` · ${x.engagement} engagement` : ""}${x?.rate != null ? ` · ${x.rate}% per view` : ""}`));
+          card.appendChild(make("div", "text", txt ?? ""));
+        }
+        ab.appendChild(card);
+      }
+      const ev = $("evergreen"); ev.textContent = "";
+      if (!g.evergreen.length) ev.appendChild(make("div", "empty", "No suggestion yet: custom posts qualify 30 days after publishing, once measured."));
+      for (const p of g.evergreen) {
+        const card = make("article", "draft");
+        const row = make("div", "row");
+        row.appendChild(badge("purple", status?.channels?.[p.channel]?.name ?? p.channel));
+        row.appendChild(make("span", "meta", `${fmt(p.views)} views · ${p.engagement} engagement · published ${when(p.published_at)}`));
+        card.appendChild(row);
+        card.appendChild(make("div", "text", p.text));
+        if (canDecide) {
+          const dup = make("button", "btn outline", "Duplicate to the queue"); dup.type = "button";
+          dup.addEventListener("click", async () => { dup.disabled = true; try { const r = await call("/api/studio/duplicate", "POST", { id: p.id }); dup.textContent = `Copied: ${LABEL[r.status] ?? r.status}`; } catch (e) { dup.textContent = e.message; } });
+          const a = make("div", "actions"); a.appendChild(dup); card.appendChild(a);
+        }
+        ev.appendChild(card);
+      }
+    } catch (e) { showErr(e); }
+  }
+
   // ---- marketing: tracked links, hashtag sets, content mix ----
   const KIND_ALL = { ...KIND };
   let mk = { links: [], sets: [], wired: false };
@@ -640,7 +715,7 @@
   const CREATE_KINDS = [["custom", "Custom post"], ["key_levels", "Key-level map"], ["pattern", "Chart pattern"], ["daily_recap", "Daily recap"]];
   const MEDIA_NOTE = { image: "The chart card (TradingView's chart with our levels, and the Cryptophys panel) is made after saving.", video: "The 9:16 video made from the chart card is made after saving." };
   const FORMAT_BADGE = { none: "Text only", image: "Image card", video: "Video" };
-  const cs = { kind: "custom", ref: null, chosen: null, texts: {}, results: {}, timers: {}, started: false, dirty: false };
+  const cs = { kind: "custom", ref: null, chosen: null, texts: {}, textsB: {}, results: {}, timers: {}, started: false, dirty: false };
 
   function createChannels() { return Object.entries(status?.channels ?? {}).filter(([, c]) => c.enabled).map(([id]) => id); }
 
@@ -665,7 +740,7 @@
       const l = make("label");
       const i = make("input"); i.type = "checkbox"; i.checked = cs.chosen.has(c);
       i.addEventListener("change", () => {
-        if (i.checked) { cs.chosen.add(c); loadTemplate([c]); } else { cs.chosen.delete(c); delete cs.texts[c]; renderEditors(); }
+        if (i.checked) { cs.chosen.add(c); loadTemplate([c]); } else { cs.chosen.delete(c); delete cs.texts[c]; delete cs.textsB[c]; renderEditors(); }
       });
       l.append(i, make("span", null, status.channels[c].name));
       box.appendChild(l);
@@ -742,6 +817,33 @@
       if (canDecide) editorTools(c, ta, changed).then((bar) => ta.before(bar));
       card.paint = paint; card.dataset.channel = c;
       bd.append(ta, meta, pv);
+      // A/B caption: a second text for this channel (both wait for approval; the Performance page compares them).
+      const bwrap = make("div", "field");
+      const bta = make("textarea", "editor"); bta.setAttribute("aria-label", `${info.name} variant B text`);
+      const bmeta = make("div", "edmeta"); const bg = make("div", "gcheck"); const bcount = make("span", "count"); bmeta.append(bg, bcount);
+      const paintB = () => {
+        const r = cs.results[`${c}:b`];
+        bcount.textContent = `${bta.value.length}`;
+        bg.className = `gcheck${r ? (r.guardian.pass ? " ok" : " bad") : ""}`;
+        bg.textContent = !r ? "Checking…" : r.guardian.pass ? "✓ Guardian: variant B passed" : `Guardian (B): ${r.guardian.failures.map((f) => `${f.check} (${f.detail})`).join(", ")}`;
+      };
+      const showB = (on) => {
+        bwrap.textContent = "";
+        if (!on) { delete cs.textsB[c]; delete cs.results[`${c}:b`]; return; }
+        bwrap.append(make("div", "lbl", "Variant B (A/B test)"), bta, bmeta);
+        if (cs.textsB[c] == null) cs.textsB[c] = cs.texts[c] ?? "";
+        bta.value = cs.textsB[c]; paintB(); checkSoon(c, 0, "b");
+      };
+      bta.addEventListener("input", () => { cs.textsB[c] = bta.value; delete cs.results[`${c}:b`]; paintB(); checkSoon(c, 500, "b"); });
+      card.paintB = paintB;
+      if (canDecide) {
+        const tog = make("label", "switch");
+        const ti = make("input"); ti.type = "checkbox"; ti.checked = cs.textsB[c] != null;
+        ti.addEventListener("change", () => showB(ti.checked));
+        tog.append(ti, make("span", null, "Add variant B (A/B test)"));
+        bd.append(tog, bwrap);
+        if (ti.checked) showB(true);
+      }
       card.appendChild(bd);
       box.appendChild(card);
       paint();
@@ -749,16 +851,21 @@
     if (!cs.chosen.size) box.appendChild(make("div", "card empty", "Choose one or more channels."));
   }
 
-  function repaint(c) { for (const card of $("ceditors").children) if (card.dataset.channel === c && card.paint) card.paint(); }
+  function repaint(c) {
+    const [ch, v] = c.split(":");
+    for (const card of $("ceditors").children) if (card.dataset.channel === ch) { if (v === "b") card.paintB?.(); else card.paint?.(); }
+  }
 
-  function checkSoon(c, ms) {
-    clearTimeout(cs.timers[c]);
+  function checkSoon(c, ms, variant = "a") {
+    const key = variant === "b" ? `${c}:b` : c;
+    const src = variant === "b" ? cs.textsB : cs.texts;
+    clearTimeout(cs.timers[key]);
     if (!canDecide) return;
-    cs.timers[c] = setTimeout(async () => {
-      const text = cs.texts[c] ?? "";
+    cs.timers[key] = setTimeout(async () => {
+      const text = src[c] ?? "";
       try {
         const r = await call("/api/studio/check", "POST", { kind: cs.kind, channel: c, text });
-        if ((cs.texts[c] ?? "") === text) { cs.results[c] = r; repaint(c); }
+        if ((src[c] ?? "") === text) { cs.results[key] = r; repaint(key); }
       } catch (e) { $("cerr").textContent = e.message; }
     }, ms);
   }
@@ -766,7 +873,7 @@
   async function sendCompose() {
     const b = $("composesend");
     $("cerr").textContent = ""; $("cdone").textContent = "";
-    const posts = [...cs.chosen].map((c) => ({ channel: c, text: cs.texts[c] ?? "" }));
+    const posts = [...cs.chosen].map((c) => ({ channel: c, text: cs.texts[c] ?? "", ...(cs.textsB[c] != null ? { text_b: cs.textsB[c] } : {}) }));
     if (!posts.length) { $("cerr").textContent = "Choose at least one channel."; return; }
     b.disabled = true;
     try {
@@ -777,7 +884,7 @@
         throw new Error(data.error || `HTTP ${res.status}`);
       }
       const done = $("cdone");
-      done.appendChild(make("span", null, `Sent to the queue: ${data.drafts.length} draft${data.drafts.length === 1 ? "" : "s"}, waiting for approval. `));
+      done.appendChild(make("span", null, `Sent to the queue: ${data.drafts.length} draft${data.drafts.length === 1 ? "" : "s"}${data.ab?.length ? ` (${data.ab.length} A/B test${data.ab.length === 1 ? "" : "s"})` : ""}, waiting for approval. `));
       const a = make("a", null, "Open the queue"); a.href = "#queue"; done.appendChild(a);
       cs.dirty = false;
       await refresh();

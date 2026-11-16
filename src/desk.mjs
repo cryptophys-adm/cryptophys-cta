@@ -44,7 +44,10 @@ export const DESK_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS hashtag_sets (
     name TEXT PRIMARY KEY, tags TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS studio_settings (
-    key TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL)`
+    key TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL)`,
+  // A/B captions (src/growth.mjs): the two drafts of one test.
+  `CREATE TABLE IF NOT EXISTS ab_tests (
+    draft_id TEXT PRIMARY KEY, grp TEXT NOT NULL, variant TEXT NOT NULL, channel TEXT NOT NULL, created_at TEXT NOT NULL)`
 ];
 /** A media chunk: 1 MB of base64 per row (a Durable Object's SQLite row holds up to 2 MB). */
 export const MEDIA_CHUNK = 1_000_000;
@@ -462,4 +465,35 @@ export function saveStudioSetting(sql, { key, value, actor }, { now = Date.now()
 export function kindMixSince(sql, fromIso, toIso) {
   ensureDesk(sql);
   return Object.fromEntries(rows(sql, "SELECT kind, COUNT(*) AS n FROM drafts WHERE status IN ('approved', 'published') AND COALESCE(published_at, decided_at, created_at) >= ? AND COALESCE(published_at, decided_at, created_at) < ? GROUP BY kind", fromIso, toIso).map((r) => [r.kind, Number(r.n)]));
+}
+
+// ---- Growth: A/B pairs, measured posts, recent copies ----
+/** Records the two drafts of an A/B test (both already added). */
+export function addAbTest(sql, { grp, a, b, channel }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  for (const [id, v] of [[a, "A"], [b, "B"]]) sql.exec("INSERT OR IGNORE INTO ab_tests (draft_id, grp, variant, channel, created_at) VALUES (?, ?, ?, ?, ?)", id, grp, v, channel, iso(now));
+}
+/** The A/B tests, newest first: each with both drafts' status and latest metrics. */
+export function listAbTests(sql, { limit = 30 } = {}) {
+  ensureDesk(sql);
+  const list = rows(sql, `SELECT t.grp, t.variant, t.channel, t.created_at, d.id, d.status, d.text, d.published_at, m.data AS metrics
+    FROM ab_tests t JOIN drafts d ON d.id = t.draft_id LEFT JOIN post_metrics m ON m.draft_id = d.id ORDER BY t.created_at DESC, t.grp, t.variant LIMIT ?`, Math.min(200, Math.max(2, (Number(limit) || 30) * 2)));
+  const groups = new Map();
+  for (const r of list) {
+    const g = groups.get(r.grp) ?? { grp: r.grp, channel: r.channel, created_at: r.created_at };
+    g[r.variant === "A" ? "a" : "b"] = { id: r.id, status: r.status, text: r.text, published_at: r.published_at, metrics: r.metrics ? JSON.parse(r.metrics) : null };
+    groups.set(r.grp, g);
+  }
+  return [...groups.values()];
+}
+/** Every published post with metrics (best times, evergreen), newest first. */
+export function measuredPosts(sql, { limit = 1000 } = {}) {
+  ensureDesk(sql);
+  return rows(sql, "SELECT d.id, d.kind, d.channel, d.text, d.published_at, m.data AS metrics FROM drafts d JOIN post_metrics m ON m.draft_id = d.id WHERE d.status = 'published' ORDER BY d.published_at DESC LIMIT ?",
+    Math.min(5000, Math.max(1, Number(limit) || 1000))).map((r) => ({ ...r, metrics: JSON.parse(r.metrics) }));
+}
+/** The drafts copied since `sinceIso` (their source ids, from the "duplicated" events). */
+export function copiedSince(sql, sinceIso) {
+  ensureDesk(sql);
+  return rows(sql, "SELECT detail FROM events WHERE action = 'duplicated' AND at >= ?", sinceIso).map((r) => String(r.detail ?? "").replace(/^from /, ""));
 }

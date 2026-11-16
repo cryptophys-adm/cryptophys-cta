@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { handle, accountOf, publishDraft, SECRETS, channelsOf, renderImages, collectInsights, runSchedule } from "../src/app.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
-import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince } from "../src/desk.mjs";
+import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
@@ -50,7 +50,8 @@ function deskStub() {
     slotOutcome: async (i) => { slotOutcome(sql, i); return true; }, recentSlots: async (n) => recentSlots(sql, { limit: n }),
     addLink: async (i, now) => addLink(sql, i, { now }), link: async (s) => getLink(sql, s), click: async (i, now) => { countClick(sql, i, { now }); return true; },
     links: async () => listLinks(sql), hashtagSets: async () => listHashtagSets(sql), saveHashtagSet: async (i, now) => saveHashtagSet(sql, i, { now }),
-    studioSetting: async (k) => studioSetting(sql, k), saveStudioSetting: async (i, now) => saveStudioSetting(sql, i, { now }), kindMix: async (f, t) => kindMixSince(sql, f, t)
+    studioSetting: async (k) => studioSetting(sql, k), saveStudioSetting: async (i, now) => saveStudioSetting(sql, i, { now }), kindMix: async (f, t) => kindMixSince(sql, f, t),
+    addAbTest: async (i, now) => { addAbTest(sql, i, { now }); return true; }, abTests: async () => listAbTests(sql), measuredPosts: async () => measuredPosts(sql), copiedSince: async (s) => copiedSince(sql, s)
   };
   return { sql, api, ns: { idFromName: () => "desk", get: () => api } };
 }
@@ -512,4 +513,21 @@ test("marketing through the HTTP face: a tracked link redirects with UTM tags an
   assert.equal((await post("/api/studio/mix", { targets: { key_levels: 20, pattern: 30, daily_recap: 30, custom: 20 } })).status, 200);
   const mix = await (await handle(req("/api/studio/mix", { token: person }), e, opts)).json();
   assert.deepEqual([mix.targets.custom, mix.updated_by, mix.total], [20, "owner@example.com", 0]);
+});
+
+test("growth through the studio API: an A/B pair from Create, its result once measured, best times, evergreen", async () => {
+  resetKeyCacheForTests();
+  const { env: e, d } = env({ CONTENT_CHANNELS: "threads" });
+  const person = await jwt({ email: "owner@example.com" });
+  const text = "Education · XAUUSD\n\nGold held its range through London.\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD";
+  const made = await (await handle(req("/api/studio/compose", { token: person, method: "POST", body: { kind: "custom", posts: [{ channel: "threads", text, text_b: text.replace("held", "kept") }] } }), e, opts)).json();
+  assert.equal(made.ok, true, JSON.stringify(made));
+  assert.equal(made.added.length, 2);
+  for (const id of made.added) { decideDraft(d.sql, { id, decision: "approve", actor: "owner" }); recordPublish(d.sql, { id, remoteId: id }); }
+  saveMetrics(d.sql, { id: made.added[0], channel: "threads", metrics: { views: 1000, likes: 10 } });
+  saveMetrics(d.sql, { id: made.added[1], channel: "threads", metrics: { views: 1000, likes: 30 } });
+  const g = await (await handle(req("/api/studio/growth", { token: person }), e, opts)).json();
+  assert.deepEqual([g.ab.length, g.ab[0].state, g.ab[0].winner, g.measured], [1, "measured", "B", 2]);
+  assert.ok("threads" in g.best_times);
+  assert.deepEqual(g.evergreen, [], "not old enough yet");
 });

@@ -63,6 +63,7 @@ Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (dr
 | `POST /api/studio/render-now` | a person, same origin, JSON | renders the waiting cards and videos now |
 | `GET /api/studio/performance` | Access JWT | the last 14 days: posts and summed views, likes, comments, shares per channel, the best post, each post's latest metrics |
 | `POST /api/studio/insights-now` | a person, same origin, JSON | reads the recent posts' metrics now |
+| `GET /api/studio/growth` | Access JWT | A/B tests with their result once both are measured, the best WIB weekday-hours per channel (two or more measured posts an hour), evergreen suggestions (custom posts 30+ days old, best engagement, not copied in 30 days) |
 | `GET /go/<slug>/<channel>` | public | a tracked link: counts the click (link, channel, WIB day; nothing about the person) and redirects (302) to its target with `utm_source=<channel>`, `utm_medium=social`, `utm_campaign`; unknown slug 404 |
 | `GET`/`POST /api/studio/links` | Access JWT / a person | tracked links with clicks per channel and each channel's short URL; a new link's target must be https on `LINK_HOSTS` (default `cta.cryptophys.work`) or the brand's profile hosts: never an open redirect |
 | `GET`/`POST /api/studio/hashtag-sets` | Access JWT / a person | named hashtag lines (`{ name, tags }`, `{ name, remove: true }`); at most 30 |
@@ -75,7 +76,7 @@ Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (dr
 | `GET /api/studio/media-library?offset=` | Access JWT | every card and video (no bytes): channel, type, status, size |
 | `GET /api/studio/templates?kind=&channels=&ref=` | Access JWT | Create: a blank post (`custom`) or the engine's template (`key_levels`, `pattern`, `daily_recap`) filled with the current projection, per channel, with the channel's hashtags |
 | `POST /api/studio/check` | a person, same origin, JSON | Create: the guardian's check of one channel's text as typed (length, the guardian's rules, a custom post's own words) |
-| `POST /api/studio/compose` | a person, same origin, JSON | Create: `{ kind, ref, posts: [{ channel, text }] }`; saved only when every channel passes; drafts `manual:<day>:<id>:<channel>` wait for approval (event `composed`, the person as actor); a template's card numbers come from the server's analysis, never the browser |
+| `POST /api/studio/compose` | a person, same origin, JSON | Create: `{ kind, ref, posts: [{ channel, text, text_b? }] }` (`text_b`: an A/B variant); saved only when every channel passes; drafts `manual:<day>:<id>:<channel>` wait for approval (event `composed`, the person as actor); a template's card numbers come from the server's analysis, never the browser |
 | `GET /api/studio/settings` | Access JWT | each channel's settings (stored over the defaults), the formats each channel can take, who changed them last; never a token |
 | `POST /api/studio/settings` | a person, same origin, JSON | `{ channel, settings }`: validated by `src/settings.mjs`, stored in the Desk (`channel_settings`), an event per change |
 
@@ -102,6 +103,12 @@ rest of the host stays public.
 | Telegram channel | text | built (Bot API; the bot is a channel admin) | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
 | YouTube Shorts | video (WebM, 9:16, 14 s) from the card; the description names TradingView | built: resumable upload, public asked; private until Google verifies the API project | `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN` |
 | TikTok | the same video | built: Direct Post, FILE_UPLOAD in one chunk, the most public privacy the creator allows; private (SELF_ONLY) until TikTok audits the app | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REFRESH_TOKEN` (TikTok rotates it; the Desk keeps the newest) |
+
+Growth (`src/growth.mjs`, the Performance page): A/B captions (Create's "Add variant B": a second text for a channel,
+checked the same way and never equal to A; both drafts wait for approval and are paired in `ab_tests`; the higher
+engagement per view wins once both are measured), best times to post (a suggestion a person adds to the channel's
+schedule) and evergreen suggestions (custom posts only: an analysis post's price levels age; "Duplicate to the queue").
+They read the metrics collected while publishing is on; until then they say there is not enough data.
 
 Marketing (owner 2026-11-16: "kerjakan tambahan pro marketing juga"; `src/marketing.mjs`, the studio's Marketing
 page): tracked links (a short link per channel with UTM tags and a click count; slugs are 8 letters, so a link never
