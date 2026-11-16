@@ -309,6 +309,8 @@ test("the bridge deploy workflow: main or by hand, no Worker secret, no delete, 
   assert.ok(pinned(code).length >= 2 && new Set([...pinned(code), ...pinned(ci)]).size === 1, "one wrangler version, the same as test.yml");
   assert.match(code, /if: needs\.credentials\.outputs\.ready == 'true'/, "skipped, not red, without the token");
   assert.match(code, /CONTENT_PUBLISH/);
+  const deploys = [...code.matchAll(/wrangler@[\d.]+ deploy([^\n]*)/g)].map((m) => m[1].trim());
+  assert.deepEqual(deploys, ["--dry-run", ""], "the deploy runs exactly what the dry run validated (wrangler 4.45.0 has no --tag or --message)");
   assert.match(code, /deploy\.health/);
   assert.match(code, /deploy\.smoke/);
   const cfg = JSON.parse(readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8").replace(/^\s*\/\/.*$/gm, ""));
