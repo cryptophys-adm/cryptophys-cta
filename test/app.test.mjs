@@ -297,3 +297,20 @@ test("the performance report: metrics read for the last two weeks' posts, shown 
   const now2 = await (await handle(req("/api/studio/insights-now", { token: person, method: "POST", body: {} }), e, { ...opts, fetchImpl: fetcher })).json();
   assert.equal(now2.read, 1);
 });
+
+test("the bridge deploy workflow: main or by hand, no Worker secret, no delete, publishing off, the Forge's checks", () => {
+  const wf = readFileSync(new URL("../.github/workflows/deploy.yml", import.meta.url), "utf8");
+  const ci = readFileSync(new URL("../.github/workflows/test.yml", import.meta.url), "utf8");
+  const code = wf.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+  assert.match(code, /on:\n  push:\n    branches: \[main\]\n  workflow_dispatch:/);
+  assert.match(code, /permissions:\n  contents: read/);
+  assert.doesNotMatch(code, /secret put|secret bulk|wrangler@[\d.]+ delete|pull_request/, "no Worker secret, no delete, never from a pull request");
+  const pinned = (s) => [...s.matchAll(/wrangler@([\d.]+)/g)].map((m) => m[1]);
+  assert.ok(pinned(code).length >= 2 && new Set([...pinned(code), ...pinned(ci)]).size === 1, "one wrangler version, the same as test.yml");
+  assert.match(code, /if: needs\.credentials\.outputs\.ready == 'true'/, "skipped, not red, without the token");
+  assert.match(code, /CONTENT_PUBLISH/);
+  assert.match(code, /deploy\.health/);
+  assert.match(code, /deploy\.smoke/);
+  const cfg = JSON.parse(readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8").replace(/^\s*\/\/.*$/gm, ""));
+  assert.equal(cfg.vars.CONTENT_PUBLISH, "off");
+});
