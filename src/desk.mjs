@@ -53,8 +53,8 @@ function event(sql, { at, id, action, actor, detail = null }) {
   sql.exec("INSERT INTO events (at, draft_id, action, actor, detail) VALUES (?, ?, ?, ?, ?)", at, id, action, actor, detail);
 }
 
-/** Adds drafts once (by id); a draft already queued is left as it is. Returns the ids added. */
-export function addDrafts(sql, drafts, { now = Date.now() } = {}) {
+/** Adds drafts once (by id); a draft already queued is left as it is. `actor`: the engine, or the person who wrote it (Create). Returns the ids added. */
+export function addDrafts(sql, drafts, { now = Date.now(), actor = "content-engine" } = {}) {
   ensureDesk(sql);
   const added = [];
   for (const d of drafts || []) {
@@ -64,7 +64,7 @@ export function addDrafts(sql, drafts, { now = Date.now() } = {}) {
       d.id, d.kind ?? "post", d.channel, d.text, d.image_url ?? null, d.window?.from ?? null, d.window?.to ?? null,
       JSON.stringify(d.decision_times ?? []), JSON.stringify(d.guardian ?? {}), STATUSES.includes(d.status) ? d.status : "pending", iso(now),
       d.overlay ? JSON.stringify(d.overlay) : null);
-    event(sql, { at: iso(now), id: d.id, action: "drafted", actor: "content-engine", detail: d.status ?? "pending" });
+    event(sql, { at: iso(now), id: d.id, action: actor === "content-engine" ? "drafted" : "composed", actor: clip(actor, 200) || "content-engine", detail: d.status ?? "pending" });
     added.push(d.id);
   }
   return added;

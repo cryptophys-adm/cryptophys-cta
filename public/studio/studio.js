@@ -1,6 +1,7 @@
 // CTA Studio (behind Cloudflare Access): a dashboard, the content queue, a person's approval or rejection, a dry
 // run, performance and channels. Everything goes through /api/studio/* on the same origin; a rejection needs a reason.
-// Views are switched by the URL hash (#dashboard, #queue, #performance, #channels). The Channels page edits each
+// Views are switched by the URL hash (#dashboard, #queue, #create, #performance, #channels). Create writes a post
+// (blank or from a template), checked by the guardian per channel as it is typed, and sends it to the queue. The Channels page edits each
 // channel's settings (format, content, drafts per day, schedule in WIB, hashtags); never a token.
 (function () {
   const $ = (id) => document.getElementById(id);
@@ -8,9 +9,9 @@
   const when = (iso) => (iso ? `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC` : "—");
   const LABEL = { pending: "Waiting for you", needs_image: "Needs image", needs_video: "Needs video", blocked: "Held by guardian", approved: "Approved", rejected: "Rejected", published: "Published", failed: "Failed to publish" };
   const TONE = { pending: "blue", needs_image: "", needs_video: "", blocked: "red", approved: "amber", rejected: "", published: "green", failed: "red" };
-  const KIND = { daily_recap: "Daily recap", key_levels: "Key-level map", pattern: "Chart pattern" };
+  const KIND = { daily_recap: "Daily recap", key_levels: "Key-level map", pattern: "Chart pattern", custom: "Custom post" };
   const FILTERS = ["pending", "needs_image", "needs_video", "blocked", "approved", "published", "rejected", "failed", ""];
-  const VIEWS = ["dashboard", "queue", "performance", "channels"];
+  const VIEWS = ["dashboard", "queue", "create", "performance", "channels"];
   let filter = "pending", status = null, canDecide = false, perf = null;
 
   async function call(path, method = "GET", body) {
@@ -33,6 +34,7 @@
     if (v === "queue") load();
     if (v === "performance") loadPerformance();
     if (v === "channels") loadChannels();
+    if (v === "create") loadCreate();
   }
 
   function tile(label, value, meta, link) {
@@ -324,6 +326,154 @@
     } catch (e) { showErr(e); }
   }
 
+
+  // ---- create: a person's post, per channel, checked as it is typed (GET templates, POST check, POST compose) ----
+  const CREATE_KINDS = [["custom", "Custom post"], ["key_levels", "Key-level map"], ["pattern", "Chart pattern"], ["daily_recap", "Daily recap"]];
+  const MEDIA_NOTE = { image: "The chart card (TradingView's chart with our levels, and the Cryptophys panel) is made after saving.", video: "The 9:16 video made from the chart card is made after saving." };
+  const FORMAT_BADGE = { none: "Text only", image: "Image card", video: "Video" };
+  const cs = { kind: "custom", ref: null, chosen: null, texts: {}, results: {}, timers: {}, started: false, dirty: false };
+
+  function createChannels() { return Object.entries(status?.channels ?? {}).filter(([, c]) => c.enabled).map(([id]) => id); }
+
+  async function loadCreate() {
+    if (cs.started) return;
+    cs.started = true;
+    const all = createChannels();
+    cs.chosen = new Set(all.slice(0, 1));
+    const kinds = $("ckinds"); kinds.textContent = "";
+    for (const [k, label] of CREATE_KINDS) {
+      const b = make("button", k === cs.kind ? "on" : null, label); b.type = "button"; b.setAttribute("role", "radio"); b.setAttribute("aria-checked", String(k === cs.kind));
+      b.addEventListener("click", () => {
+        if (cs.dirty && !window.confirm("Replace what you wrote with the template?")) return;
+        cs.kind = k; cs.ref = null;
+        for (const x of kinds.children) { const on = x === b; x.classList.toggle("on", on); x.setAttribute("aria-checked", String(on)); }
+        loadTemplate([...cs.chosen]);
+      });
+      kinds.appendChild(b);
+    }
+    const box = $("cchannels"); box.textContent = "";
+    for (const c of all) {
+      const l = make("label");
+      const i = make("input"); i.type = "checkbox"; i.checked = cs.chosen.has(c);
+      i.addEventListener("change", () => {
+        if (i.checked) { cs.chosen.add(c); loadTemplate([c]); } else { cs.chosen.delete(c); delete cs.texts[c]; renderEditors(); }
+      });
+      l.append(i, make("span", null, status.channels[c].name));
+      box.appendChild(l);
+    }
+    if (!all.length) box.appendChild(make("span", "meta", "No channel is enabled in this Worker."));
+    $("cpattern").addEventListener("change", () => { cs.ref = $("cpattern").value; loadTemplate([...cs.chosen]); });
+    if (!canDecide) { $("composesend").disabled = true; $("composesend").title = "Only a signed-in person can send a post"; }
+    $("composesend").addEventListener("click", sendCompose);
+    await loadTemplate([...cs.chosen]);
+  }
+
+  async function loadTemplate(channels) {
+    $("cdone").textContent = "";
+    if (!channels.length) { renderEditors(); return; }
+    try {
+      const q = new URLSearchParams({ kind: cs.kind, channels: channels.join(",") });
+      if (cs.ref) q.set("ref", cs.ref);
+      const t = await call(`/api/studio/templates?${q}`);
+      for (const c of channels) { cs.texts[c] = t.texts?.[c] ?? ""; delete cs.results[c]; }
+      cs.ref = t.ref ?? null;
+      const sel = $("cpattern"); sel.textContent = "";
+      for (const o of t.options ?? []) { const op = make("option", null, o.label); op.value = o.ref; op.selected = o.ref === cs.ref; sel.appendChild(op); }
+      $("cpatternf").hidden = cs.kind !== "pattern" || !(t.options ?? []).length;
+      const missing = channels.filter((c) => !t.texts?.[c]);
+      $("cnote").textContent = t.note ?? (missing.length && cs.kind !== "custom" ? `The template does not fit ${missing.map((c) => status.channels[c].name).join(", ")}: write that channel's text yourself.` : "");
+      if (t.at) $("cnote").textContent = `${$("cnote").textContent ? $("cnote").textContent + " " : ""}Analysis read ${when(t.at)}.`.trim();
+      cs.dirty = false;
+      renderEditors();
+      for (const c of channels) checkSoon(c, 0);
+      $("cerr").textContent = "";
+    } catch (e) { $("cerr").textContent = e.message; }
+  }
+
+  function renderEditors() {
+    const box = $("ceditors"); box.textContent = "";
+    for (const c of [...cs.chosen]) {
+      const info = status.channels[c];
+      const card = make("article", "card chcard");
+      const hd = make("div", "hd");
+      hd.appendChild(make("span", "ic", initial(info.name)));
+      const title = make("div", "grow");
+      title.appendChild(make("h2", null, info.name));
+      const row = make("div", "row");
+      row.appendChild(badge("purple", FORMAT_BADGE[info.media] ?? info.media));
+      row.appendChild(badge(info.configured ? "green" : "amber", info.configured ? "Account connected" : "No account yet"));
+      title.appendChild(row);
+      hd.appendChild(title);
+      card.appendChild(hd);
+      const bd = make("div", "bd");
+      const ta = make("textarea", "editor"); ta.value = cs.texts[c] ?? ""; ta.setAttribute("aria-label", `${info.name} text`); ta.spellcheck = true;
+      const meta = make("div", "edmeta");
+      const g = make("div", "gcheck", "Checking…");
+      const count = make("span", "count");
+      meta.append(g, count);
+      const pv = make("div", "preview");
+      const ph = make("div", "ph");
+      ph.appendChild(make("span", "av", initial(status?.brand?.name)));
+      ph.appendChild(make("b", null, status?.brand?.name ?? "Cryptophys"));
+      ph.appendChild(make("span", "meta", `· ${info.name} preview`));
+      const pt = make("div", "pt");
+      pv.append(ph, pt);
+      if (info.media === "image" || info.media === "video") pv.appendChild(make("div", `pm ${info.media}`, MEDIA_NOTE[info.media]));
+      const paint = () => {
+        const limit = { threads: 500, instagram: 2200, x: 280, telegram: 4096, youtube: 5000, tiktok: 2200 }[c];
+        count.textContent = `${ta.value.length}/${limit}`;
+        count.classList.toggle("over", ta.value.length > limit);
+        pt.textContent = ta.value;
+        const r = cs.results[c];
+        g.className = `gcheck${r ? (r.guardian.pass ? " ok" : " bad") : ""}`;
+        g.textContent = !r ? "Checking…" : r.guardian.pass ? "✓ Guardian: every check passed" : `Guardian: ${r.guardian.failures.map((f) => `${f.check} (${f.detail})`).join(", ")}`;
+      };
+      ta.addEventListener("input", () => { cs.texts[c] = ta.value; cs.dirty = true; delete cs.results[c]; paint(); checkSoon(c, 500); });
+      card.paint = paint; card.dataset.channel = c;
+      bd.append(ta, meta, pv);
+      card.appendChild(bd);
+      box.appendChild(card);
+      paint();
+    }
+    if (!cs.chosen.size) box.appendChild(make("div", "card empty", "Choose one or more channels."));
+  }
+
+  function repaint(c) { for (const card of $("ceditors").children) if (card.dataset.channel === c && card.paint) card.paint(); }
+
+  function checkSoon(c, ms) {
+    clearTimeout(cs.timers[c]);
+    if (!canDecide) return;
+    cs.timers[c] = setTimeout(async () => {
+      const text = cs.texts[c] ?? "";
+      try {
+        const r = await call("/api/studio/check", "POST", { kind: cs.kind, channel: c, text });
+        if ((cs.texts[c] ?? "") === text) { cs.results[c] = r; repaint(c); }
+      } catch (e) { $("cerr").textContent = e.message; }
+    }, ms);
+  }
+
+  async function sendCompose() {
+    const b = $("composesend");
+    $("cerr").textContent = ""; $("cdone").textContent = "";
+    const posts = [...cs.chosen].map((c) => ({ channel: c, text: cs.texts[c] ?? "" }));
+    if (!posts.length) { $("cerr").textContent = "Choose at least one channel."; return; }
+    b.disabled = true;
+    try {
+      const res = await fetch("/api/studio/compose", { method: "POST", credentials: "same-origin", headers: { accept: "application/json", "content-type": "application/json" }, body: JSON.stringify({ kind: cs.kind, ref: cs.ref, posts }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        for (const [c, r] of Object.entries(data.results ?? {})) { cs.results[c] = r; repaint(c); }
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const done = $("cdone");
+      done.appendChild(make("span", null, `Sent to the queue: ${data.drafts.length} draft${data.drafts.length === 1 ? "" : "s"}, waiting for approval. `));
+      const a = make("a", null, "Open the queue"); a.href = "#queue"; done.appendChild(a);
+      cs.dirty = false;
+      await refresh();
+    } catch (e) { $("cerr").textContent = e.message; }
+    finally { b.disabled = !canDecide; }
+  }
+
   // ---- performance ----
   async function loadPerformance() {
     try {
@@ -369,6 +519,7 @@
       $("who").textContent = who.subject;
       $("avatar").textContent = initial(who.subject);
       $("avatar").title = who.can_decide ? "can approve" : "read only";
+      canDecide = Boolean(who.can_decide);
     } catch (e) { showErr(e); }
     const busy = (id, fn) => $(id).addEventListener("click", async (ev) => {
       ev.currentTarget.disabled = true; const b = ev.currentTarget;

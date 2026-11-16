@@ -24,6 +24,7 @@
     <div class="group">Studio</div>
     <a href="#dashboard" data-view="dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 13h8V3H3zm0 8h8v-6H3zm10 0h8V11h-8zm0-18v6h8V3z"/></svg>Dashboard</a>
     <a href="#queue" data-view="queue"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z"/></svg>Content queue<span class="n" id="navpending"></span></a>
+    <a href="#create" data-view="create"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 17.3V21h3.7l11-11-3.7-3.7zM20.7 7a1 1 0 0 0 0-1.4l-2.3-2.3a1 1 0 0 0-1.4 0l-1.8 1.8 3.7 3.7z"/></svg>Create</a>
     <a href="#performance" data-view="performance"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 19h2v-7H5zm6 0h2V5h-2zm6 0h2v-10h-2z"/></svg>Performance</a>
     <a href="#channels" data-view="channels"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M18 16a3 3 0 0 0-2.2 1l-7-4a3 3 0 0 0 0-2l7-4A3 3 0 1 0 15 5l-7 4a3 3 0 1 0 0 6l7 4a3 3 0 1 0 3-3z"/></svg>Channels</a>
     <div class="group">Public</div>
@@ -52,6 +53,25 @@
         <div class="tabs" id="tabs" role="tablist"></div>
         <div class="list" id="queue"><div class="empty">Loading…</div></div>
       </div>
+    </section>
+
+    <section class="view" id="view-create" aria-labelledby="h-create" hidden>
+      <div class="crumbs">CTA Studio / Create</div>
+      <div class="pagehead">
+        <div><h1 id="h-create">Create</h1><p>Write a post, or start from a template filled with the current analysis. The guardian checks each channel as you type; the post then waits in the queue for approval.</p></div>
+        <div class="actions"><button class="btn primary" id="composesend" type="button">Send to queue</button></div>
+      </div>
+      <div class="card">
+        <div class="bd compose-start">
+          <div class="field"><div class="lbl">Start from</div><div class="seg" id="ckinds" role="radiogroup" aria-label="Start from"></div></div>
+          <div class="field" id="cpatternf" hidden><div class="lbl">Pattern</div><select id="cpattern" class="select" aria-label="Pattern"></select></div>
+          <div class="field"><div class="lbl">Channels</div><div class="checks" id="cchannels"></div></div>
+          <div class="notice info" id="cnote"></div>
+        </div>
+      </div>
+      <div class="err" id="cerr" role="alert"></div>
+      <div class="notice ok" id="cdone"></div>
+      <div class="grid two" id="ceditors"></div>
     </section>
 
     <section class="view" id="view-performance" aria-labelledby="h-performance" hidden>

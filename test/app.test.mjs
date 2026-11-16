@@ -33,7 +33,7 @@ function sqlite() {
 function deskStub() {
   const sql = sqlite();
   const api = {
-    add: async (d, now) => addDrafts(sql, d, { now }), list: async (i) => listDrafts(sql, i ?? {}),
+    add: async (d, now, actor) => addDrafts(sql, d, { now, ...(actor ? { actor } : {}) }), list: async (i) => listDrafts(sql, i ?? {}),
     get: async (id) => { const d = getDraft(sql, id); return d ? { ...d, events: draftEvents(sql, id) } : null; },
     decide: async (i, now) => decideDraft(sql, i, { now }), published: async (i, now) => recordPublish(sql, i, { now }),
     counts: async () => deskCounts(sql), token: async (c) => storedToken(sql, c), saveToken: async (c, t, now) => { storeToken(sql, c, t, { now }); return true; },
@@ -380,4 +380,33 @@ test("channel settings through the studio API: a person saves, a service token o
   const made = await (await handle(req("/api/studio/draft-now", { token: person, method: "POST", body: {} }), e, opts)).json();
   assert.ok(made.recap.added.length >= 1);
   assert.ok(listDrafts(d.sql, {}).every((x) => x.channel === "threads"), JSON.stringify(listDrafts(d.sql, {}).map((x) => x.channel)));
+});
+
+test("Create through the studio API: templates, the live check, and a composed post queued by a person", async () => {
+  resetKeyCacheForTests();
+  const { env: e, d } = env({ CONTENT_CHANNELS: "threads,x,instagram" });
+  const person = await jwt({ email: "owner@example.com" });
+  const svc = await jwt({ common_name: "ci.access" });
+  const t = await (await handle(req("/api/studio/templates?kind=custom&channels=threads,x,tiktok", { token: person }), e, opts)).json();
+  assert.deepEqual(Object.keys(t.texts), ["threads", "x"], "only the Worker's channels");
+  assert.equal((await handle(req("/api/studio/templates?kind=meme", { token: person }), e, opts)).status, 400);
+  const text = "Education · XAUUSD\n\nGold held its range through London.\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD";
+  const post = (path, body, token = person, extra = {}) => handle(req(path, { token, method: "POST", body, ...extra }), e, opts);
+  const c = await (await post("/api/studio/check", { kind: "custom", channel: "threads", text })).json();
+  assert.deepEqual([c.guardian.pass, c.length, c.limit], [true, text.length, 500]);
+  assert.equal((await post("/api/studio/check", { kind: "custom", channel: "threads", text }, svc)).status, 403);
+  assert.equal((await post("/api/studio/compose", { kind: "custom", posts: [{ channel: "threads", text }] }, svc)).status, 403, "a service token never writes");
+  assert.equal((await post("/api/studio/compose", { kind: "custom", posts: [{ channel: "threads", text }] }, person, { origin: "https://evil.example" })).status, 403);
+  const no = await post("/api/studio/compose", { kind: "custom", posts: [{ channel: "threads", text: text.replace("Gold held", "Buy now, gold held") }, { channel: "x", text }] });
+  assert.equal(no.status, 400);
+  assert.equal((await no.json()).results.threads.guardian.pass, false);
+  assert.equal(listDrafts(d.sql, {}).length, 0, "nothing saved when one channel fails");
+  const yes = await (await post("/api/studio/compose", { kind: "custom", posts: [{ channel: "threads", text }] })).json();
+  assert.equal(yes.ok, true);
+  assert.match(yes.added[0], /^manual:\d{4}-\d{2}-\d{2}:[0-9a-f]{8}:threads$/);
+  const saved = getDraft(d.sql, yes.added[0]);
+  assert.deepEqual([saved.status, saved.kind], ["pending", "custom"]);
+  assert.deepEqual(draftEvents(d.sql, yes.added[0]).map((x) => [x.action, x.actor]), [["composed", "owner@example.com"]]);
+  assert.equal((await post("/api/studio/compose", { kind: "custom", posts: [{ channel: "tiktok", text }] })).status, 400, "a channel the Worker does not serve");
+  assert.equal((await handle(req("/api/studio/compose", { token: person }), e, opts)).status, 405);
 });

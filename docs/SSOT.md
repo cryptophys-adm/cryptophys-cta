@@ -63,6 +63,9 @@ Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (dr
 | `POST /api/studio/render-now` | a person, same origin, JSON | renders the waiting cards and videos now |
 | `GET /api/studio/performance` | Access JWT | the last 14 days: posts and summed views, likes, comments, shares per channel, the best post, each post's latest metrics |
 | `POST /api/studio/insights-now` | a person, same origin, JSON | reads the recent posts' metrics now |
+| `GET /api/studio/templates?kind=&channels=&ref=` | Access JWT | Create: a blank post (`custom`) or the engine's template (`key_levels`, `pattern`, `daily_recap`) filled with the current projection, per channel, with the channel's hashtags |
+| `POST /api/studio/check` | a person, same origin, JSON | Create: the guardian's check of one channel's text as typed (length, the guardian's rules, a custom post's own words) |
+| `POST /api/studio/compose` | a person, same origin, JSON | Create: `{ kind, ref, posts: [{ channel, text }] }`; saved only when every channel passes; drafts `manual:<day>:<id>:<channel>` wait for approval (event `composed`, the person as actor); a template's card numbers come from the server's analysis, never the browser |
 | `GET /api/studio/settings` | Access JWT | each channel's settings (stored over the defaults), the formats each channel can take, who changed them last; never a token |
 | `POST /api/studio/settings` | a person, same origin, JSON | `{ channel, settings }`: validated by `src/settings.mjs`, stored in the Desk (`channel_settings`), an event per change |
 
@@ -104,6 +107,16 @@ the studio's Channels page). Per channel, set by a person:
 
 The defaults are what the engine did before settings existed; a stored row that no longer validates falls back to
 them. A draft the guardian held is queued as it is.
+
+Create (owner 2026-11-16: content creation in the studio; person-written posts allowed with the guardian and
+approval; `src/compose.mjs`, the studio's Create page). A person picks a start (a custom post, or the key-level map,
+chart pattern or daily recap template filled with the current projection) and the channels, edits each channel's
+text, sees a preview and the guardian's result as they type, and sends it to the queue. The guardian checks as for
+the engine's drafts: price levels only in the analysis kinds, TradingView's credit where the post is the chart card or
+its video, the recap's delay rule with the recap window's decisions; a custom post needs at least 20 characters of its
+own besides the template lines. A post is saved only when every channel passes; the drafts then wait for approval like
+any other (cards and videos are made for them by the same run). Settings' kinds and daily maximum bound the engine,
+not a person's post.
 
 Meta's endpoint shapes follow the published guides (Meta's own pages were unreachable from the build session).
 YouTube's resumable upload and TikTok's Direct Post and media transfer follow their guides, read on 2026-11-15; the
