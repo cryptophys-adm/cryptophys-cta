@@ -79,11 +79,12 @@ export async function mediaBytes(env, draft) {
 
 /**
  * Each channel's settings (src/settings.mjs): the stored ones over the defaults. A desk that cannot be read gives
- * the defaults, which are what the engine did before settings existed.
+ * the defaults, which are what the engine did before settings existed. `strict` (the studio page) throws instead,
+ * so a person never edits the defaults over settings that could not be read.
  */
-export async function channelSettings(env) {
+export async function channelSettings(env, { strict = false } = {}) {
   let stored = null;
-  try { stored = await desk(env).settings(); } catch { stored = null; }
+  try { stored = await desk(env).settings(); } catch (e) { if (strict) throw e; stored = null; }
   return { settings: effectiveSettings(stored?.settings ?? {}), meta: stored?.meta ?? {} };
 }
 /** The settings applied to fresh drafts: kinds, the daily maximum (WIB day) and the hashtag line (guardian again). */
@@ -316,7 +317,7 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
       }
       // The Channels page: each channel's settings, what it can take, and who changed them last. Never a token.
       if (route === "GET /api/studio/settings") {
-        return rpc(async () => ({ ...(await channelSettings(env)), formats: FORMATS, planned: PLANNED_FORMATS, kinds: KINDS, kind_names: KIND_NAMES, days: DAYS,
+        return rpc(async () => ({ ...(await channelSettings(env, { strict: true })), formats: FORMATS, planned: PLANNED_FORMATS, kinds: KINDS, kind_names: KIND_NAMES, days: DAYS,
           timezone: TIMEZONE, max_per_day: MAX_PER_DAY, max_slots: MAX_SLOTS, can_edit: identity.type === "user" }), "settings_failed");
       }
       if (route === "POST /api/studio/settings") {

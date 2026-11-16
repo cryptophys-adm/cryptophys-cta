@@ -371,6 +371,11 @@ test("channel settings through the studio API: a person saves, a service token o
   assert.deepEqual([after.settings.x.enabled, after.meta.x.updated_by], [false, "owner@example.com"]);
   assert.ok(!JSON.stringify(after).match(/token|secret/i), "never a token");
   assert.equal((await handle(req("/api/studio/settings", { token: person, method: "DELETE" }), e, opts)).status, 405);
+  // A desk that cannot be read: the page gets an error, never the defaults to save over the stored settings.
+  const broken = env({ CONTENT_CHANNELS: "threads,x" });
+  const api = broken.d.ns.get();
+  api.settings = async () => { throw new Error("desk down"); };
+  assert.equal((await handle(req("/api/studio/settings", { token: person }), broken.env, opts)).status, 502);
   // X is off: the next drafting run makes Threads drafts only.
   const made = await (await handle(req("/api/studio/draft-now", { token: person, method: "POST", body: {} }), e, opts)).json();
   assert.ok(made.recap.added.length >= 1);
