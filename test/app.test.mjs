@@ -81,7 +81,7 @@ test("the studio: 403 without a valid Access JWT, the page and API with one; a s
   for (const p of ["/studio", "/studio/", "/api/studio/drafts", "/api/studio/status"]) assert.equal((await handle(req(p), e, opts)).status, 403, p);
   // A person opening the studio page without a sign-in gets the sign-in page (still 403, no-store); the API keeps JSON.
   const page = await handle(req("/studio"), e, opts);
-  assert.equal(await page.text(), "asset /signin.html");
+  assert.equal(await page.text(), "asset /signin");
   assert.equal(page.headers.get("cache-control"), "no-store");
   assert.match(page.headers.get("content-security-policy"), /script-src 'self'/);
   assert.equal((await (await handle(req("/api/studio/drafts"), e, opts)).json()).error, "access_denied");

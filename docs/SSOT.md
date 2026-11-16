@@ -12,7 +12,7 @@ Bindings:
   and supply, H1/H4/D1 chart patterns with their lines and projection, the structure; never a decision or plan).
 - `CONTENT_DESK` → Durable Object `ContentDesk` (SQLite): the drafts, their events, the refreshed tokens, the
   published archive.
-- `ASSETS` → `public/` (the public pages `/`, `/archive`, `/about`, `/disclaimer`, the sign-in page `/signin.html` served with a 403 for `/studio` without a valid Access JWT, and the studio page; no build step). A light developer-console look (owner
+- `ASSETS` → `public/` (the public pages `/`, `/archive`, `/about`, `/disclaimer`, the sign-in page `/signin` served with a 403 for `/studio` without a valid Access JWT, and the studio page; no build step). A light developer-console look (owner
   2026-11-16): a white top bar, the studio's left navigation (Dashboard, Content queue, Performance, Channels, switched
   by the URL hash), white cards on a light grey page, one blue for actions; Cryptophys's own mark and name only. No
   inline script or style, no web font (CSP `'self'`); a test holds both.
@@ -54,7 +54,7 @@ Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (dr
 | `GET /health` | anyone | `{ ok, service, publish }` |
 | `GET /`, `GET /api/public/profile`, `GET /api/public/archive` | anyone | the brand, its links, the disclaimer, published posts |
 | `GET /media/<id>.jpg`, `GET /media/<id>.webm` | anyone, only once the draft is approved or published | the Instagram card (Instagram fetches it at publishing), the video; 404 before, and a video is never served as `.jpg` |
-| `GET /studio` | Access JWT | the studio page; without a valid JWT the sign-in page (`/signin.html`, 403) |
+| `GET /studio` | Access JWT | the studio page; without a valid JWT the sign-in page (`/signin`, 403) |
 | `GET /`, `/archive`, `/about`, `/disclaimer` | none | the public pages (static; the archive and profile from `/api/public/*`) |
 | `GET /api/studio/whoami`, `status`, `drafts`, `draft`, `preview` | Access JWT (person or service token) | read the queue; `preview` is a dry run with tokens redacted |
 | `POST /api/studio/decide` | a person, same origin, JSON | approve or reject (a reason is required to reject); an approval publishes at once only while `CONTENT_PUBLISH` is "on" |

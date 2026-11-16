@@ -254,7 +254,7 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
       // A person opening the studio page without a valid sign-in gets the sign-in page (still 403, nothing private);
       // the API and every other caller keep the JSON refusal. Once Access covers the studio paths, Access shows its
       // own login before the Worker; this page then only appears for an expired or refused sign-in.
-      if (!path.startsWith("/api/") && (request.method === "GET" || request.method === "HEAD")) return asset(env, request, url, "/signin.html", 403);
+      if (!path.startsWith("/api/") && (request.method === "GET" || request.method === "HEAD")) return asset(env, request, url, "/signin", 403); // the assets serve signin.html at /signin (auto-trailing-slash)
       return json({ error: "access_denied", reason: v.reason }, 403);
     }
     const identity = v.identity;
