@@ -63,6 +63,11 @@ Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (dr
 | `POST /api/studio/render-now` | a person, same origin, JSON | renders the waiting cards and videos now |
 | `GET /api/studio/performance` | Access JWT | the last 14 days: posts and summed views, likes, comments, shares per channel, the best post, each post's latest metrics |
 | `POST /api/studio/insights-now` | a person, same origin, JSON | reads the recent posts' metrics now |
+| `GET /api/studio/library?status=&channel=&kind=&q=&from=&to=&offset=` | Access JWT | Library: every draft, filtered (words in the text or id; `from`/`to` are WIB days), 30 a page, with the total |
+| `POST /api/studio/edit` | a person, same origin, JSON | `{ id, text }`: only a pending, blocked, needs_image or needs_video draft; the guardian again (refused text is not stored); a card or video channel's media is made again; event `edited` |
+| `POST /api/studio/duplicate` | a person, same origin, JSON | `{ id }`: a copy of any draft as `manual:<day>:<id>:<channel>`, checked again, waiting for approval; events `composed` and `duplicated` (with the source) |
+| `GET /api/studio/calendar?month=YYYY-MM` | Access JWT | drafts made and posts published per WIB day and channel |
+| `GET /api/studio/media-library?offset=` | Access JWT | every card and video (no bytes): channel, type, status, size |
 | `GET /api/studio/templates?kind=&channels=&ref=` | Access JWT | Create: a blank post (`custom`) or the engine's template (`key_levels`, `pattern`, `daily_recap`) filled with the current projection, per channel, with the channel's hashtags |
 | `POST /api/studio/check` | a person, same origin, JSON | Create: the guardian's check of one channel's text as typed (length, the guardian's rules, a custom post's own words) |
 | `POST /api/studio/compose` | a person, same origin, JSON | Create: `{ kind, ref, posts: [{ channel, text }] }`; saved only when every channel passes; drafts `manual:<day>:<id>:<channel>` wait for approval (event `composed`, the person as actor); a template's card numbers come from the server's analysis, never the browser |
@@ -91,6 +96,12 @@ rest of the host stays public.
 | Telegram channel | text | built (Bot API; the bot is a channel admin) | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
 | YouTube Shorts | video (WebM, 9:16, 14 s) from the card; the description names TradingView | built: resumable upload, public asked; private until Google verifies the API project | `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN` |
 | TikTok | the same video | built: Direct Post, FILE_UPLOAD in one chunk, the most public privacy the creator allows; private (SELF_ONLY) until TikTok audits the app | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REFRESH_TOKEN` (TikTok rotates it; the Desk keeps the newest) |
+
+Content management (owner 2026-11-16: "content management"; the studio's Library, Calendar and Media pages). The
+library lists every draft and post with filters and paging; a person edits a draft's text before approval (the
+guardian again, as for a composed post; a refused text is not stored; an Instagram, YouTube or TikTok draft loses its
+card or video, which carried the old text, and gets a new one), or copies any draft, a published one included, as a
+new draft that waits for approval. Approved, published and rejected drafts are never rewritten. Nothing is deleted.
 
 Channel settings (owner 2026-11-16: "setting konfigurasi channel ... content creation terjadwal untuk masing-masing
 channel beserta format contentnya apakah video/image/text only"; `src/settings.mjs`, the Desk's `channel_settings`,

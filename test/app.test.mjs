@@ -7,7 +7,8 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { handle, accountOf, publishDraft, SECRETS, channelsOf, renderImages, collectInsights } from "../src/app.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
-import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince } from "../src/desk.mjs";
+import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia } from "../src/desk.mjs";
+import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
 
@@ -41,7 +42,10 @@ function deskStub() {
     needingImage: async (n, retry) => draftsNeedingImage(sql, { limit: n, retry }), attachImage: async (i, now) => attachImage(sql, i, { now }),
     media: async (id) => mediaOf(sql, id), note: async (i, now) => noteDraft(sql, i, { now }),
     publishedSince: async (s, n) => publishedSince(sql, s, { limit: n }), saveMetrics: async (i, now) => saveMetrics(sql, i, { now }),
-    settings: async () => storedSettings(sql), saveSettings: async (i, now) => saveChannelSettings(sql, i, { now }), channelCounts: async (s) => channelCountsSince(sql, s)
+    settings: async () => storedSettings(sql), saveSettings: async (i, now) => saveChannelSettings(sql, i, { now }), channelCounts: async (s) => channelCountsSince(sql, s),
+    library: async (i) => searchDrafts(sql, i ?? {}), calendar: async (m) => calendarMonth(sql, m), mediaList: async (i) => listMedia(sql, i ?? {}),
+    edit: async (i, now) => editDraft(sql, { ...i, check: (x) => editCheck(x, i.checkOptions ?? {}) }, { now }),
+    duplicate: async (i, now) => duplicateDraft(sql, { ...i, check: (x) => editCheck(x, i.checkOptions ?? {}) }, { now })
   };
   return { sql, api, ns: { idFromName: () => "desk", get: () => api } };
 }
@@ -409,4 +413,34 @@ test("Create through the studio API: templates, the live check, and a composed p
   assert.deepEqual(draftEvents(d.sql, yes.added[0]).map((x) => [x.action, x.actor]), [["composed", "owner@example.com"]]);
   assert.equal((await post("/api/studio/compose", { kind: "custom", posts: [{ channel: "tiktok", text }] })).status, 400, "a channel the Worker does not serve");
   assert.equal((await handle(req("/api/studio/compose", { token: person }), e, opts)).status, 405);
+});
+
+test("content management through the studio API: library, edit, duplicate, calendar, media; writes by a person only", async () => {
+  resetKeyCacheForTests();
+  const { env: e, d } = env({ CONTENT_CHANNELS: "threads,x" });
+  const person = await jwt({ email: "owner@example.com" });
+  const svc = await jwt({ common_name: "ci.access" });
+  const text = "Education · XAUUSD\n\nGold held its range through London.\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD";
+  addDrafts(d.sql, [{ id: "m:threads", kind: "custom", channel: "threads", text, status: "pending" }]);
+  const get = async (p, token = person) => (await handle(req(p, { token }), e, opts)).json();
+  const post = (p, body, token = person) => handle(req(p, { token, method: "POST", body }), e, opts);
+  const lib = await get("/api/studio/library?q=london&channel=threads");
+  assert.deepEqual([lib.total, lib.drafts[0].id, lib.can_edit], [1, "m:threads", true]);
+  assert.equal((await get("/api/studio/library", svc)).can_edit, false);
+  assert.equal((await post("/api/studio/edit", { id: "m:threads", text: text.replace("London", "Asia") }, svc)).status, 403);
+  const refused = await post("/api/studio/edit", { id: "m:threads", text: text.replace("Gold held", "Nexus: gold held") });
+  assert.equal(refused.status, 400);
+  assert.ok((await refused.json()).guardian.failures.some((f) => f.check === "internal"));
+  const ok = await (await post("/api/studio/edit", { id: "m:threads", text: text.replace("London", "Asia") })).json();
+  assert.deepEqual([ok.ok, ok.status], [true, "pending"]);
+  assert.match(getDraft(d.sql, "m:threads").text, /Asia/);
+  const dup = await (await post("/api/studio/duplicate", { id: "m:threads" })).json();
+  assert.match(dup.id, /^manual:\d{4}-\d{2}-\d{2}:[0-9a-f]{8}:threads$/);
+  assert.equal((await post("/api/studio/duplicate", {})).status, 400);
+  const month = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 7);
+  const cal = await get("/api/studio/calendar");
+  assert.equal(cal.month, month);
+  assert.equal(Object.values(cal.days).reduce((n, x) => n + x.created, 0), 2);
+  assert.equal((await handle(req("/api/studio/calendar?month=nope", { token: person }), e, opts)).status, 400);
+  assert.deepEqual(await get("/api/studio/media-library"), { media: [], total: 0, offset: 0, limit: 24 });
 });

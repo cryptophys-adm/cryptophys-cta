@@ -225,7 +225,7 @@ async function rpc(fn, failure) {
 }
 
 const isStudio = (path) => path === "/studio" || path.startsWith("/studio/") || path.startsWith("/api/studio/");
-const STUDIO_ROUTES = ["/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
+const STUDIO_ROUTES = ["/api/studio/library", "/api/studio/edit", "/api/studio/duplicate", "/api/studio/calendar", "/api/studio/media-library", "/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
 /** The public origin of the cards Instagram fetches (GET /media/<id>.jpg). */
 export const originOf = (env) => String(env?.PUBLIC_ORIGIN || "https://cta.cryptophys.work").replace(/\/+$/, "");
 const MEDIA_PATH = /^\/media\/([0-9a-f]{32})\.(jpg|webm)$/;
@@ -330,6 +330,29 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
           return { ...out, publish: await publishDraft(env, await desk(env).get(out.id), { now: at }) };
         }, "decide_failed");
       }
+      // Content management: the library (filters, words, WIB days), a person's edit (the guardian again; a media
+      // channel's card is made again), a copy of any draft, the calendar and the media library.
+      if (route === "GET /api/studio/library") {
+        const p = (k) => url.searchParams.get(k) || null;
+        return rpc(async () => ({ ...(await desk(env).library({ status: p("status"), channel: p("channel"), kind: p("kind"), q: p("q"), from: p("from"), to: p("to"), offset: Number(p("offset")) || 0, limit: 30 })),
+          can_edit: identity.type === "user" }), "library_failed");
+      }
+      if (route === "POST /api/studio/edit" || route === "POST /api/studio/duplicate") {
+        const r = await personJson(request, url, identity, 16_000);
+        if (r.response) return r.response;
+        const id = typeof r.body.id === "string" ? r.body.id.slice(0, 160) : "";
+        if (!id) return json({ error: "id is required" }, 400);
+        const at = now ? now * 1000 : Date.now();
+        const checkOptions = { delayHours: delayOf(env), now: at };
+        if (route === "POST /api/studio/edit") return rpc(() => desk(env).edit({ id, text: textOf(r.body.text), actor: identity.subject, checkOptions }, at), "edit_failed");
+        const newId = `manual:${new Date(at).toISOString().slice(0, 10)}:${randomHex(4)}`;
+        return rpc(() => desk(env).duplicate({ id, newId, actor: identity.subject, checkOptions }, at), "duplicate_failed");
+      }
+      if (route === "GET /api/studio/calendar") {
+        const month = url.searchParams.get("month") || new Date((now ? now * 1000 : Date.now()) + 7 * 3_600_000).toISOString().slice(0, 7);
+        return rpc(() => desk(env).calendar(month), "calendar_failed");
+      }
+      if (route === "GET /api/studio/media-library") return rpc(() => desk(env).mediaList({ offset: Number(url.searchParams.get("offset")) || 0 }), "media_failed");
       // Create: a template filled with the current analysis (or a blank post), each channel's text checked by the
       // guardian as it is typed, and the post sent to the queue (a person only; every channel must pass).
       if (route === "GET /api/studio/templates") {

@@ -1,7 +1,8 @@
 // CTA Studio (behind Cloudflare Access): a dashboard, the content queue, a person's approval or rejection, a dry
 // run, performance and channels. Everything goes through /api/studio/* on the same origin; a rejection needs a reason.
 // Views are switched by the URL hash (#dashboard, #queue, #create, #performance, #channels). Create writes a post
-// (blank or from a template), checked by the guardian per channel as it is typed, and sends it to the queue. The Channels page edits each
+// (blank or from a template), checked by the guardian per channel as it is typed, and sends it to the queue.
+// Library (filters, edit before approval, duplicate), Calendar (per WIB day) and Media (cards and videos). The Channels page edits each
 // channel's settings (format, content, drafts per day, schedule in WIB, hashtags); never a token.
 (function () {
   const $ = (id) => document.getElementById(id);
@@ -11,7 +12,8 @@
   const TONE = { pending: "blue", needs_image: "", needs_video: "", blocked: "red", approved: "amber", rejected: "", published: "green", failed: "red" };
   const KIND = { daily_recap: "Daily recap", key_levels: "Key-level map", pattern: "Chart pattern", custom: "Custom post" };
   const FILTERS = ["pending", "needs_image", "needs_video", "blocked", "approved", "published", "rejected", "failed", ""];
-  const VIEWS = ["dashboard", "queue", "create", "performance", "channels"];
+  const VIEWS = ["dashboard", "queue", "create", "library", "calendar", "media", "performance", "channels"];
+  const EDITABLE = ["pending", "blocked", "needs_image", "needs_video"];
   let filter = "pending", status = null, canDecide = false, perf = null;
 
   async function call(path, method = "GET", body) {
@@ -35,6 +37,9 @@
     if (v === "performance") loadPerformance();
     if (v === "channels") loadChannels();
     if (v === "create") loadCreate();
+    if (v === "library") loadLibrary(true);
+    if (v === "calendar") loadCalendar();
+    if (v === "media") loadMedia(true);
   }
 
   function tile(label, value, meta, link) {
@@ -298,13 +303,50 @@
       no.addEventListener("click", () => decide("reject"));
       actions.append(reason, no, ok);
     }
+    const note = make("div", "note");
+    if (canDecide && EDITABLE.includes(d.status)) {
+      const edit = make("button", "btn outline", "Edit"); edit.type = "button";
+      edit.addEventListener("click", () => {
+        const textEl = card.querySelector(".text");
+        if (!textEl || card.querySelector(".editbox")) return;
+        const box = make("div", "editbox");
+        const ta = make("textarea", "editor"); ta.value = d.text; ta.setAttribute("aria-label", "Draft text");
+        const row = make("div", "actions");
+        const cancel = make("button", "btn outline", "Cancel"); cancel.type = "button";
+        const save = make("button", "btn primary", "Save (guardian checks again)"); save.type = "button";
+        cancel.addEventListener("click", () => { box.replaceWith(textEl); });
+        save.addEventListener("click", async () => {
+          save.disabled = true; err.textContent = "";
+          try {
+            const res = await fetch("/api/studio/edit", { method: "POST", credentials: "same-origin", headers: { accept: "application/json", "content-type": "application/json" }, body: JSON.stringify({ id: d.id, text: ta.value }) });
+            const r = await res.json().catch(() => ({}));
+            if (!res.ok || !r.ok) throw new Error(r.guardian ? `${r.error}: ${r.guardian.failures.map((f) => `${f.check} (${f.detail})`).join(", ")}` : r.error || `HTTP ${res.status}`);
+            await reloadCurrent();
+          } catch (e) { err.textContent = e.message; save.disabled = false; }
+        });
+        row.append(cancel, save);
+        box.append(ta, row);
+        textEl.replaceWith(box);
+      });
+      actions.appendChild(edit);
+    }
+    if (canDecide) {
+      const dup = make("button", "btn outline", "Duplicate"); dup.type = "button"; dup.title = "Copy this post as a new draft (checked again, waits for approval)";
+      dup.addEventListener("click", async () => {
+        dup.disabled = true; err.textContent = "";
+        try { const r = await call("/api/studio/duplicate", "POST", { id: d.id }); note.textContent = `Copied as a new draft: ${r.id} (${LABEL[r.status] ?? r.status}).`; await refresh(); }
+        catch (e) { err.textContent = e.message; }
+        finally { dup.disabled = false; }
+      });
+      actions.appendChild(dup);
+    }
     const preview = make("button", "btn outline", "Dry run"); preview.type = "button";
     preview.addEventListener("click", async () => {
       try { dry.textContent = JSON.stringify(await call(`/api/studio/preview?id=${encodeURIComponent(d.id)}`), null, 2); dry.hidden = false; }
       catch (e) { err.textContent = e.message; }
     });
     actions.appendChild(preview);
-    card.append(actions, err, dry);
+    card.append(actions, note, err, dry);
     return card;
   }
 
@@ -326,6 +368,120 @@
     } catch (e) { showErr(e); }
   }
 
+
+
+  // ---- library, calendar, media ----
+  const lib = { offset: 0, total: 0, wired: false, timer: null };
+  async function reloadCurrent() { if (!$("view-library").hidden) await loadLibrary(true); else await refresh(); }
+
+  function option(sel, value, label) { const o = make("option", null, label); o.value = value; sel.appendChild(o); }
+  function wireLibrary() {
+    if (lib.wired) return;
+    lib.wired = true;
+    option($("lstatus"), "", "Any status"); for (const f of FILTERS.filter(Boolean)) option($("lstatus"), f, LABEL[f]);
+    option($("lchannel"), "", "Any channel"); for (const [c, x] of Object.entries(status?.channels ?? {})) option($("lchannel"), c, x.name);
+    option($("lkind"), "", "Any type"); for (const [k, label] of Object.entries(KIND)) option($("lkind"), k, label);
+    for (const id of ["lstatus", "lchannel", "lkind", "lfrom", "lto"]) $(id).addEventListener("change", () => loadLibrary(true));
+    $("lq").addEventListener("input", () => { clearTimeout(lib.timer); lib.timer = setTimeout(() => loadLibrary(true), 350); });
+    $("lclear").addEventListener("click", () => { for (const id of ["lq", "lstatus", "lchannel", "lkind", "lfrom", "lto"]) $(id).value = ""; loadLibrary(true); });
+    $("lmore").addEventListener("click", () => loadLibrary(false));
+  }
+
+  async function loadLibrary(reset) {
+    wireLibrary();
+    if (reset) lib.offset = 0;
+    const q = new URLSearchParams();
+    for (const [id, key] of [["lq", "q"], ["lstatus", "status"], ["lchannel", "channel"], ["lkind", "kind"], ["lfrom", "from"], ["lto", "to"]]) if ($(id).value) q.set(key, $(id).value);
+    if (lib.offset) q.set("offset", String(lib.offset));
+    try {
+      const r = await call(`/api/studio/library?${q}`);
+      canDecide = canDecide && r.can_edit !== false;
+      const box = $("library");
+      if (reset) box.textContent = "";
+      lib.total = r.total; lib.offset = r.offset + r.drafts.length;
+      $("lcount").textContent = `${r.total} draft${r.total === 1 ? "" : "s"}`;
+      if (!r.drafts.length && reset) box.appendChild(make("div", "empty", "Nothing matches these filters."));
+      let day = box.dataset.day && !reset ? box.dataset.day : "";
+      for (const d of r.drafts) {
+        const dd = String(d.created_at).slice(0, 10);
+        if (dd !== day) { day = dd; box.appendChild(make("div", "daygroup", day)); }
+        box.appendChild(draftCard(d));
+      }
+      box.dataset.day = day;
+      $("lmore").hidden = lib.offset >= lib.total;
+      showErr(null);
+    } catch (e) { showErr(e); }
+  }
+
+  const cal = { month: null };
+  const wibNow = () => new Date(Date.now() + 7 * 3_600_000).toISOString();
+  function shiftMonth(m, by) { const [y, mo] = m.split("-").map(Number); const d = new Date(Date.UTC(y, mo - 1 + by, 1)); return d.toISOString().slice(0, 7); }
+  async function loadCalendar() {
+    if (!cal.month) {
+      cal.month = wibNow().slice(0, 7);
+      $("calprev").addEventListener("click", () => { cal.month = shiftMonth(cal.month, -1); loadCalendar(); });
+      $("calnext").addEventListener("click", () => { cal.month = shiftMonth(cal.month, 1); loadCalendar(); });
+    }
+    try {
+      const r = await call(`/api/studio/calendar?month=${cal.month}`);
+      const [y, m] = cal.month.split("-").map(Number);
+      $("calmonth").textContent = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+      const box = $("cal"); box.textContent = "";
+      for (const d of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]) box.appendChild(make("div", "dow", d));
+      const first = new Date(Date.UTC(y, m - 1, 1));
+      const lead = (first.getUTCDay() + 6) % 7;
+      const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      const today = wibNow().slice(0, 10);
+      for (let i = 0; i < lead; i++) box.appendChild(make("div", "day out"));
+      for (let n = 1; n <= days; n++) {
+        const iso = `${cal.month}-${String(n).padStart(2, "0")}`;
+        const x = r.days?.[iso];
+        const cell = make("button", `day${iso === today ? " today" : ""}`); cell.type = "button";
+        cell.setAttribute("aria-label", `${iso}: ${x ? `${x.created} drafted, ${x.published} published` : "nothing"}`);
+        cell.appendChild(make("span", "dn", String(n)));
+        if (x?.created) cell.appendChild(make("span", "chip c", `${x.created} drafted`));
+        if (x?.published) cell.appendChild(make("span", "chip p", `${x.published} published`));
+        if (x) cell.appendChild(make("span", "chs", Object.keys(x.channels).map((c) => status?.channels?.[c]?.name ?? c).join(" · ")));
+        cell.addEventListener("click", () => { wireLibrary(); for (const id of ["lq", "lstatus", "lchannel", "lkind"]) $(id).value = ""; $("lfrom").value = iso; $("lto").value = iso; location.hash = "#library"; });
+        box.appendChild(cell);
+      }
+      const tail = (7 - ((lead + days) % 7)) % 7;
+      for (let i = 0; i < tail; i++) box.appendChild(make("div", "day out"));
+      showErr(null);
+    } catch (e) { showErr(e); }
+  }
+
+  const med = { offset: 0, wired: false };
+  async function loadMedia(reset) {
+    if (!med.wired) { med.wired = true; $("mmore").addEventListener("click", () => loadMedia(false)); }
+    if (reset) med.offset = 0;
+    try {
+      const r = await call(`/api/studio/media-library${med.offset ? `?offset=${med.offset}` : ""}`);
+      const box = $("medialist");
+      if (reset) box.textContent = "";
+      med.offset = r.offset + r.media.length;
+      if (!r.media.length && reset) box.appendChild(make("div", "card empty", "No card or video yet."));
+      for (const m of r.media) {
+        const t = make("div", "card mtile");
+        const video = m.content_type === "video/webm";
+        const el = make(video ? "video" : "img");
+        if (video) { el.controls = true; el.preload = "metadata"; el.muted = true; } else { el.alt = `${status?.channels?.[m.channel]?.name ?? m.channel} card`; el.loading = "lazy"; }
+        el.src = `/api/studio/media?id=${m.id}`;
+        t.appendChild(el);
+        const row = make("div", "row");
+        row.appendChild(badge("purple", status?.channels?.[m.channel]?.name ?? m.channel ?? "?"));
+        if (m.status) row.appendChild(badge(TONE[m.status] ?? "", LABEL[m.status] ?? m.status));
+        t.appendChild(row);
+        t.appendChild(make("div", "meta", `${KIND[m.kind] ?? m.kind ?? ""} · ${(m.bytes / 1024).toFixed(0)} KB · ${when(m.created_at)}`));
+        const a = make("a", null, "Open its draft"); a.href = "#library";
+        a.addEventListener("click", () => { wireLibrary(); for (const id of ["lstatus", "lchannel", "lkind", "lfrom", "lto"]) $(id).value = ""; $("lq").value = m.draft_id; });
+        t.appendChild(a);
+        box.appendChild(t);
+      }
+      $("mmore").hidden = med.offset >= r.total;
+      showErr(null);
+    } catch (e) { showErr(e); }
+  }
 
   // ---- create: a person's post, per channel, checked as it is typed (GET templates, POST check, POST compose) ----
   const CREATE_KINDS = [["custom", "Custom post"], ["key_levels", "Key-level map"], ["pattern", "Chart pattern"], ["daily_recap", "Daily recap"]];
