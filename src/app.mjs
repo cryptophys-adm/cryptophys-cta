@@ -314,8 +314,9 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
       if (STUDIO_ROUTES.includes(path)) return json({ error: "method_not_allowed" }, 405);
       return json({ error: "not_found" }, 404);
     }
-    // /studio: the studio page (assets), after the JWT check.
-    return asset(env, request, url, "/studio/index.html");
+    // /studio: the studio page; /studio/<file> (studio.js): that asset itself. Both after the JWT check. Before
+    // 2026-11-16 every /studio/* path got the page, so /studio/studio.js came back as HTML and the studio never ran.
+    return asset(env, request, url, path === "/studio" ? "/studio/" : null);
   }
 
   if (request.method === "GET" || request.method === "HEAD") return asset(env, request, url, path === "/" ? "/index.html" : null);
