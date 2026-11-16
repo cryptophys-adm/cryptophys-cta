@@ -13,6 +13,7 @@ import { ANALYSIS_DISCLAIMER } from "./analysis-drafts.mjs";
 import { effectiveSettings, normalizeSettings, draftingChannels, applySettings, wibDayStart, FORMATS, PLANNED_FORMATS, KINDS, KIND_NAMES, DAYS, TIMEZONE, MAX_PER_DAY, MAX_SLOTS } from "./settings.mjs";
 import { recheck } from "./desk.mjs";
 import { dueSlots, nextSlots } from "./scheduler.mjs";
+import { linkHosts, normalizeLink, randomSlug, shortUrl, redirectTarget, GO_PATH, normalizeHashtagSet, MAX_SETS, normalizeMix, DEFAULT_MIX, MIX_KINDS, wibWeek, mixReport } from "./marketing.mjs";
 import { templateTexts, checkPost, composeDrafts, overlayFor, recapWindow, COMPOSE_KINDS, COMPOSE_KIND_NAMES } from "./compose.mjs";
 
 export const RECAP_CRON = "17 22 * * 2-6";
@@ -274,7 +275,7 @@ async function rpc(fn, failure) {
 }
 
 const isStudio = (path) => path === "/studio" || path.startsWith("/studio/") || path.startsWith("/api/studio/");
-const STUDIO_ROUTES = ["/api/studio/schedule", "/api/studio/library", "/api/studio/edit", "/api/studio/duplicate", "/api/studio/calendar", "/api/studio/media-library", "/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
+const STUDIO_ROUTES = ["/api/studio/links", "/api/studio/hashtag-sets", "/api/studio/mix", "/api/studio/schedule", "/api/studio/library", "/api/studio/edit", "/api/studio/duplicate", "/api/studio/calendar", "/api/studio/media-library", "/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
 /** The public origin of the cards Instagram fetches (GET /media/<id>.jpg). */
 export const originOf = (env) => String(env?.PUBLIC_ORIGIN || "https://cta.cryptophys.work").replace(/\/+$/, "");
 const MEDIA_PATH = /^\/media\/([0-9a-f]{32})\.(jpg|webm)$/;
@@ -332,6 +333,15 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
     if ((media[2] === "webm") !== (m.content_type === "video/webm")) return json({ error: "not_found" }, 404);
     return image(m, "public, max-age=86400");
   }
+  // A tracked link (src/marketing.mjs): count the click (link, channel, WIB day; nothing about the person) and send
+  // the visitor on with UTM tags. Only links made in the studio, to our own or the brand's profile hosts.
+  const go = request.method === "GET" || request.method === "HEAD" ? GO_PATH.exec(path) : null;
+  if (go) {
+    const link = await desk(env).link(go[1]).catch(() => null);
+    if (!link) return json({ error: "not_found" }, 404);
+    if (request.method === "GET") await desk(env).click({ slug: go[1], channel: go[2] }, now ? now * 1000 : Date.now()).catch(() => {});
+    return new Response(null, { status: 302, headers: { location: redirectTarget(link, go[2]), "cache-control": "no-store", "referrer-policy": "no-referrer", "x-content-type-options": "nosniff" } });
+  }
   if (route === "GET /api/public/archive") {
     return rpc(async () => ({ posts: await desk(env).archive(Number(url.searchParams.get("limit")) || 30) }), "archive_failed");
   }
@@ -378,6 +388,49 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
           if (!out.ok || out.status !== "approved") return out;
           return { ...out, publish: await publishDraft(env, await desk(env).get(out.id), { now: at }) };
         }, "decide_failed");
+      }
+      // Marketing (src/marketing.mjs): tracked links, hashtag sets, the weekly content mix.
+      if (route === "GET /api/studio/links") {
+        return rpc(async () => ({ links: (await desk(env).links()).map((l) => ({ ...l, short: Object.fromEntries(channelsOf(env).map((c) => [c, shortUrl(originOf(env), l.slug, c)])) })),
+          hosts: linkHosts(env), can_edit: identity.type === "user" }), "links_failed");
+      }
+      if (route === "POST /api/studio/links") {
+        const r = await personJson(request, url, identity);
+        if (r.response) return r.response;
+        const n = normalizeLink(r.body, { hosts: linkHosts(env) });
+        if (!n.ok) return json({ error: n.error }, 400);
+        return rpc(async () => {
+          for (let i = 0; i < 3; i++) {
+            const out = await desk(env).addLink({ slug: randomSlug(), link: n.link, actor: identity.subject }, now ? now * 1000 : Date.now());
+            if (out.ok) return out;
+          }
+          return { ok: false, error: "could not make a short link; try again" };
+        }, "links_failed");
+      }
+      if (route === "GET /api/studio/hashtag-sets") return rpc(async () => ({ sets: await desk(env).hashtagSets(), max: MAX_SETS }), "sets_failed");
+      if (route === "POST /api/studio/hashtag-sets") {
+        const r = await personJson(request, url, identity);
+        if (r.response) return r.response;
+        const remove = r.body.remove === true;
+        const n = remove ? { ok: typeof r.body.name === "string" && r.body.name.trim() !== "", set: { name: String(r.body.name ?? "").trim().slice(0, 40) }, error: "name is required" } : normalizeHashtagSet(r.body);
+        if (!n.ok) return json({ error: n.error }, 400);
+        return rpc(() => desk(env).saveHashtagSet({ set: n.set, remove, actor: identity.subject, max: MAX_SETS }, now ? now * 1000 : Date.now()), "sets_failed");
+      }
+      if (route === "GET /api/studio/mix") {
+        return rpc(async () => {
+          const at = now ? now * 1000 : Date.now();
+          const stored = await desk(env).studioSetting("mix");
+          const targets = stored?.value ?? DEFAULT_MIX;
+          const week = wibWeek(at);
+          return { targets, kinds: MIX_KINDS, updated_at: stored?.updated_at ?? null, updated_by: stored?.updated_by ?? null, week, ...mixReport(targets, await desk(env).kindMix(week.from, week.to)) };
+        }, "mix_failed");
+      }
+      if (route === "POST /api/studio/mix") {
+        const r = await personJson(request, url, identity);
+        if (r.response) return r.response;
+        const n = normalizeMix(r.body.targets);
+        if (!n.ok) return json({ error: n.error }, 400);
+        return rpc(() => desk(env).saveStudioSetting({ key: "mix", value: n.mix, actor: identity.subject }, now ? now * 1000 : Date.now()), "mix_failed");
       }
       if (route === "GET /api/studio/schedule") return rpc(() => studioSchedule(env, { now: now ? now * 1000 : Date.now() }), "schedule_failed");
       // Content management: the library (filters, words, WIB days), a person's edit (the guardian again; a media

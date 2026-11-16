@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { handle, accountOf, publishDraft, SECRETS, channelsOf, renderImages, collectInsights, runSchedule } from "../src/app.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
-import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots } from "../src/desk.mjs";
+import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
@@ -47,7 +47,10 @@ function deskStub() {
     edit: async (i, now) => editDraft(sql, { ...i, check: (x) => editCheck(x, i.checkOptions ?? {}) }, { now }),
     duplicate: async (i, now) => duplicateDraft(sql, { ...i, check: (x) => editCheck(x, i.checkOptions ?? {}) }, { now }),
     nextApproved: async (c) => nextApproved(sql, c), approvedCounts: async () => approvedCounts(sql), claimSlot: async (i, now) => claimSlot(sql, i, { now }),
-    slotOutcome: async (i) => { slotOutcome(sql, i); return true; }, recentSlots: async (n) => recentSlots(sql, { limit: n })
+    slotOutcome: async (i) => { slotOutcome(sql, i); return true; }, recentSlots: async (n) => recentSlots(sql, { limit: n }),
+    addLink: async (i, now) => addLink(sql, i, { now }), link: async (s) => getLink(sql, s), click: async (i, now) => { countClick(sql, i, { now }); return true; },
+    links: async () => listLinks(sql), hashtagSets: async () => listHashtagSets(sql), saveHashtagSet: async (i, now) => saveHashtagSet(sql, i, { now }),
+    studioSetting: async (k) => studioSetting(sql, k), saveStudioSetting: async (i, now) => saveStudioSetting(sql, i, { now }), kindMix: async (f, t) => kindMixSince(sql, f, t)
   };
   return { sql, api, ns: { idFromName: () => "desk", get: () => api } };
 }
@@ -484,4 +487,29 @@ test("the per-channel scheduler: a scheduled channel posts in its slots only, on
   assert.equal(sch.channels.x.scheduled, false);
   assert.deepEqual(sch.recent.map((x) => [x.key, x.outcome, x.draft_id]), [["telegram@2026-11-16T19:00", "published", "t1:telegram"]]);
   assert.ok(!JSON.stringify(sch).includes("SECRET"));
+});
+
+test("marketing through the HTTP face: a tracked link redirects with UTM tags and counts; sets and the mix by a person", async () => {
+  resetKeyCacheForTests();
+  const { env: e } = env({ CONTENT_CHANNELS: "threads,x" });
+  const person = await jwt({ email: "owner@example.com" });
+  const svc = await jwt({ common_name: "ci.access" });
+  const post = (p, body, token = person) => handle(req(p, { token, method: "POST", body }), e, opts);
+  assert.equal((await post("/api/studio/links", { target: "https://cta.cryptophys.work/archive", campaign: "launch" }, svc)).status, 403);
+  assert.equal((await post("/api/studio/links", { target: "https://evil.example/", campaign: "launch" })).status, 400, "never an open redirect");
+  const made = await (await post("/api/studio/links", { target: "https://cta.cryptophys.work/archive", campaign: "launch", label: "Archive" })).json();
+  assert.match(made.slug, /^[a-z]{8}$/);
+  const go = await handle(req(`/go/${made.slug}/threads`), e, opts);
+  assert.equal(go.status, 302);
+  assert.equal(go.headers.get("location"), "https://cta.cryptophys.work/archive?utm_source=threads&utm_medium=social&utm_campaign=launch");
+  assert.equal((await handle(req("/go/zzzzzzzz/threads"), e, opts)).status, 404);
+  const list = await (await handle(req("/api/studio/links", { token: person }), e, opts)).json();
+  assert.deepEqual([list.links[0].total, list.links[0].short.x], [1, `https://cta.cryptophys.work/go/${made.slug}/x`]);
+  assert.equal((await post("/api/studio/hashtag-sets", { name: "core", tags: "#XAUUSD #gold" })).status, 200);
+  assert.deepEqual((await (await handle(req("/api/studio/hashtag-sets", { token: person }), e, opts)).json()).sets.map((x) => x.tags), ["#XAUUSD #gold"]);
+  assert.equal((await post("/api/studio/hashtag-sets", { name: "core", remove: true })).status, 200);
+  assert.equal((await post("/api/studio/mix", { targets: { key_levels: 50 } })).status, 400);
+  assert.equal((await post("/api/studio/mix", { targets: { key_levels: 20, pattern: 30, daily_recap: 30, custom: 20 } })).status, 200);
+  const mix = await (await handle(req("/api/studio/mix", { token: person }), e, opts)).json();
+  assert.deepEqual([mix.targets.custom, mix.updated_by, mix.total], [20, "owner@example.com", 0]);
 });

@@ -63,6 +63,10 @@ Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (dr
 | `POST /api/studio/render-now` | a person, same origin, JSON | renders the waiting cards and videos now |
 | `GET /api/studio/performance` | Access JWT | the last 14 days: posts and summed views, likes, comments, shares per channel, the best post, each post's latest metrics |
 | `POST /api/studio/insights-now` | a person, same origin, JSON | reads the recent posts' metrics now |
+| `GET /go/<slug>/<channel>` | public | a tracked link: counts the click (link, channel, WIB day; nothing about the person) and redirects (302) to its target with `utm_source=<channel>`, `utm_medium=social`, `utm_campaign`; unknown slug 404 |
+| `GET`/`POST /api/studio/links` | Access JWT / a person | tracked links with clicks per channel and each channel's short URL; a new link's target must be https on `LINK_HOSTS` (default `cta.cryptophys.work`) or the brand's profile hosts: never an open redirect |
+| `GET`/`POST /api/studio/hashtag-sets` | Access JWT / a person | named hashtag lines (`{ name, tags }`, `{ name, remove: true }`); at most 30 |
+| `GET`/`POST /api/studio/mix` | Access JWT / a person | the weekly content-mix targets per post type (whole percents adding up to 100) and this WIB week's approved and published posts against them |
 | `GET /api/studio/schedule` | Access JWT | each channel's next slots (WIB), approved drafts waiting, the next one, and the latest slot runs |
 | `GET /api/studio/library?status=&channel=&kind=&q=&from=&to=&offset=` | Access JWT | Library: every draft, filtered (words in the text or id; `from`/`to` are WIB days), 30 a page, with the total |
 | `POST /api/studio/edit` | a person, same origin, JSON | `{ id, text }`: only a pending, blocked, needs_image or needs_video draft; the guardian again (refused text is not stored); a card or video channel's media is made again; event `edited` |
@@ -98,6 +102,11 @@ rest of the host stays public.
 | Telegram channel | text | built (Bot API; the bot is a channel admin) | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
 | YouTube Shorts | video (WebM, 9:16, 14 s) from the card; the description names TradingView | built: resumable upload, public asked; private until Google verifies the API project | `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN` |
 | TikTok | the same video | built: Direct Post, FILE_UPLOAD in one chunk, the most public privacy the creator allows; private (SELF_ONLY) until TikTok audits the app | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REFRESH_TOKEN` (TikTok rotates it; the Desk keeps the newest) |
+
+Marketing (owner 2026-11-16: "kerjakan tambahan pro marketing juga"; `src/marketing.mjs`, the studio's Marketing
+page): tracked links (a short link per channel with UTM tags and a click count; slugs are 8 letters, so a link never
+reads as a price to the guardian), hashtag sets (put into a post on the Create page, which also inserts a tracked link
+at the cursor), and the weekly content mix (targets per post type; the Dashboard shows this week's actual against them).
 
 Content management (owner 2026-11-16: "content management"; the studio's Library, Calendar and Media pages). The
 library lists every draft and post with filters and paging; a person edits a draft's text before approval (the
