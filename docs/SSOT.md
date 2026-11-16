@@ -63,6 +63,10 @@ Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (dr
 | `POST /api/studio/render-now` | a person, same origin, JSON | renders the waiting cards and videos now |
 | `GET /api/studio/performance` | Access JWT | the last 14 days: posts and summed views, likes, comments, shares per channel, the best post, each post's latest metrics |
 | `POST /api/studio/insights-now` | a person, same origin, JSON | reads the recent posts' metrics now |
+| `GET /api/studio/connections` | Access JWT | each channel's connection: OAuth or bot, whether the provider app's secrets and `TOKEN_ENC_KEY` are set, the connected account's name, scopes and token expiry, the redirect URI to register; never a token or a secret |
+| `POST /api/studio/connect/start` | an approver (a person, same origin, JSON) | `{ channel }`: a one-time state (PKCE for X) and the provider's sign-in URL; refused without the app's secrets or `TOKEN_ENC_KEY`; not for Telegram |
+| `GET /studio/oauth/callback` | Access JWT, an approver | the provider's redirect: the state is taken once (same person, 10 minutes), the code is exchanged server-side, the tokens are stored encrypted (AES-GCM) with the account's name; back to the Channels page with a short result |
+| `POST /api/studio/connect/disconnect`, `/connect/check` | an approver | delete a channel's stored tokens and connection; or check the account works (Telegram: the bot can post in the channel) |
 | `GET /api/studio/growth` | Access JWT | A/B tests with their result once both are measured, the best WIB weekday-hours per channel (two or more measured posts an hour), evergreen suggestions (custom posts 30+ days old, best engagement, not copied in 30 days) |
 | `GET /go/<slug>/<channel>` | public | a tracked link: counts the click (link, channel, WIB day; nothing about the person) and redirects (302) to its target with `utm_source=<channel>`, `utm_medium=social`, `utm_campaign`; unknown slug 404 |
 | `GET`/`POST /api/studio/links` | Access JWT / a person | tracked links with clicks per channel and each channel's short URL; a new link's target must be https on `LINK_HOSTS` (default `cta.cryptophys.work`) or the brand's profile hosts: never an open redirect |
@@ -153,6 +157,19 @@ its video, the recap's delay rule with the recap window's decisions; a custom po
 own besides the template lines. A post is saved only when every channel passes; the drafts then wait for approval like
 any other (cards and videos are made for them by the same run). Settings' kinds and daily maximum bound the engine,
 not a person's post.
+
+Accounts by OAuth (owner 2026-11-16: "ya, kerjakan halaman koneksi OAuth per channel"; `src/oauth.mjs`, the Channels
+page's Account section). An approver presses Connect; the provider's own sign-in and consent page asks them; the
+provider redirects to `/studio/oauth/callback` (behind Access) with a one-time code, which this Worker exchanges
+server-side. The tokens are stored in the Desk encrypted with `TOKEN_ENC_KEY` (AES-GCM) and never shown: the page shows
+the account's name, scopes and expiry, Check, Reconnect and Disconnect. Threads and Instagram get their long-lived
+token (refreshed by the daily run); X's two-hour token is renewed from its refresh token before a call; YouTube and
+TikTok keep their refresh tokens as before. A connected account wins over the account secrets; without one, the
+secrets of section 4's table still work. Telegram has no OAuth: its bot token stays a secret and Check confirms the bot
+may post in the channel. Set once through the platform: each provider app's id and secret (`THREADS_APP_ID`,
+`THREADS_APP_SECRET`, `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `X_CLIENT_ID`, `X_CLIENT_SECRET`; YouTube's and
+TikTok's client secrets above) and `TOKEN_ENC_KEY` (32 random bytes, base64); each app registers the redirect URI
+`https://cta.cryptophys.work/studio/oauth/callback`. Connecting posts nothing: publishing stays behind `CONTENT_PUBLISH`.
 
 Meta's endpoint shapes follow the published guides (Meta's own pages were unreachable from the build session).
 YouTube's resumable upload and TikTok's Direct Post and media transfer follow their guides, read on 2026-11-15; the

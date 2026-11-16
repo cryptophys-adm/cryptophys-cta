@@ -7,7 +7,8 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { handle, accountOf, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule } from "../src/app.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
-import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince } from "../src/desk.mjs";
+import { CONNECT_SECRETS } from "../src/oauth.mjs";
+import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
@@ -51,7 +52,9 @@ function deskStub() {
     addLink: async (i, now) => addLink(sql, i, { now }), link: async (s) => getLink(sql, s), click: async (i, now) => { countClick(sql, i, { now }); return true; },
     links: async () => listLinks(sql), hashtagSets: async () => listHashtagSets(sql), saveHashtagSet: async (i, now) => saveHashtagSet(sql, i, { now }),
     studioSetting: async (k) => studioSetting(sql, k), saveStudioSetting: async (i, now) => saveStudioSetting(sql, i, { now }), kindMix: async (f, t) => kindMixSince(sql, f, t),
-    addAbTest: async (i, now) => { addAbTest(sql, i, { now }); return true; }, abTests: async () => listAbTests(sql), measuredPosts: async () => measuredPosts(sql), copiedSince: async (s) => copiedSince(sql, s)
+    addAbTest: async (i, now) => { addAbTest(sql, i, { now }); return true; }, abTests: async () => listAbTests(sql), measuredPosts: async () => measuredPosts(sql), copiedSince: async (s) => copiedSince(sql, s),
+    putOAuthState: async (i, now) => putOAuthState(sql, i, { now }), takeOAuthState: async (i, now) => takeOAuthState(sql, i, { now }),
+    saveConnection: async (i, now) => saveConnection(sql, i, { now }), connections: async () => connectionsOf(sql), removeConnection: async (i, now) => removeConnection(sql, i, { now })
   };
   return { sql, api, ns: { idFromName: () => "desk", get: () => api } };
 }
@@ -201,7 +204,7 @@ test("the native deploy block in organism.json equals wrangler.jsonc, and the or
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   assert.deepEqual(Object.keys(pkg.dependencies ?? {}), ["@cloudflare/puppeteer"], "one runtime dependency, declared in the deploy block");
   assert.deepEqual(d.crons, cfg.triggers.crons);
-  assert.deepEqual(d.secrets_kept, [...Object.values(SECRETS).flatMap((s) => Object.values(s)), ...STUDIO_SECRETS]);
+  assert.deepEqual(d.secrets_kept, [...Object.values(SECRETS).flatMap((s) => Object.values(s)), ...STUDIO_SECRETS, ...CONNECT_SECRETS]);
   const src = readFileSync(new URL("../src/index.mjs", import.meta.url), "utf8");
   for (const e of [...d.entrypoints, ...d.durable_objects.map((o) => o.class_name)]) assert.match(src, new RegExp(`export class ${e}\\b`));
   assert.equal(d.via, "forge");
@@ -558,4 +561,52 @@ test("team roles: unset, every person approves; set, approvers decide and set ch
   const ok = await (await post("/api/studio/decide", { id, decision: "approve" }, owner)).json();
   assert.equal(ok.status, "approved", "the approver decides");
   assert.deepEqual(draftEvents(d.sql, id).map((x) => [x.action, x.actor]).sort(), [["approved", "owner@example.com"], ["composed", "writer@example.com"]], "who wrote and who approved, in the history");
+});
+
+test("connecting an account through the studio: approver only, the state round trip, tokens sealed and never shown", async () => {
+  resetKeyCacheForTests();
+  const KEY = Buffer.alloc(32, 9).toString("base64");
+  const { env: e, d } = env({ CONTENT_CHANNELS: "threads,x,telegram", THREADS_APP_ID: "app", THREADS_APP_SECRET: "APPSECRET", TOKEN_ENC_KEY: KEY, STUDIO_APPROVERS: "owner@example.com" });
+  const owner = await jwt({ email: "owner@example.com" });
+  const writer = await jwt({ email: "writer@example.com" });
+  const provider = async (url, init) => {
+    const u = String(url);
+    if (u.includes("cloudflareaccess.com")) return certsFetch(url, init);
+    if (u.startsWith("https://graph.threads.net/oauth/access_token")) return Response.json({ access_token: "SHORT-TOKEN", user_id: 42 });
+    if (u.startsWith("https://graph.threads.net/access_token")) return Response.json({ access_token: "LONG-TOKEN", expires_in: 5184000 });
+    if (u.startsWith("https://graph.threads.net/v1.0/me")) return Response.json({ id: "42", username: "xauusd-ai-cta" });
+    return Response.json({ error: "unexpected " + u }, { status: 500 });
+  };
+  const o = { fetchImpl: provider, now: NOW };
+  const post = (p, body, token) => handle(req(p, { token, method: "POST", body }), e, o);
+  assert.equal((await post("/api/studio/connect/start", { channel: "threads" }, writer)).status, 403, "an editor never connects");
+  assert.equal((await post("/api/studio/connect/start", { channel: "x" }, owner)).status, 400, "X's app is not set up");
+  assert.equal((await post("/api/studio/connect/start", { channel: "telegram" }, owner)).status, 400, "Telegram is a bot");
+  const start = await (await post("/api/studio/connect/start", { channel: "threads" }, owner)).json();
+  const auth = new URL(start.url);
+  assert.equal(auth.origin + auth.pathname, "https://threads.net/oauth/authorize");
+  assert.equal(auth.searchParams.get("redirect_uri"), "https://cta.cryptophys.work/studio/oauth/callback");
+  const state = auth.searchParams.get("state");
+  // Someone else's sign-in cannot finish it; an unknown state neither.
+  const cb = (q, token) => handle(req(`/studio/oauth/callback?${new URLSearchParams(q)}`, { token }), e, o);
+  assert.match((await cb({ state: "f".repeat(48), code: "c" }, owner)).headers.get("location"), /oauth=error/);
+  assert.match((await cb({ state, code: "c" }, writer)).headers.get("location"), /only\+an\+approver/);
+  const ok = await cb({ state, code: "c0de" }, owner);
+  assert.equal(ok.status, 302);
+  assert.equal(ok.headers.get("location"), "/studio?oauth=ok&channel=threads#channels");
+  assert.match((await cb({ state, code: "c0de" }, owner)).headers.get("location"), /unknown\+or\+used/, "a state works once");
+  const stored = storedToken(d.sql, "threads");
+  assert.match(stored.access_token, /^enc1:/, "sealed at rest");
+  assert.ok(!stored.access_token.includes("LONG-TOKEN"));
+  const acct = await accountOf(e, "threads", { stored: { access_token: "LONG-TOKEN" }, connection: { account_id: "42" } });
+  assert.deepEqual([acct.access_token, acct.user_id], ["LONG-TOKEN", "42"]);
+  const conns = await (await handle(req("/api/studio/connections", { token: owner }), e, o)).json();
+  assert.deepEqual([conns.channels.threads.connected, conns.channels.threads.via, conns.channels.threads.account_name, conns.can_connect], [true, "oauth", "@xauusd-ai-cta", true]);
+  assert.equal(conns.channels.x.app_configured, false);
+  const text = JSON.stringify(conns);
+  for (const secret of ["LONG-TOKEN", "SHORT-TOKEN", "APPSECRET", KEY, "enc1:"]) assert.ok(!text.includes(secret), `never ${secret}`);
+  const check = await (await post("/api/studio/connect/check", { channel: "threads" }, owner)).json();
+  assert.deepEqual(check.check, { id: "42", name: "@xauusd-ai-cta" });
+  assert.equal((await post("/api/studio/connect/disconnect", { channel: "threads" }, owner)).status, 200);
+  assert.equal(storedToken(d.sql, "threads"), null);
 });
