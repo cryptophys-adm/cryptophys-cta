@@ -88,7 +88,10 @@ test("the studio: 403 without a valid Access JWT, the page and API with one; a s
   assert.equal((await handle(req("/studio/studio.js"), e, opts)).status, 403, "a studio asset is never served without a sign-in");
   assert.equal((await handle(req("/api/studio/drafts", { token: "a.b.c" }), e, opts)).status, 403);
   const person = await jwt({ email: "Owner@Example.com" });
-  assert.equal(await (await handle(req("/studio", { token: person }), e, opts)).text(), "asset /studio/index.html");
+  assert.equal(await (await handle(req("/studio", { token: person }), e, opts)).text(), "asset /studio/");
+  // The studio's script is served as itself, never as the page (2026-11-16: it came back as HTML and nothing ran).
+  assert.equal(await (await handle(req("/studio/studio.js", { token: person }), e, opts)).text(), "asset /studio/studio.js");
+  assert.equal(await (await handle(req("/studio/", { token: person }), e, opts)).text(), "asset /studio/");
   assert.deepEqual(await (await handle(req("/api/studio/whoami", { token: person }), e, opts)).json(), { subject: "owner@example.com", type: "user", can_decide: true });
   const st = await (await handle(req("/api/studio/status", { token: person }), e, opts)).json();
   assert.equal(st.publish, "off");
