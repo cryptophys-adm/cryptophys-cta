@@ -314,3 +314,17 @@ test("the bridge deploy workflow: main or by hand, no Worker secret, no delete, 
   const cfg = JSON.parse(readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8").replace(/^\s*\/\/.*$/gm, ""));
   assert.equal(cfg.vars.CONTENT_PUBLISH, "off");
 });
+
+test("the pages: no inline script or style (CSP 'self'), the studio's four views, and no other company's name", () => {
+  const read = (p) => readFileSync(new URL(`../public/${p}`, import.meta.url), "utf8");
+  for (const page of ["index.html", "studio/index.html"]) {
+    const html = read(page);
+    assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)[^>]*>|<style\b|\sstyle=|\son[a-z]+=/i, `${page}: inline script, style or handler`);
+  }
+  const studio = read("studio/index.html");
+  for (const v of ["dashboard", "queue", "performance", "channels"]) assert.match(studio, new RegExp(`id="view-${v}"`));
+  for (const id of ["publish", "who", "tabs", "queue", "channels", "perf", "draftnow", "rendernow", "insightsnow", "err"]) assert.match(studio, new RegExp(`id="${id}"`), id);
+  const all = ["index.html", "studio/index.html", "cta.css", "cta.js", "studio/studio.js"].map(read).join("\n");
+  assert.doesNotMatch(all, /\b(meta platforms|facebook)\b|\bmeta for developers\b/i, "our own brand only");
+  assert.doesNotMatch(all, /\binnerHTML\b/, "text goes in as text");
+});
