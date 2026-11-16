@@ -10,6 +10,8 @@ import { renderCard, renderVideo, toBase64, fromBase64 } from "./render.mjs";
 import { DISCLAIMER } from "./drafts.mjs";
 import { postInsights, performanceReport, insightChannelsOf, INSIGHTS_DAYS } from "./insights.mjs";
 import { ANALYSIS_DISCLAIMER } from "./analysis-drafts.mjs";
+import { effectiveSettings, normalizeSettings, draftingChannels, applySettings, wibDayStart, FORMATS, PLANNED_FORMATS, KINDS, KIND_NAMES, DAYS, TIMEZONE, MAX_PER_DAY, MAX_SLOTS } from "./settings.mjs";
+import { recheck } from "./desk.mjs";
 
 export const RECAP_CRON = "17 22 * * 2-6";
 export const ANALYSIS_CRON = "9 * * * 1-5";
@@ -75,10 +77,30 @@ export async function mediaBytes(env, draft) {
   return { bytes: fromBase64(m.data), mime: m.content_type };
 }
 
+/**
+ * Each channel's settings (src/settings.mjs): the stored ones over the defaults. A desk that cannot be read gives
+ * the defaults, which are what the engine did before settings existed.
+ */
+export async function channelSettings(env) {
+  let stored = null;
+  try { stored = await desk(env).settings(); } catch { stored = null; }
+  return { settings: effectiveSettings(stored?.settings ?? {}), meta: stored?.meta ?? {} };
+}
+/** The settings applied to fresh drafts: kinds, the daily maximum (WIB day) and the hashtag line (guardian again). */
+async function settled(env, drafts, settings, now) {
+  if (!drafts.length) return drafts;
+  let today = {};
+  try { today = await desk(env).channelCounts(wibDayStart(now)); } catch { today = {}; }
+  return applySettings(drafts, settings, { today, recheck: (d) => recheck(d, { delayHours: delayOf(env), now }) });
+}
+
 /** The daily recap drafts (decisions older than 24 hours), queued once. */
 export async function draftDay(env, { now = Date.now() } = {}) {
   const projection = await env.PROJECTION.recaps({ days: 3 });
-  const { summary, drafts } = dailyDrafts(projection?.recaps ?? [], { now, channels: channelsOf(env), delayHours: delayOf(env) });
+  const { settings } = await channelSettings(env);
+  const made = dailyDrafts(projection?.recaps ?? [], { now, channels: draftingChannels(channelsOf(env), settings), delayHours: delayOf(env) });
+  const summary = made.summary;
+  const drafts = await settled(env, made.drafts, settings, now);
   const added = drafts.length ? await desk(env).add(drafts, now) : [];
   return { bars: summary.bars, drafts: drafts.map((d) => ({ id: d.id, status: d.status })), added };
 }
@@ -89,7 +111,8 @@ export async function draftAnalysis(env, { now = Date.now() } = {}) {
   const d = desk(env);
   const known = new Set(await d.idsWithPrefix("pattern:"));
   const postedToday = await d.kindCounts("pattern", new Date(now).toISOString().slice(0, 10));
-  const drafts = analysisDrafts(analysis, { now, channels: channelsOf(env), levelsRun: new Date(now).getUTCHours() === 6, postedToday, known });
+  const { settings } = await channelSettings(env);
+  const drafts = await settled(env, analysisDrafts(analysis, { now, channels: draftingChannels(channelsOf(env), settings), levelsRun: new Date(now).getUTCHours() === 6, postedToday, known }), settings, now);
   const added = drafts.length ? await d.add(drafts, now) : [];
   return { zones: analysis?.zones?.length ?? 0, patterns: analysis?.patterns?.length ?? 0, drafts: drafts.map((x) => ({ id: x.id, status: x.status })), added };
 }
@@ -186,7 +209,7 @@ async function rpc(fn, failure) {
 }
 
 const isStudio = (path) => path === "/studio" || path.startsWith("/studio/") || path.startsWith("/api/studio/");
-const STUDIO_ROUTES = ["/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
+const STUDIO_ROUTES = ["/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
 /** The public origin of the cards Instagram fetches (GET /media/<id>.jpg). */
 export const originOf = (env) => String(env?.PUBLIC_ORIGIN || "https://cta.cryptophys.work").replace(/\/+$/, "");
 const MEDIA_PATH = /^\/media\/([0-9a-f]{32})\.(jpg|webm)$/;
@@ -290,6 +313,19 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
           if (!out.ok || out.status !== "approved") return out;
           return { ...out, publish: await publishDraft(env, await desk(env).get(out.id), { now: at }) };
         }, "decide_failed");
+      }
+      // The Channels page: each channel's settings, what it can take, and who changed them last. Never a token.
+      if (route === "GET /api/studio/settings") {
+        return rpc(async () => ({ ...(await channelSettings(env)), formats: FORMATS, planned: PLANNED_FORMATS, kinds: KINDS, kind_names: KIND_NAMES, days: DAYS,
+          timezone: TIMEZONE, max_per_day: MAX_PER_DAY, max_slots: MAX_SLOTS, can_edit: identity.type === "user" }), "settings_failed");
+      }
+      if (route === "POST /api/studio/settings") {
+        const r = await personJson(request, url, identity);
+        if (r.response) return r.response;
+        const channel = typeof r.body.channel === "string" ? r.body.channel : "";
+        const n = normalizeSettings(channel, r.body.settings);
+        if (!n.ok) return json({ error: n.error }, 400);
+        return rpc(() => desk(env).saveSettings({ channel, settings: n.settings, actor: identity.subject }, now ? now * 1000 : Date.now()), "settings_failed");
       }
       if (route === "GET /api/studio/performance") return rpc(() => studioPerformance(env, { now: now ? now * 1000 : Date.now() }), "performance_failed");
       if (route === "POST /api/studio/insights-now") {

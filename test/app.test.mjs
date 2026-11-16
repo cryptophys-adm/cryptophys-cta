@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { handle, accountOf, publishDraft, SECRETS, channelsOf, renderImages, collectInsights } from "../src/app.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
-import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics } from "../src/desk.mjs";
+import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince } from "../src/desk.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
 
@@ -40,7 +40,8 @@ function deskStub() {
     idsWithPrefix: async (p) => draftIdsWithPrefix(sql, p), kindCounts: async (k, s) => kindCountsSince(sql, k, s), archive: async (n) => publishedPosts(sql, { limit: n }),
     needingImage: async (n, retry) => draftsNeedingImage(sql, { limit: n, retry }), attachImage: async (i, now) => attachImage(sql, i, { now }),
     media: async (id) => mediaOf(sql, id), note: async (i, now) => noteDraft(sql, i, { now }),
-    publishedSince: async (s, n) => publishedSince(sql, s, { limit: n }), saveMetrics: async (i, now) => saveMetrics(sql, i, { now })
+    publishedSince: async (s, n) => publishedSince(sql, s, { limit: n }), saveMetrics: async (i, now) => saveMetrics(sql, i, { now }),
+    settings: async () => storedSettings(sql), saveSettings: async (i, now) => saveChannelSettings(sql, i, { now }), channelCounts: async (s) => channelCountsSince(sql, s)
   };
   return { sql, api, ns: { idFromName: () => "desk", get: () => api } };
 }
@@ -347,4 +348,31 @@ test("the pages: no inline script or style (CSP 'self'), the studio's four views
   const all = [...publicPages, "signin.html", "studio/index.html", "cta.css", "cta.js", "studio/studio.js"].map(read).join("\n");
   assert.doesNotMatch(all, /\b(meta platforms|facebook)\b|\bmeta for developers\b/i, "our own brand only");
   assert.doesNotMatch(all, /\binnerHTML\b/, "text goes in as text");
+});
+
+test("channel settings through the studio API: a person saves, a service token only reads; the drafting honours them", async () => {
+  resetKeyCacheForTests();
+  const { env: e, d } = env({ CONTENT_CHANNELS: "threads,x" });
+  const person = await jwt({ email: "owner@example.com" });
+  const svc = await jwt({ common_name: "ci.access" });
+  const get = async (token) => (await handle(req("/api/studio/settings", { token }), e, opts)).json();
+  const post = (body, extra = {}) => handle(req("/api/studio/settings", { token: person, method: "POST", body, ...extra }), e, opts);
+  assert.equal((await handle(req("/api/studio/settings"), e, opts)).status, 403, "behind Access");
+  const first = await get(person);
+  assert.deepEqual([first.can_edit, first.timezone, first.formats.instagram, first.settings.x.enabled], [true, "Asia/Jakarta", ["image"], true]);
+  assert.equal((await get(svc)).can_edit, false);
+  assert.equal((await handle(req("/api/studio/settings", { token: svc, method: "POST", body: { channel: "x", settings: { enabled: false } } }), e, opts)).status, 403);
+  assert.equal((await post({ channel: "x", settings: { enabled: false } }, { origin: "https://evil.example" })).status, 403);
+  assert.equal((await post({ channel: "x", settings: { format: "video" } })).status, 400);
+  assert.equal((await post({ channel: "myspace", settings: {} })).status, 400);
+  const saved = await (await post({ channel: "x", settings: { enabled: false, schedule: [{ days: ["mon"], time: "19:00" }] } })).json();
+  assert.deepEqual([saved.ok, saved.settings.enabled, saved.settings.schedule], [true, false, [{ days: ["mon"], time: "19:00" }]]);
+  const after = await get(person);
+  assert.deepEqual([after.settings.x.enabled, after.meta.x.updated_by], [false, "owner@example.com"]);
+  assert.ok(!JSON.stringify(after).match(/token|secret/i), "never a token");
+  assert.equal((await handle(req("/api/studio/settings", { token: person, method: "DELETE" }), e, opts)).status, 405);
+  // X is off: the next drafting run makes Threads drafts only.
+  const made = await (await handle(req("/api/studio/draft-now", { token: person, method: "POST", body: {} }), e, opts)).json();
+  assert.ok(made.recap.added.length >= 1);
+  assert.ok(listDrafts(d.sql, {}).every((x) => x.channel === "threads"), JSON.stringify(listDrafts(d.sql, {}).map((x) => x.channel)));
 });
