@@ -286,3 +286,22 @@ textarea.editor:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 3px
 @media (max-width:720px){.cal .day{min-height:64px;padding:4px}.cal .chs{display:none}}
 
 .pad{padding:10px 20px}
+
+/* Marketing page, Create toolbar, content mix (studio.js) */
+.linkrow{display:grid;gap:6px;padding:14px 20px;border-bottom:1px solid var(--line2)}
+.linkrow:last-child{border-bottom:0}
+.linkrow .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.linkrow code{font-size:12px;background:var(--subtle);border:1px solid var(--line2);border-radius:4px;padding:2px 6px;word-break:break-all}
+.linkrow .shorts{display:flex;flex-wrap:wrap;gap:6px}
+.setrow{display:flex;gap:8px;align-items:center;padding:10px 20px;border-bottom:1px solid var(--line2)}
+.setrow:last-child{border-bottom:0}
+.setrow b{min-width:90px}
+.mixedit{display:grid;grid-template-columns:1fr 90px;gap:8px 12px;align-items:center}
+.mixrow{display:grid;grid-template-columns:140px 1fr 110px;gap:12px;align-items:center;padding:6px 0}
+.mixbar{position:relative;height:12px;background:var(--subtle);border-radius:6px;border:1px solid var(--line2);overflow:hidden}
+.mixbar .act{position:absolute;left:0;top:0;bottom:0;background:var(--blue);border-radius:6px}
+.mixbar .tgt{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--text)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.toolbar select{height:30px;font-size:13px}
+.meta.warn{color:var(--amber);font-weight:600}
+.ft .saved,.ft .err{margin-left:8px}

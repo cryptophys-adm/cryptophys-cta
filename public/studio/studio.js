@@ -12,7 +12,7 @@
   const TONE = { pending: "blue", needs_image: "", needs_video: "", blocked: "red", approved: "amber", rejected: "", published: "green", failed: "red" };
   const KIND = { daily_recap: "Daily recap", key_levels: "Key-level map", pattern: "Chart pattern", custom: "Custom post" };
   const FILTERS = ["pending", "needs_image", "needs_video", "blocked", "approved", "published", "rejected", "failed", ""];
-  const VIEWS = ["dashboard", "queue", "create", "library", "calendar", "media", "performance", "channels"];
+  const VIEWS = ["dashboard", "queue", "create", "library", "calendar", "media", "marketing", "performance", "channels"];
   const EDITABLE = ["pending", "blocked", "needs_image", "needs_video"];
   let filter = "pending", status = null, canDecide = false, perf = null, sched = null;
 
@@ -40,6 +40,7 @@
     if (v === "library") loadLibrary(true);
     if (v === "calendar") loadCalendar();
     if (v === "media") loadMedia(true);
+    if (v === "marketing") loadMarketing();
   }
 
   function tile(label, value, meta, link) {
@@ -401,6 +402,127 @@
 
 
 
+
+  // ---- marketing: tracked links, hashtag sets, content mix ----
+  const KIND_ALL = { ...KIND };
+  let mk = { links: [], sets: [], wired: false };
+  function renderMix(m) {
+    const box = $("mixnow"); box.textContent = "";
+    box.appendChild(make("div", "meta", `${m.total} approved or published post${m.total === 1 ? "" : "s"} this week (from ${when(m.week.from)}). Bar: actual; line: target.`));
+    for (const k of m.kinds) {
+      const row = make("div", "mixrow");
+      row.appendChild(make("span", null, KIND_ALL[k.kind] ?? k.kind));
+      const bar = make("div", "mixbar");
+      const act = make("span", "act"); act.style.width = `${Math.min(100, k.actual)}%`;
+      const tgt = make("span", "tgt"); tgt.style.left = `${Math.min(100, k.target)}%`;
+      bar.append(act, tgt);
+      row.appendChild(bar);
+      row.appendChild(make("span", `meta${Math.abs(k.gap) >= 15 && m.total ? " warn" : ""}`, `${k.actual}% / ${k.target}%`));
+      box.appendChild(row);
+    }
+    renderMixEdit(m);
+  }
+  function renderMixEdit(m) {
+    const box = $("mixedit"); if (!box) return;
+    box.textContent = "";
+    for (const k of m.kinds) {
+      box.appendChild(make("label", null, KIND_ALL[k.kind] ?? k.kind));
+      const i = make("input", "num"); i.type = "number"; i.min = "0"; i.max = "100"; i.value = String(k.target); i.dataset.kind = k.kind; i.disabled = !canDecide;
+      i.setAttribute("aria-label", `${KIND_ALL[k.kind] ?? k.kind} target (%)`);
+      box.appendChild(i);
+    }
+    $("mixmeta").textContent = m.updated_by ? `Last changed by ${m.updated_by} · ${when(m.updated_at)}` : "Default targets";
+  }
+  async function loadMarketing() {
+    if (!mk.wired) {
+      mk.wired = true;
+      $("laddbtn").addEventListener("click", async () => {
+        $("lerr").textContent = "";
+        try { await call("/api/studio/links", "POST", { target: $("ltarget").value.trim(), campaign: $("lcampaign").value.trim(), label: $("llabel").value.trim() }); $("ltarget").value = ""; $("llabel").value = ""; await loadMarketing(); }
+        catch (e) { $("lerr").textContent = e.message; }
+      });
+      $("haddbtn").addEventListener("click", async () => {
+        $("herr").textContent = "";
+        try { await call("/api/studio/hashtag-sets", "POST", { name: $("hname").value.trim(), tags: $("htags").value.trim() }); $("hname").value = ""; $("htags").value = ""; await loadMarketing(); }
+        catch (e) { $("herr").textContent = e.message; }
+      });
+      $("mixsave").addEventListener("click", async () => {
+        $("mixerr").textContent = ""; $("mixsaved").textContent = "";
+        const targets = {}; for (const i of $("mixedit").querySelectorAll("input")) targets[i.dataset.kind] = Number(i.value);
+        try { await call("/api/studio/mix", "POST", { targets }); $("mixsaved").textContent = "Saved"; renderMix(await call("/api/studio/mix")); }
+        catch (e) { $("mixerr").textContent = e.message; }
+      });
+      for (const id of ["laddbtn", "haddbtn", "mixsave"]) $(id).disabled = !canDecide;
+    }
+    try {
+      const [l, h, m] = await Promise.all([call("/api/studio/links"), call("/api/studio/hashtag-sets"), call("/api/studio/mix")]);
+      mk.links = l.links; mk.sets = h.sets;
+      $("lhosts").textContent = l.hosts.join(", ");
+      const box = $("linklist"); box.textContent = "";
+      if (!l.links.length) box.appendChild(make("div", "empty", "No tracked link yet."));
+      for (const x of l.links) {
+        const row = make("div", "linkrow");
+        const top = make("div", "top");
+        top.appendChild(make("b", null, x.label));
+        top.appendChild(badge("blue", x.campaign));
+        top.appendChild(make("span", "grow"));
+        top.appendChild(make("span", "meta", `${x.total} click${x.total === 1 ? "" : "s"}${Object.keys(x.clicks).length ? " · " + Object.entries(x.clicks).map(([c, n]) => `${status?.channels?.[c]?.name ?? c} ${n}`).join(", ") : ""}`));
+        row.appendChild(top);
+        row.appendChild(make("div", "meta", `→ ${x.target}`));
+        const shorts = make("div", "shorts");
+        for (const [c, u] of Object.entries(x.short)) {
+          const b = make("button", "btn sm outline", `Copy for ${status?.channels?.[c]?.name ?? c}`); b.type = "button"; b.title = u;
+          b.addEventListener("click", async () => { try { await navigator.clipboard.writeText(u); b.textContent = "Copied"; } catch { b.textContent = u; } });
+          shorts.appendChild(b);
+        }
+        row.appendChild(shorts);
+        box.appendChild(row);
+      }
+      const sets = $("setlist"); sets.textContent = "";
+      if (!h.sets.length) sets.appendChild(make("div", "empty", "No hashtag set yet."));
+      for (const x of h.sets) {
+        const row = make("div", "setrow");
+        row.appendChild(make("b", null, x.name));
+        row.appendChild(make("span", "grow", x.tags));
+        if (canDecide) {
+          const rm = make("button", "btn sm outline", "Remove"); rm.type = "button";
+          rm.addEventListener("click", async () => { try { await call("/api/studio/hashtag-sets", "POST", { name: x.name, remove: true }); await loadMarketing(); } catch (e) { $("herr").textContent = e.message; } });
+          row.appendChild(rm);
+        }
+        sets.appendChild(row);
+      }
+      renderMix(m);
+      showErr(null);
+    } catch (e) { showErr(e); }
+  }
+  /** The Create page's tools for one channel's editor: a tracked link at the cursor, a hashtag set as the last line. */
+  async function editorTools(c, ta, onChange) {
+    if (!mk.links.length && !mk.sets.length) {
+      try { const [l, h] = await Promise.all([call("/api/studio/links"), call("/api/studio/hashtag-sets")]); mk.links = l.links; mk.sets = h.sets; } catch { /* tools stay empty */ }
+    }
+    const bar = make("div", "toolbar");
+    const ls = make("select", "select"); ls.setAttribute("aria-label", "Insert a tracked link");
+    const l0 = make("option", null, mk.links.length ? "Insert tracked link…" : "No tracked link (Marketing page)"); l0.value = ""; ls.appendChild(l0);
+    for (const x of mk.links) { const o = make("option", null, `${x.label} (${x.campaign})`); o.value = x.short[c] ?? ""; ls.appendChild(o); }
+    ls.addEventListener("change", () => {
+      if (!ls.value) return;
+      const at = ta.selectionStart ?? ta.value.length;
+      ta.value = `${ta.value.slice(0, at)}${ls.value}${ta.value.slice(at)}`;
+      ls.value = ""; onChange();
+    });
+    const hs = make("select", "select"); hs.setAttribute("aria-label", "Use a hashtag set");
+    const h0 = make("option", null, mk.sets.length ? "Use hashtag set…" : "No hashtag set (Marketing page)"); h0.value = ""; hs.appendChild(h0);
+    for (const x of mk.sets) { const o = make("option", null, `${x.name}: ${x.tags}`); o.value = x.tags; hs.appendChild(o); }
+    hs.addEventListener("change", () => {
+      if (!hs.value) return;
+      const lines = ta.value.replace(/\s+$/, "").split("\n");
+      if (lines.length && /^(#\w+\s*)+$/.test(lines[lines.length - 1].trim())) lines[lines.length - 1] = hs.value; else lines.push(hs.value);
+      ta.value = lines.join("\n"); hs.value = ""; onChange();
+    });
+    bar.append(ls, hs);
+    return bar;
+  }
+
   // ---- library, calendar, media ----
   const lib = { offset: 0, total: 0, wired: false, timer: null };
   async function reloadCurrent() { if (!$("view-library").hidden) await loadLibrary(true); else await refresh(); }
@@ -615,7 +737,9 @@
         g.className = `gcheck${r ? (r.guardian.pass ? " ok" : " bad") : ""}`;
         g.textContent = !r ? "Checking…" : r.guardian.pass ? "✓ Guardian: every check passed" : `Guardian: ${r.guardian.failures.map((f) => `${f.check} (${f.detail})`).join(", ")}`;
       };
-      ta.addEventListener("input", () => { cs.texts[c] = ta.value; cs.dirty = true; delete cs.results[c]; paint(); checkSoon(c, 500); });
+      const changed = () => { cs.texts[c] = ta.value; cs.dirty = true; delete cs.results[c]; paint(); checkSoon(c, 500); };
+      ta.addEventListener("input", changed);
+      if (canDecide) editorTools(c, ta, changed).then((bar) => ta.before(bar));
       card.paint = paint; card.dataset.channel = c;
       bd.append(ta, meta, pv);
       card.appendChild(bd);
@@ -698,6 +822,7 @@
   async function refresh() {
     try { status = await call("/api/studio/status"); renderStatus(); } catch (e) { showErr(e); }
     try { sched = await call("/api/studio/schedule"); renderUpNext(); } catch (e) { showErr(e); }
+    try { renderMix(await call("/api/studio/mix")); } catch (e) { showErr(e); }
     if (!$("view-queue").hidden) await load();
   }
 

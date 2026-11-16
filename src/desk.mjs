@@ -34,7 +34,17 @@ export const DESK_SCHEMA = [
     channel TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL)`,
   // The scheduler's slots that ran (src/scheduler.mjs): a slot is used once.
   `CREATE TABLE IF NOT EXISTS slot_runs (
-    key TEXT PRIMARY KEY, channel TEXT NOT NULL, slot_at TEXT NOT NULL, ran_at TEXT NOT NULL, draft_id TEXT, outcome TEXT NOT NULL)`
+    key TEXT PRIMARY KEY, channel TEXT NOT NULL, slot_at TEXT NOT NULL, ran_at TEXT NOT NULL, draft_id TEXT, outcome TEXT NOT NULL)`,
+  // Marketing (src/marketing.mjs): tracked links and their clicks (per channel and WIB day; nothing about the
+  // person), hashtag sets, and studio-wide settings (the weekly content mix).
+  `CREATE TABLE IF NOT EXISTS links (
+    slug TEXT PRIMARY KEY, target TEXT NOT NULL, campaign TEXT NOT NULL, label TEXT NOT NULL, created_at TEXT NOT NULL, created_by TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS link_clicks (
+    slug TEXT NOT NULL, channel TEXT NOT NULL, day TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (slug, channel, day))`,
+  `CREATE TABLE IF NOT EXISTS hashtag_sets (
+    name TEXT PRIMARY KEY, tags TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS studio_settings (
+    key TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL)`
 ];
 /** A media chunk: 1 MB of base64 per row (a Durable Object's SQLite row holds up to 2 MB). */
 export const MEDIA_CHUNK = 1_000_000;
@@ -387,4 +397,69 @@ export function slotOutcome(sql, { key, channel, draftId = null, outcome }) {
 export function recentSlots(sql, { limit = 20 } = {}) {
   ensureDesk(sql);
   return rows(sql, "SELECT key, channel, slot_at, ran_at, draft_id, outcome FROM slot_runs ORDER BY slot_at DESC LIMIT ?", Math.min(100, Math.max(1, Number(limit) || 20)));
+}
+
+// ---- Marketing: tracked links, hashtag sets, the content mix ----
+/** Stores a new tracked link (already validated by normalizeLink); a slug is never reused. */
+export function addLink(sql, { slug, link, actor }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  if (rows(sql, "SELECT 1 AS x FROM links WHERE slug = ?", slug).length) return { ok: false, error: "slug taken" };
+  sql.exec("INSERT INTO links (slug, target, campaign, label, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?)", slug, link.target, link.campaign, link.label, iso(now), clip(actor, 200) || "unknown");
+  return { ok: true, slug, ...link };
+}
+export function getLink(sql, slug) {
+  ensureDesk(sql);
+  return rows(sql, "SELECT slug, target, campaign, label FROM links WHERE slug = ?", String(slug ?? ""))[0] ?? null;
+}
+/** Counts one click (per link, channel and WIB day). */
+export function countClick(sql, { slug, channel }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  const day = new Date(now + 7 * 3_600_000).toISOString().slice(0, 10);
+  sql.exec("INSERT INTO link_clicks (slug, channel, day, n) VALUES (?, ?, ?, 1) ON CONFLICT(slug, channel, day) DO UPDATE SET n = n + 1", slug, channel, day);
+}
+/** The links, newest first, with their clicks per channel and in total. */
+export function listLinks(sql, { limit = 100 } = {}) {
+  ensureDesk(sql);
+  const links = rows(sql, "SELECT slug, target, campaign, label, created_at, created_by FROM links ORDER BY created_at DESC LIMIT ?", Math.min(500, Math.max(1, Number(limit) || 100)));
+  const clicks = rows(sql, "SELECT slug, channel, SUM(n) AS n FROM link_clicks GROUP BY slug, channel");
+  return links.map((l) => {
+    const by = Object.fromEntries(clicks.filter((c) => c.slug === l.slug).map((c) => [c.channel, Number(c.n)]));
+    return { ...l, clicks: by, total: Object.values(by).reduce((a, b) => a + b, 0) };
+  });
+}
+
+export function listHashtagSets(sql) {
+  ensureDesk(sql);
+  return rows(sql, "SELECT name, tags, updated_at, updated_by FROM hashtag_sets ORDER BY name");
+}
+/** Saves a hashtag set (validated by normalizeHashtagSet), or deletes it with `remove`. */
+export function saveHashtagSet(sql, { set, remove = false, actor, max = 30 }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  if (remove) { sql.exec("DELETE FROM hashtag_sets WHERE name = ?", set.name); return { ok: true, removed: set.name }; }
+  const exists = rows(sql, "SELECT 1 AS x FROM hashtag_sets WHERE name = ?", set.name).length;
+  if (!exists && Number(rows(sql, "SELECT COUNT(*) AS n FROM hashtag_sets")[0].n) >= max) return { ok: false, error: `at most ${max} sets` };
+  sql.exec("INSERT INTO hashtag_sets (name, tags, updated_at, updated_by) VALUES (?, ?, ?, ?) ON CONFLICT(name) DO UPDATE SET tags = excluded.tags, updated_at = excluded.updated_at, updated_by = excluded.updated_by",
+    set.name, set.tags, iso(now), clip(actor, 200) || "unknown");
+  return { ok: true, ...set };
+}
+
+/** A studio-wide setting (JSON), or null. */
+export function studioSetting(sql, key) {
+  ensureDesk(sql);
+  const r = rows(sql, "SELECT data, updated_at, updated_by FROM studio_settings WHERE key = ?", key)[0];
+  if (!r) return null;
+  try { return { value: JSON.parse(r.data), updated_at: r.updated_at, updated_by: r.updated_by }; } catch { return null; }
+}
+export function saveStudioSetting(sql, { key, value, actor }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  const data = JSON.stringify(value);
+  sql.exec("INSERT INTO studio_settings (key, data, updated_at, updated_by) VALUES (?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, updated_by = excluded.updated_by",
+    key, data, iso(now), clip(actor, 200) || "unknown");
+  event(sql, { at: iso(now), id: `studio:${key}`, action: "settings_saved", actor: clip(actor, 200) || "unknown", detail: data.slice(0, 2000) });
+  return { ok: true, key, value, updated_at: iso(now) };
+}
+/** Approved and published drafts per kind since `fromIso` (the week's content mix). */
+export function kindMixSince(sql, fromIso, toIso) {
+  ensureDesk(sql);
+  return Object.fromEntries(rows(sql, "SELECT kind, COUNT(*) AS n FROM drafts WHERE status IN ('approved', 'published') AND COALESCE(published_at, decided_at, created_at) >= ? AND COALESCE(published_at, decided_at, created_at) < ? GROUP BY kind", fromIso, toIso).map((r) => [r.kind, Number(r.n)]));
 }
