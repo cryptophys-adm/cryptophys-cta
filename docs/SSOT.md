@@ -12,7 +12,10 @@ Bindings:
   and supply, H1/H4/D1 chart patterns with their lines and projection, the structure; never a decision or plan).
 - `CONTENT_DESK` → Durable Object `ContentDesk` (SQLite): the drafts, their events, the refreshed tokens, the
   published archive.
-- `ASSETS` → `public/` (the CTA page and the studio page; no build step).
+- `ASSETS` → `public/` (the CTA page and the studio page; no build step). A light developer-console look (owner
+  2026-11-16): a white top bar, the studio's left navigation (Dashboard, Content queue, Performance, Channels, switched
+  by the URL hash), white cards on a light grey page, one blue for actions; Cryptophys's own mark and name only. No
+  inline script or style, no web font (CSP `'self'`); a test holds both.
 - `BROWSER` → Browser Run: the Instagram cards (`src/card.mjs`, `src/render.mjs`). A card is 1080 × 1350:
   TradingView's own Advanced Chart widget (`OANDA:XAUUSD`, the draft's timeframe) with **our overlay drawn over it**
   (owner 2026-11-15: "Langsung gambar beserta pola dan key level serta proyeksi horizon di chart"; "Overlay on
