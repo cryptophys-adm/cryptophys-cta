@@ -63,6 +63,8 @@ Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (dr
 | `POST /api/studio/render-now` | a person, same origin, JSON | renders the waiting cards and videos now |
 | `GET /api/studio/performance` | Access JWT | the last 14 days: posts and summed views, likes, comments, shares per channel, the best post, each post's latest metrics |
 | `POST /api/studio/insights-now` | a person, same origin, JSON | reads the recent posts' metrics now |
+| `GET /api/studio/settings` | Access JWT | each channel's settings (stored over the defaults), the formats each channel can take, who changed them last; never a token |
+| `POST /api/studio/settings` | a person, same origin, JSON | `{ channel, settings }`: validated by `src/settings.mjs`, stored in the Desk (`channel_settings`), an event per change |
 
 The Worker verifies the Access JWT itself (team `cryptophys.cloudflareaccess.com`; audience `ACCESS_AUD`, a plain var in
 `wrangler.jsonc`: the tag of the platform's Access application, not a secret). For the edge to ask for sign-in, the platform's `provision-access.yml` covers
@@ -86,6 +88,22 @@ rest of the host stays public.
 | Telegram channel | text | built (Bot API; the bot is a channel admin) | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
 | YouTube Shorts | video (WebM, 9:16, 14 s) from the card; the description names TradingView | built: resumable upload, public asked; private until Google verifies the API project | `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN` |
 | TikTok | the same video | built: Direct Post, FILE_UPLOAD in one chunk, the most public privacy the creator allows; private (SELF_ONLY) until TikTok audits the app | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REFRESH_TOKEN` (TikTok rotates it; the Desk keeps the newest) |
+
+Channel settings (owner 2026-11-16: "setting konfigurasi channel ... content creation terjadwal untuk masing-masing
+channel beserta format contentnya apakah video/image/text only"; `src/settings.mjs`, the Desk's `channel_settings`,
+the studio's Channels page). Per channel, set by a person:
+
+| Setting | Values | Effect now |
+|---|---|---|
+| `enabled` | on / off | off: the channel gets no drafts (`CONTENT_CHANNELS` still bounds the channels) |
+| `format` | text, image, video: only what the channel's publisher posts today (Threads, X, Telegram text; Instagram image; YouTube, TikTok video); the rest is shown as planned and refused | recorded; a new format needs its publisher first |
+| `kinds` | key-level map, chart pattern, daily recap | a kind not listed is not drafted for the channel |
+| `max_per_day` | 1–24 (default 6: one key-level map, four patterns, one recap) | drafts over it in the WIB day (00:00 Asia/Jakarta) are not made |
+| `schedule` | up to 12 slots, each days of the week and a time in WIB | stored; the per-channel scheduler (next studio update) publishes approved posts in them |
+| `hashtags` | up to 8 `#words`; never the internal names | replaces the channel's default hashtag line; the guardian checks the draft again, and a failing line keeps the default |
+
+The defaults are what the engine did before settings existed; a stored row that no longer validates falls back to
+them. A draft the guardian held is queued as it is.
 
 Meta's endpoint shapes follow the published guides (Meta's own pages were unreachable from the build session).
 YouTube's resumable upload and TikTok's Direct Post and media transfer follow their guides, read on 2026-11-15; the

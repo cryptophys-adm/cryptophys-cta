@@ -27,7 +27,10 @@ export const DESK_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS post_metrics (
     draft_id TEXT PRIMARY KEY, channel TEXT NOT NULL, fetched_at TEXT NOT NULL, data TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS media_chunks (
-    media_id TEXT NOT NULL, seq INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (media_id, seq))`
+    media_id TEXT NOT NULL, seq INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (media_id, seq))`,
+  // Each channel's settings (src/settings.mjs), set by a person in the studio's Channels page. Never a token.
+  `CREATE TABLE IF NOT EXISTS channel_settings (
+    channel TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL)`
 ];
 /** A media chunk: 1 MB of base64 per row (a Durable Object's SQLite row holds up to 2 MB). */
 export const MEDIA_CHUNK = 1_000_000;
@@ -229,4 +232,29 @@ export function saveMetrics(sql, { id, channel, metrics }, { now = Date.now() } 
   sql.exec("INSERT INTO post_metrics (draft_id, channel, fetched_at, data) VALUES (?, ?, ?, ?) ON CONFLICT(draft_id) DO UPDATE SET fetched_at = excluded.fetched_at, data = excluded.data",
     String(id), String(channel), iso(now), JSON.stringify(metrics));
   return true;
+}
+
+/** The stored settings of every channel ({ channel: settings }), with who changed them last and when. */
+export function storedSettings(sql) {
+  ensureDesk(sql);
+  const out = {}, meta = {};
+  for (const r of rows(sql, "SELECT channel, data, updated_at, updated_by FROM channel_settings")) {
+    try { out[r.channel] = JSON.parse(r.data); } catch { continue; }
+    meta[r.channel] = { updated_at: r.updated_at, updated_by: r.updated_by };
+  }
+  return { settings: out, meta };
+}
+/** Stores one channel's settings (already validated by normalizeSettings), with an event per change. */
+export function saveChannelSettings(sql, { channel, settings, actor }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  const data = JSON.stringify(settings);
+  sql.exec("INSERT INTO channel_settings (channel, data, updated_at, updated_by) VALUES (?, ?, ?, ?) ON CONFLICT(channel) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, updated_by = excluded.updated_by",
+    channel, data, iso(now), clip(actor, 200) || "unknown");
+  event(sql, { at: iso(now), id: `settings:${channel}`, action: "settings_saved", actor: clip(actor, 200) || "unknown", detail: data.slice(0, 2000) });
+  return { ok: true, channel, settings, updated_at: iso(now) };
+}
+/** How many drafts each channel got since `sinceIso` (every kind): the daily maximum's count. */
+export function channelCountsSince(sql, sinceIso) {
+  ensureDesk(sql);
+  return Object.fromEntries(rows(sql, "SELECT channel, COUNT(*) AS n FROM drafts WHERE created_at >= ? GROUP BY channel", sinceIso).map((r) => [r.channel, Number(r.n)]));
 }

@@ -1,6 +1,7 @@
 // CTA Studio (behind Cloudflare Access): a dashboard, the content queue, a person's approval or rejection, a dry
 // run, performance and channels. Everything goes through /api/studio/* on the same origin; a rejection needs a reason.
-// Views are switched by the URL hash (#dashboard, #queue, #performance, #channels).
+// Views are switched by the URL hash (#dashboard, #queue, #performance, #channels). The Channels page edits each
+// channel's settings (format, content, drafts per day, schedule in WIB, hashtags); never a token.
 (function () {
   const $ = (id) => document.getElementById(id);
   const make = (tag, cls, value) => { const n = document.createElement(tag); if (cls) n.className = cls; if (value != null) n.textContent = value; return n; };
@@ -31,6 +32,7 @@
     for (const a of $("nav").querySelectorAll("a[data-view]")) a.classList.toggle("on", a.dataset.view === v);
     if (v === "queue") load();
     if (v === "performance") loadPerformance();
+    if (v === "channels") loadChannels();
   }
 
   function tile(label, value, meta, link) {
@@ -72,24 +74,169 @@
   function renderStatus() {
     const on = status?.publish === "on";
     const p = $("publish"); p.textContent = `Publishing ${on ? "on" : "off"}`; p.className = `badge ${on ? "green" : "amber"}`;
-    const box = $("channels"); box.textContent = "";
-    for (const [, c] of Object.entries(status?.channels ?? {})) {
-      const card = make("div", "card channel");
-      const top = make("div", "top");
-      top.appendChild(make("span", "ic", initial(c.name)));
-      top.appendChild(make("b", null, c.name));
-      card.appendChild(top);
-      const row = make("div", "row");
-      row.appendChild(badge(c.configured ? "green" : "amber", c.configured ? "Account connected" : "No account yet"));
-      row.appendChild(badge(c.publisher === "built" ? "blue" : "", c.publisher === "built" ? "Publisher ready" : "Publisher later"));
-      if (c.media !== "none") row.appendChild(badge("purple", c.media === "image" ? "Needs image" : "Needs video"));
-      if (!c.enabled) row.appendChild(badge("", "Disabled"));
-      card.appendChild(row);
-      if (c.quota) card.appendChild(make("div", "meta", `${c.quota.used}/${c.quota.total ?? "?"} posts today`));
-      if (c.note) card.appendChild(make("div", "meta", c.note));
-      box.appendChild(card);
-    }
     renderDashboard();
+  }
+
+  // ---- channels: each channel's settings (GET/POST /api/studio/settings) ----
+  const FORMAT_NAMES = { text: "Text only", image: "Image", video: "Video" };
+  const FORMAT_NOTE = { planned: "planned", na: "not available" };
+  const DAY_NAMES = { mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun" };
+
+  async function loadChannels() {
+    try {
+      const cfg = await call("/api/studio/settings");
+      const n = $("chnotice"); n.textContent = "";
+      const line = make("span");
+      line.appendChild(make("b", null, "Times are in WIB (UTC+7). "));
+      n.appendChild(line);
+      line.appendChild(document.createTextNode(status?.publish === "on"
+        ? "Approved posts go out in each channel's slots once the per-channel scheduler is on (next studio update)."
+        : "Publishing is off: the slots are saved now, and approved posts wait. The per-channel scheduler comes in the next studio update."));
+      const box = $("channels"); box.textContent = "";
+      for (const c of Object.keys(cfg.settings || {})) box.appendChild(channelCard(c, cfg));
+      showErr(null);
+    } catch (e) { showErr(e); }
+  }
+
+  function field(label, hint) {
+    const f = make("div", "field");
+    f.appendChild(make("div", "lbl", label));
+    if (hint) f.appendChild(make("div", "hint", hint));
+    return f;
+  }
+
+  function channelCard(c, cfg) {
+    const info = status?.channels?.[c] ?? {};
+    const edit = Boolean(cfg.can_edit);
+    const s = JSON.parse(JSON.stringify(cfg.settings[c]));
+    const card = make("article", "card chcard");
+    const hd = make("div", "hd");
+    hd.appendChild(make("span", "ic", initial(info.name || c)));
+    const title = make("div", "grow");
+    title.appendChild(make("h2", null, info.name || c));
+    const row = make("div", "row");
+    row.appendChild(badge(info.configured ? "green" : "amber", info.configured ? "Account connected" : "No account yet"));
+    row.appendChild(badge(info.publisher === "built" ? "blue" : "", info.publisher === "built" ? "Publisher ready" : "Publisher later"));
+    if (info.enabled === false) row.appendChild(badge("", "Off in the Worker's config"));
+    if (info.quota) row.appendChild(badge("", `${info.quota.used}/${info.quota.total ?? "?"} posts today`));
+    title.appendChild(row);
+    hd.appendChild(title);
+    card.appendChild(hd);
+
+    const bd = make("div", "bd");
+    const sync = () => card.classList.toggle("off", !s.enabled);
+    // On or off
+    const sw = make("label", "switch");
+    const on = make("input"); on.type = "checkbox"; on.checked = s.enabled; on.disabled = !edit;
+    on.addEventListener("change", () => { s.enabled = on.checked; sync(); });
+    sw.append(on, make("span", null, "Make drafts for this channel"));
+    bd.appendChild(sw);
+
+    // Format
+    const ff = field("Format", "What a post on this channel carries. A format our publisher does not post yet is shown as planned.");
+    const seg = make("div", "seg"); seg.setAttribute("role", "radiogroup"); seg.setAttribute("aria-label", `${info.name || c} format`);
+    for (const f of ["text", "image", "video"]) {
+      const allowed = (cfg.formats?.[c] ?? []).includes(f);
+      const planned = (cfg.planned?.[c] ?? []).includes(f);
+      const b = make("button", f === s.format ? "on" : null, FORMAT_NAMES[f]);
+      if (!allowed) b.appendChild(make("small", null, planned ? FORMAT_NOTE.planned : FORMAT_NOTE.na));
+      b.type = "button"; b.setAttribute("role", "radio"); b.setAttribute("aria-checked", String(f === s.format));
+      b.disabled = !edit || !allowed;
+      b.addEventListener("click", () => { s.format = f; for (const x of seg.children) { const sel = x === b; x.classList.toggle("on", sel); x.setAttribute("aria-checked", String(sel)); } });
+      seg.appendChild(b);
+    }
+    ff.appendChild(seg);
+    bd.appendChild(ff);
+
+    // Content kinds
+    const kf = field("Content", "Which drafts this channel gets.");
+    const checks = make("div", "checks");
+    for (const k of cfg.kinds ?? []) {
+      const l = make("label");
+      const i = make("input"); i.type = "checkbox"; i.checked = s.kinds.includes(k); i.disabled = !edit;
+      i.addEventListener("change", () => { s.kinds = (cfg.kinds ?? []).filter((x) => (x === k ? i.checked : s.kinds.includes(x))); });
+      l.append(i, make("span", null, cfg.kind_names?.[k] ?? k));
+      checks.appendChild(l);
+    }
+    kf.appendChild(checks);
+    bd.appendChild(kf);
+
+    // Daily maximum
+    const mf = field("Drafts per day", `At most this many drafts a day (WIB), every kind together; 1 to ${cfg.max_per_day ?? 24}.`);
+    const max = make("input", "num"); max.type = "number"; max.min = "1"; max.max = String(cfg.max_per_day ?? 24); max.value = String(s.max_per_day); max.disabled = !edit;
+    max.setAttribute("aria-label", "Drafts per day");
+    max.addEventListener("input", () => { s.max_per_day = Number(max.value); });
+    mf.appendChild(max);
+    bd.appendChild(mf);
+
+    // Schedule
+    const sf = field("Posting schedule (WIB)", `Up to ${cfg.max_slots ?? 12} slots. Each slot: the days and the time an approved post goes out.`);
+    const slots = make("div", "slots");
+    const drawSlots = () => {
+      slots.textContent = "";
+      if (!s.schedule.length) slots.appendChild(make("div", "hint", "No slot yet: approved posts go out right after approval, once publishing is on."));
+      s.schedule.forEach((slot, idx) => {
+        const r = make("div", "slot");
+        const days = make("div", "days");
+        for (const d of cfg.days ?? []) {
+          const b = make("button", slot.days.includes(d) ? "on" : null, DAY_NAMES[d] ?? d);
+          b.type = "button"; b.disabled = !edit; b.setAttribute("aria-pressed", String(slot.days.includes(d)));
+          b.addEventListener("click", () => {
+            slot.days = slot.days.includes(d) ? slot.days.filter((x) => x !== d) : (cfg.days ?? []).filter((x) => x === d || slot.days.includes(x));
+            b.classList.toggle("on", slot.days.includes(d)); b.setAttribute("aria-pressed", String(slot.days.includes(d)));
+          });
+          days.appendChild(b);
+        }
+        const t = make("input", "time"); t.type = "time"; t.value = slot.time; t.disabled = !edit; t.setAttribute("aria-label", "Time (WIB)");
+        t.addEventListener("input", () => { slot.time = t.value; });
+        r.append(days, t, make("span", "meta", "WIB"), make("span", "grow"));
+        if (edit) {
+          const rm = make("button", "btn sm outline", "Remove"); rm.type = "button";
+          rm.addEventListener("click", () => { s.schedule.splice(idx, 1); drawSlots(); });
+          r.appendChild(rm);
+        }
+        slots.appendChild(r);
+      });
+      if (edit && s.schedule.length < (cfg.max_slots ?? 12)) {
+        const add = make("button", "btn sm outline", "Add slot"); add.type = "button";
+        add.addEventListener("click", () => { s.schedule.push({ days: ["mon", "tue", "wed", "thu", "fri"], time: "19:00" }); drawSlots(); });
+        slots.appendChild(add);
+      }
+    };
+    drawSlots();
+    sf.appendChild(slots);
+    bd.appendChild(sf);
+
+    // Hashtags
+    const hf = field("Hashtags", "Up to 8, each starting with #. The guardian checks the draft again with them.");
+    const tags = make("input", "text"); tags.type = "text"; tags.value = s.hashtags; tags.disabled = !edit; tags.maxLength = 200; tags.setAttribute("aria-label", "Hashtags");
+    tags.addEventListener("input", () => { s.hashtags = tags.value; });
+    hf.appendChild(tags);
+    bd.appendChild(hf);
+    card.appendChild(bd);
+
+    const ft = make("div", "ft");
+    const meta = cfg.meta?.[c];
+    ft.appendChild(make("span", "grow", meta ? `Last changed by ${meta.updated_by} · ${when(meta.updated_at)}` : "Default settings"));
+    const msg = make("span", "saved");
+    const err = make("span", "err");
+    ft.append(err, msg);
+    if (edit) {
+      const save = make("button", "btn primary", "Save"); save.type = "button";
+      save.addEventListener("click", async () => {
+        save.disabled = true; err.textContent = ""; msg.textContent = "";
+        try {
+          const r = await call("/api/studio/settings", "POST", { channel: c, settings: s });
+          msg.textContent = "Saved";
+          ft.firstChild.textContent = `Last changed by you · ${when(r.updated_at)}`;
+        } catch (e) { err.textContent = e.message; }
+        finally { save.disabled = false; }
+      });
+      ft.appendChild(save);
+    }
+    card.appendChild(ft);
+    sync();
+    return card;
   }
 
   // ---- content queue ----

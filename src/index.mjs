@@ -15,7 +15,7 @@
 // Kernel: the OrganismDna and CtaHealth entrypoints serve the platform's census and drift checks.
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import puppeteer from "@cloudflare/puppeteer";
-import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics } from "./desk.mjs";
+import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince } from "./desk.mjs";
 import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, collectInsights, ANALYSIS_CRON } from "./app.mjs";
 import ORGANISM from "../organism.json" with { type: "json" };
 
@@ -39,6 +39,9 @@ export class ContentDesk extends DurableObject {
   async note(input, now) { return noteDraft(this.sql, input, { now }); }
   async publishedSince(sinceIso, limit) { return publishedSince(this.sql, sinceIso, { limit }); }
   async saveMetrics(input, now) { return saveMetrics(this.sql, input, { now }); }
+  async settings() { return storedSettings(this.sql); }
+  async saveSettings(input, now) { return saveChannelSettings(this.sql, input, { now }); }
+  async channelCounts(sinceIso) { return channelCountsSince(this.sql, sinceIso); }
 }
 /** The platform's census: this organ's DNA (agents, AI tasks), read through the Forge (EXT_ORGANISM_CTA). */
 export class OrganismDna extends WorkerEntrypoint {
