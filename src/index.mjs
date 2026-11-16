@@ -15,7 +15,7 @@
 // Kernel: the OrganismDna and CtaHealth entrypoints serve the platform's census and drift checks.
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import puppeteer from "@cloudflare/puppeteer";
-import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince } from "./desk.mjs";
+import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince } from "./desk.mjs";
 import { editCheck } from "./compose.mjs";
 import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, collectInsights, runSchedule, ANALYSIS_CRON } from "./app.mjs";
 import { SCHEDULE_CRON } from "./scheduler.mjs";
@@ -63,6 +63,10 @@ export class ContentDesk extends DurableObject {
   async studioSetting(key) { return studioSetting(this.sql, key); }
   async saveStudioSetting(input, now) { return saveStudioSetting(this.sql, input, { now }); }
   async kindMix(from, to) { return kindMixSince(this.sql, from, to); }
+  async addAbTest(input, now) { addAbTest(this.sql, input, { now }); return true; }
+  async abTests() { return listAbTests(this.sql); }
+  async measuredPosts() { return measuredPosts(this.sql); }
+  async copiedSince(sinceIso) { return copiedSince(this.sql, sinceIso); }
 }
 /** The platform's census: this organ's DNA (agents, AI tasks), read through the Forge (EXT_ORGANISM_CTA). */
 export class OrganismDna extends WorkerEntrypoint {

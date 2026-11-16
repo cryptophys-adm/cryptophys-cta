@@ -92,17 +92,30 @@ export function composeDrafts({ kind, posts, allowed = CHANNELS, decisionTimes =
     if (seen.has(p.channel)) return { ok: false, error: "a channel appears twice" };
     seen.add(p.channel);
   }
-  const results = Object.fromEntries(posts.map((p) => [p.channel, checkPost({ channel: p.channel, kind, text: p.text, decisionTimes, delayHours, now })]));
+  // A/B captions (src/growth.mjs): a second text for a channel is variant B, checked the same way.
+  const results = {};
+  for (const p of posts) {
+    results[p.channel] = checkPost({ channel: p.channel, kind, text: p.text, decisionTimes, delayHours, now });
+    if (typeof p.text_b === "string" && p.text_b.trim()) {
+      const b = checkPost({ channel: p.channel, kind, text: p.text_b, decisionTimes, delayHours, now });
+      results[`${p.channel}:b`] = b;
+      if (b.text === results[p.channel].text) results[`${p.channel}:b`] = { ...b, guardian: { ...b.guardian, pass: false, failures: [{ check: "variant", detail: "variant B is the same as A" }, ...b.guardian.failures] } };
+    }
+  }
   if (Object.values(results).some((r) => !r.guardian.pass)) {
     return { ok: false, error: "the guardian refused one or more channels; nothing was saved", results: Object.fromEntries(Object.entries(results).map(([c, r]) => [c, { length: r.length, limit: r.limit, guardian: r.guardian }])) };
   }
   const day = new Date(now).toISOString().slice(0, 10);
-  const drafts = posts.map((p) => {
-    const r = results[p.channel];
-    return { id: `manual:${day}:${id}:${p.channel}`, kind, channel: p.channel, text: r.text, image_url: null, window: null, decision_times: decisionTimes,
-      guardian: r.guardian, overlay: hasImage(p.channel) ? overlay(p.channel) : null, status: initialStatus(p.channel) };
-  });
-  return { ok: true, drafts };
+  const drafts = [], ab = [];
+  const draftOf = (channel, r, suffix) => ({ id: `manual:${day}:${id}${suffix}:${channel}`, kind, channel, text: r.text, image_url: null, window: null, decision_times: decisionTimes,
+    guardian: r.guardian, overlay: hasImage(channel) ? overlay(channel) : null, status: initialStatus(channel) });
+  for (const p of posts) {
+    const a = draftOf(p.channel, results[p.channel], "");
+    drafts.push(a);
+    const rb = results[`${p.channel}:b`];
+    if (rb) { const b = draftOf(p.channel, rb, "-b"); drafts.push(b); ab.push({ grp: `ab:${day}:${id}:${p.channel}`, a: a.id, b: b.id, channel: p.channel }); }
+  }
+  return { ok: true, drafts, ab };
 }
 
 /** The card's numbers for a template post (the same as the engine's), or null for a custom post. */
