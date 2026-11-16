@@ -83,15 +83,17 @@ jobs:
           const origin = `https://${deploy.custom_domains[0]}`;
           const wait = (ms) => new Promise((r) => setTimeout(r, ms));
           const get = (path) => fetch(origin + path, { redirect: "manual", signal: AbortSignal.timeout(20000) });
-          // A new custom domain can take a few minutes to answer.
+          // A new custom domain can take a few minutes to answer, and a runner's resolver can hold a "no such host"
+          // answer from before the domain existed for up to 30 minutes (the zone's negative-cache time): the first
+          // deploy of a new hostname waits up to 35 minutes here. Later deploys answer at once.
           let health = null;
-          for (let i = 0; i < 30 && !health; i++) {
+          for (let i = 0; i < 70 && !health; i++) {
             try {
               const r = await get(deploy.health.path);
               const j = await r.json().catch(() => null);
               if (r.ok && Object.entries(deploy.health.expect).every(([k, v]) => j?.[k] === v)) health = j;
               else console.log(`health not ready: HTTP ${r.status}`);
-            } catch (e) { console.log(`health: ${e?.name}`); }
+            } catch (e) { console.log(`health: ${e?.cause?.code || e?.cause?.message || e?.name}`); }
             if (!health) await wait(10000);
           }
           if (!health) { console.error(`::error::${origin}${deploy.health.path} did not answer as expected`); process.exit(1); }
