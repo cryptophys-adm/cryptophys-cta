@@ -79,6 +79,13 @@ test("the studio: 403 without a valid Access JWT, the page and API with one; a s
   resetKeyCacheForTests();
   const { env: e } = env();
   for (const p of ["/studio", "/studio/", "/api/studio/drafts", "/api/studio/status"]) assert.equal((await handle(req(p), e, opts)).status, 403, p);
+  // A person opening the studio page without a sign-in gets the sign-in page (still 403, no-store); the API keeps JSON.
+  const page = await handle(req("/studio"), e, opts);
+  assert.equal(await page.text(), "asset /signin.html");
+  assert.equal(page.headers.get("cache-control"), "no-store");
+  assert.match(page.headers.get("content-security-policy"), /script-src 'self'/);
+  assert.equal((await (await handle(req("/api/studio/drafts"), e, opts)).json()).error, "access_denied");
+  assert.equal((await handle(req("/studio/studio.js"), e, opts)).status, 403, "a studio asset is never served without a sign-in");
   assert.equal((await handle(req("/api/studio/drafts", { token: "a.b.c" }), e, opts)).status, 403);
   const person = await jwt({ email: "Owner@Example.com" });
   assert.equal(await (await handle(req("/studio", { token: person }), e, opts)).text(), "asset /studio/index.html");
@@ -319,14 +326,22 @@ test("the bridge deploy workflow: main or by hand, no Worker secret, no delete, 
 
 test("the pages: no inline script or style (CSP 'self'), the studio's four views, and no other company's name", () => {
   const read = (p) => readFileSync(new URL(`../public/${p}`, import.meta.url), "utf8");
-  for (const page of ["index.html", "studio/index.html"]) {
+  for (const page of ["index.html", "archive.html", "about.html", "disclaimer.html", "signin.html", "studio/index.html"]) {
     const html = read(page);
     assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)[^>]*>|<style\b|\sstyle=|\son[a-z]+=/i, `${page}: inline script, style or handler`);
   }
   const studio = read("studio/index.html");
   for (const v of ["dashboard", "queue", "performance", "channels"]) assert.match(studio, new RegExp(`id="view-${v}"`));
   for (const id of ["publish", "who", "tabs", "queue", "channels", "perf", "draftnow", "rendernow", "insightsnow", "err"]) assert.match(studio, new RegExp(`id="${id}"`), id);
-  const all = ["index.html", "studio/index.html", "cta.css", "cta.js", "studio/studio.js"].map(read).join("\n");
+  const publicPages = ["index.html", "archive.html", "about.html", "disclaimer.html"];
+  for (const page of publicPages) {
+    const html = read(page);
+    for (const href of ["/", "/archive", "/about", "/disclaimer", "/studio"]) assert.match(html, new RegExp(`href="${href}"`), `${page} links ${href}`);
+    assert.match(html, /not financial advice/i, `${page} carries the disclaimer`);
+    assert.doesNotMatch(html, /\b(nexus|omega)\b/i, `${page}: never Nexus or Omega publicly`);
+    assert.doesNotMatch(html, /\b(buy now|sell now|entry at|take profit at|stop loss at|guaranteed)\b/i, `${page}: no advice`);
+  }
+  const all = [...publicPages, "signin.html", "studio/index.html", "cta.css", "cta.js", "studio/studio.js"].map(read).join("\n");
   assert.doesNotMatch(all, /\b(meta platforms|facebook)\b|\bmeta for developers\b/i, "our own brand only");
   assert.doesNotMatch(all, /\binnerHTML\b/, "text goes in as text");
 });

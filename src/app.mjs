@@ -250,7 +250,13 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
 
   if (isStudio(path)) {
     const v = await verifyAccessJwt(request.headers.get("cf-access-jwt-assertion"), env, { fetchImpl, ...(now ? { now } : {}) });
-    if (!v.ok) return json({ error: "access_denied", reason: v.reason }, 403);
+    if (!v.ok) {
+      // A person opening the studio page without a valid sign-in gets the sign-in page (still 403, nothing private);
+      // the API and every other caller keep the JSON refusal. Once Access covers the studio paths, Access shows its
+      // own login before the Worker; this page then only appears for an expired or refused sign-in.
+      if (!path.startsWith("/api/") && (request.method === "GET" || request.method === "HEAD")) return asset(env, request, url, "/signin.html", 403);
+      return json({ error: "access_denied", reason: v.reason }, 403);
+    }
     const identity = v.identity;
     if (path.startsWith("/api/studio/")) {
       if (route === "GET /api/studio/whoami") return json({ subject: identity.subject, type: identity.type, can_decide: identity.type === "user" });
@@ -316,12 +322,13 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
   return json({ error: "not_found" }, 404);
 }
 
-async function asset(env, request, url, rewrite) {
+async function asset(env, request, url, rewrite, status) {
   if (!env.ASSETS) return json({ error: "not_found" }, 404);
   const target = rewrite ? new Request(new URL(rewrite, url.origin).toString(), { method: request.method, headers: request.headers }) : request;
   const res = await env.ASSETS.fetch(target);
   const headers = new Headers(res.headers);
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) headers.set(k, v);
-  return new Response(res.body, { status: res.status, headers });
+  if (status) headers.set("cache-control", "no-store");
+  return new Response(res.body, { status: status && res.ok ? status : res.status, headers });
 }
 

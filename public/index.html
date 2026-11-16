@@ -14,13 +14,14 @@
       <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path fill="#c8961e" d="M16 1.5 28.6 8.75v14.5L16 30.5 3.4 23.25V8.75z"/><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" d="M20.6 11.6a6.4 6.4 0 1 0 0 8.8"/></svg>
       Cryptophys
     </a>
-    <nav aria-label="Sections">
-      <a href="#channels">Channels</a>
-      <a href="#posts">Latest posts</a>
-      <a href="#about">About</a>
+    <nav aria-label="Pages">
+      <a href="/" class="on" aria-current="page">Home</a>
+      <a href="/archive">Archive</a>
+      <a href="/about">How it works</a>
+      <a href="/disclaimer">Disclaimer</a>
     </nav>
     <span class="grow"></span>
-    <span class="badge blue plain">Education</span>
+    <a class="btn outline sm" href="/studio" id="studio-link">Studio sign in</a>
   </div>
 </header>
 <main>
@@ -31,8 +32,9 @@
         <h1 id="name">XAUUSD AI · Cryptophys</h1>
         <p class="tag" id="tagline">Gold analysis from the Cryptophys AI system.</p>
         <div class="links" id="links"></div>
+        <p class="meta hero-more"><a href="/about">How a post is made →</a></p>
       </div>
-      <aside class="card hero-card" id="about" aria-label="What we post">
+      <aside class="card hero-card" aria-label="What we post">
         <h3>What you get</h3>
         <ul class="facts">
           <li><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5h18v2H3zm0 6h12v2H3zm0 6h18v2H3z"/></svg><span>Key-level maps: where supply and demand zones sit, and which metrics form them.</span></li>
@@ -47,23 +49,25 @@
     <div class="grid three" id="chanlist"><div class="card empty">Loading channels…</div></div>
   </section>
   <section class="section" id="posts">
-    <div class="head"><div><h2>Latest posts</h2><p>Published after a person's approval.</p></div></div>
-    <div class="grid two" id="archive"><div class="card empty">No posts published yet.</div></div>
+    <div class="head"><div><h2>Latest posts</h2><p>Published after a person's approval.</p></div><span class="grow"></span><a class="btn outline" href="/archive">See all posts</a></div>
+    <div class="grid two" id="archive" data-limit="4"><div class="card empty">No posts published yet.</div></div>
   </section>
   <div class="disclaimer">
     <div class="notice info" role="note">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2zm0-8h-2V7h2z"/></svg>
-      <div><b>Education, not financial advice</b><span id="disclaimer">This content is education and analysis. It is not an invitation to buy or sell and not financial advice.</span></div>
+      <div><b>Education, not financial advice</b><span id="disclaimer">This content is education and analysis. It is not an invitation to buy or sell and not financial advice.</span> <a href="/disclaimer">Read the full disclaimer</a></div>
     </div>
   </div>
 </main>
 <footer class="site-foot">
   <div class="in">
     <span class="brand"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path fill="#c8961e" d="M16 1.5 28.6 8.75v14.5L16 30.5 3.4 23.25V8.75z"/><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" d="M20.6 11.6a6.4 6.4 0 1 0 0 8.8"/></svg>Cryptophys</span>
+    <a href="/archive">Archive</a>
+    <a href="/about">How it works</a>
+    <a href="/disclaimer">Disclaimer</a>
     <span>Chart by TradingView</span>
-    <span>Education, not financial advice</span>
     <span class="grow"></span>
-    <span>© Cryptophys</span>
+    <span>© Cryptophys · Education, not financial advice</span>
   </div>
 </footer>
 <script src="/cta.js"></script>
