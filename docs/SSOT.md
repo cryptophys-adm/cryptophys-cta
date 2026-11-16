@@ -4,7 +4,7 @@
 
 | Worker | Source | Deployed by | Role |
 |---|---|---|---|
-| `cryptophys-cta` | `src/`, `public/`, `wrangler.jsonc` the platform's native deploy (Forge + Deployment Orchestrator, consensus `deploy_commit`; `organism.json` `deploy`) | `cta.cryptophys.work`: the public CTA page and the content studio; the content engine (drafts, guardian, queue, publishers). |
+| `cryptophys-cta` | `src/`, `public/`, `wrangler.jsonc` | `.github/workflows/deploy.yml` on `main` until the platform's native deploy (Forge + Deployment Orchestrator, consensus `deploy_commit`; `organism.json` `deploy`, ADR-0018) takes over | `cta.cryptophys.work`: the public CTA page and the content studio; the content engine (drafts, guardian, queue, publishers). |
 
 Bindings:
 - `PROJECTION` → `xauusd-ai-trading-assistant` entrypoint `PublicProjection` (read-only RPC): `recaps({days})`
@@ -101,12 +101,21 @@ External organ, `organism.json` (`cta-organism.v1`): one portal organ `cryptophy
 `cta-guardian` (tier 1, `signals.observe` and `reports.publish`, no seat), no AI task. Platform-side, still to be done
 in `cryptophys-cloud-platform` (its own PRs and consensus):
 - an `EXTERNAL_ORIGINS` entry `{ origin: "cta", schema: "cta-organism.v1", binding: "EXT_ORGANISM_CTA", services: ["cryptophys-cta"] }`
-  and the Forge binding `EXT_ORGANISM_CTA` → `cryptophys-cta` `OrganismDna`;
+  (done: platform CR cta-external-origin, merge 280e220) and the Forge binding `EXT_ORGANISM_CTA` → `cryptophys-cta` `OrganismDna`;
 - the drift binding `EXT_CRYPTOPHYS_CTA` → `cryptophys-cta` `CtaHealth`;
-- Access paths `cta.cryptophys.work/studio*` and `cta.cryptophys.work/api/studio/*` in `provision-access.yml`.
+- Access paths `cta.cryptophys.work/studio*` and `cta.cryptophys.work/api/studio/*` in the platform's native Access
+  definition (`native-access.ts`, gate 9; `provision-access.yml` is retired at cut-over), applied on the owner's click.
 - the native deploy of an external organ (owner 2026-11-15: "gunakan native deployment pakai forge"): the Forge
   mirrors and checks this repository, and the Orchestrator does the first full script upload (the Durable Object
   migration `v1`, the custom domain, the assets), then code and config versions, keeping the Worker secrets.
   `organism.json` `deploy` is what it reads; the organ's own `deploy_unit` stays `null`, because the census refuses an
-  external organ that claims a platform unit. Until that path is live, `cryptophys-cta` is not deployed.
+  external organ that claims a platform unit. Not built yet (platform 2026-11-16: no ETA; it follows the cut-over
+  follow-ups, and needs the owner's choice of ADR-0018 scope, the source repository the Forge mirrors, and a proven
+  custom domain for a new hostname).
+- Until then, the bridge (owner 2026-11-16: "setuju, buatkan PR workflow deploy CTA"): `.github/workflows/deploy.yml`
+  deploys from `main` with the repository secret `CLOUDFLARE_API_TOKEN` (skipped with a warning without it), runs the
+  tests, refuses unless `CONTENT_PUBLISH` is "off", sets no Worker secret, and runs `organism.json` `deploy`'s health
+  and smoke checks against `cta.cryptophys.work`. Once the Worker exists, the platform adds the `EXT_ORGANISM_CTA` and
+  `EXT_CRYPTOPHYS_CTA` bindings and the Access paths (the owner approves the Access change). The workflow is removed
+  in the change that hands the deploy to the Forge.
 Until the Forge registers the agents, the Worker does not bind the kernel (`AGENTS`).

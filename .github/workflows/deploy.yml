@@ -1,0 +1,108 @@
+name: Deploy cryptophys-cta
+
+# The bridge deploy of cryptophys-cta (cta.cryptophys.work) until the platform's Forge deploys external organs
+# (ADR-0018). Owner 2026-11-16: "setuju, buatkan PR workflow deploy CTA" (the platform session's faster path: the
+# Worker must exist before the platform can bind EXT_ORGANISM_CTA and EXT_CRYPTOPHYS_CTA and cover the studio with
+# Access). Runs on main and by hand; never `wrangler deploy` by hand.
+#
+# - Without the repository secret CLOUDFLARE_API_TOKEN, the deploy job is skipped with a warning (main stays green
+#   until the owner adds it, then runs this workflow by hand once).
+# - It sets no Worker secret: the channels' account tokens are set later through the platform; `wrangler deploy`
+#   keeps the secrets a Worker already has.
+# - Publishing stays off: CONTENT_PUBLISH is "off" in wrangler.jsonc, and this workflow refuses to deploy otherwise
+#   (turning it on is its own owner PR, which removes that guard in the same change).
+# - The health and smoke checks are read from organism.json `deploy` (the same checks the Forge will run).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-cta
+  cancel-in-progress: false
+
+jobs:
+  credentials:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::CLOUDFLARE_API_TOKEN is not set in this repository's Actions secrets: cryptophys-cta was NOT deployed. Add it, then run this workflow by hand (Actions → Deploy cryptophys-cta → Run workflow)."
+            echo "### Not deployed: CLOUDFLARE_API_TOKEN is not set" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  deploy:
+    needs: credentials
+    if: needs.credentials.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Tests
+        run: node --test test/*.test.mjs
+
+      - name: Publishing stays off
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          const cfg = JSON.parse(readFileSync("wrangler.jsonc", "utf8").replace(/^\s*\/\/.*$/gm, ""));
+          if (cfg.vars?.CONTENT_PUBLISH !== "off") { console.error(`::error::CONTENT_PUBLISH is "${cfg.vars?.CONTENT_PUBLISH}", not "off": refused`); process.exit(1); }
+          console.log("CONTENT_PUBLISH: off");
+          NODE
+
+      - name: Install (the lockfile; @cloudflare/puppeteer is bundled into the Worker)
+        run: npm ci --no-audit --no-fund
+
+      - name: Validate the Worker bundle
+        run: npx --yes wrangler@4.45.0 deploy --dry-run
+
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx --yes wrangler@4.45.0 deploy --tag "${GITHUB_SHA:0:12}" --message "commit ${GITHUB_SHA}"
+
+      - name: Health and smoke checks (organism.json deploy)
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          const { deploy } = JSON.parse(readFileSync("organism.json", "utf8"));
+          const origin = `https://${deploy.custom_domains[0]}`;
+          const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+          const get = (path) => fetch(origin + path, { redirect: "manual", signal: AbortSignal.timeout(20000) });
+          // A new custom domain can take a few minutes to answer.
+          let health = null;
+          for (let i = 0; i < 30 && !health; i++) {
+            try {
+              const r = await get(deploy.health.path);
+              const j = await r.json().catch(() => null);
+              if (r.ok && Object.entries(deploy.health.expect).every(([k, v]) => j?.[k] === v)) health = j;
+              else console.log(`health not ready: HTTP ${r.status}`);
+            } catch (e) { console.log(`health: ${e?.name}`); }
+            if (!health) await wait(10000);
+          }
+          if (!health) { console.error(`::error::${origin}${deploy.health.path} did not answer as expected`); process.exit(1); }
+          console.log(`health: ${JSON.stringify(health)}`);
+          if (health.publish !== "off") { console.error(`::error::the deployed Worker reports publish ${health.publish}`); process.exit(1); }
+          let failed = 0;
+          for (const s of deploy.smoke) {
+            const r = await get(s.path);
+            const ok = s.expect_status.includes(r.status);
+            console.log(`${ok ? "ok  " : "FAIL"} ${s.path}: HTTP ${r.status} (expected ${s.expect_status.join(" or ")})`);
+            if (!ok) failed++;
+          }
+          if (failed) process.exit(1);
+          NODE
