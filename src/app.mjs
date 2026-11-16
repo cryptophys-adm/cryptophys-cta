@@ -13,6 +13,7 @@ import { ANALYSIS_DISCLAIMER } from "./analysis-drafts.mjs";
 import { effectiveSettings, normalizeSettings, draftingChannels, applySettings, wibDayStart, FORMATS, PLANNED_FORMATS, KINDS, KIND_NAMES, DAYS, TIMEZONE, MAX_PER_DAY, MAX_SLOTS } from "./settings.mjs";
 import { recheck } from "./desk.mjs";
 import { dueSlots, nextSlots } from "./scheduler.mjs";
+import { PROVIDERS, BOT_CHANNELS, CONNECT_SECRETS, appOf, newAttempt, authorizeUrl, exchangeCode, refreshX, identify, checkTelegram, redirectUri, sealToken, openToken, encryptionReady, STATE_RE, CALLBACK_PATH } from "./oauth.mjs";
 import { bestTimes, abResult, evergreen, EVERGREEN_MIN_DAYS } from "./growth.mjs";
 import { linkHosts, normalizeLink, randomSlug, shortUrl, redirectTarget, GO_PATH, normalizeHashtagSet, MAX_SETS, normalizeMix, DEFAULT_MIX, MIX_KINDS, wibWeek, mixReport } from "./marketing.mjs";
 import { templateTexts, checkPost, composeDrafts, overlayFor, recapWindow, COMPOSE_KINDS, COMPOSE_KIND_NAMES } from "./compose.mjs";
@@ -62,15 +63,47 @@ const approverOnly = (role) => (role === "approver" ? null : json({ error: "appr
 export const desk = (env) => env.CONTENT_DESK.get(env.CONTENT_DESK.idFromName("desk"));
 
 /** A channel's account from its secrets (a refreshed token from the desk wins). Never returned to a caller. */
-export async function accountOf(env, channel, { stored = null } = {}) {
+export async function accountOf(env, channel, { stored = null, connection = null } = {}) {
   const names = SECRETS[channel] ?? {};
   const keys = Object.keys(names);
   if (!keys.length) return null;
   const account = Object.fromEntries(keys.map((k) => [k, env?.[names[k]] || null]));
+  // An account connected by OAuth (src/oauth.mjs) names its own user (Threads, Instagram).
+  if (connection?.account_id && "user_id" in account) account.user_id = connection.account_id;
   if (stored?.access_token && "access_token" in account) account.access_token = stored.access_token;
   // TikTok rotates its refresh token: the one the desk stored last wins over the secret that seeded it.
   if (stored?.refresh_token && "refresh_token" in account) account.refresh_token = stored.refresh_token;
   return keys.every((k) => account[k]) ? { ...account, refreshed_at: stored?.refreshed_at ?? null } : null;
+}
+
+/** A channel's stored tokens, decrypted (src/oauth.mjs), or null. Never returned to a caller. */
+export async function storedTokenOf(env, channel) {
+  const t = await desk(env).token(channel).catch(() => null);
+  if (!t) return null;
+  return { ...t, access_token: await openToken(env, t.access_token), refresh_token: await openToken(env, t.refresh_token) };
+}
+/** Stores a refreshed or rotated token, encrypted when TOKEN_ENC_KEY is set. */
+export async function saveTokenSealed(env, channel, token, now = Date.now()) {
+  return desk(env).saveToken(channel, { ...token, access_token: await sealToken(env, token.access_token), refresh_token: token.refresh_token ? await sealToken(env, token.refresh_token) : null }, now);
+}
+/**
+ * A channel's account for a call: its secrets, its stored tokens and its OAuth connection. X's two-hour token is
+ * renewed from its refresh token first when it is within five minutes of expiry. Never returned to a caller.
+ */
+export async function accountFor(env, channel, { now = Date.now(), fetcher } = {}) {
+  let stored = await storedTokenOf(env, channel);
+  const connection = (await desk(env).connections().catch(() => ({})))?.[channel] ?? null;
+  if (channel === "x" && stored?.refresh_token && (!stored.expires_at || Date.parse(stored.expires_at) - now < 5 * 60_000)) {
+    const app = appOf(env, "x");
+    if (app) {
+      try {
+        const t = await refreshX({ app, refresh_token: stored.refresh_token, ...(fetcher ? { fetcher } : {}) });
+        await saveTokenSealed(env, "x", t, now);
+        stored = { ...stored, ...t, expires_at: t.expires_in ? new Date(now + t.expires_in * 1000).toISOString() : null, refreshed_at: new Date(now).toISOString() };
+      } catch (e) { console.error("x_refresh_failed", String(e?.message ?? e).slice(0, 160)); }
+    }
+  }
+  return accountOf(env, channel, { stored, connection });
 }
 
 /** Publishes one approved draft now, when publishing is on. Never throws. */
@@ -84,11 +117,11 @@ export async function publishDraft(env, draft, { now = Date.now(), fetcher, slot
     if (s?.schedule?.length) return { status: "approved", held: "waiting_for_slot", next: nextSlots(s.schedule, now, 1).map((x) => ({ at: new Date(x.at).toISOString(), wib: x.key }))[0] ?? null };
   }
   if (CHANNEL_SPECS[draft.channel]?.publisher !== "built") return { status: "approved", held: "publisher_not_built" };
-  const account = await accountOf(env, draft.channel, { stored: await desk(env).token(draft.channel).catch(() => null) });
+  const account = await accountFor(env, draft.channel, { now, fetcher });
   if (!account) return { status: "approved", held: "account_not_configured" };
   try {
     const r = await publishTo(draft.channel, { account, draft, fetcher, media: () => mediaBytes(env, draft),
-      saveToken: (token) => desk(env).saveToken(draft.channel, token, now) });
+      saveToken: (token) => saveTokenSealed(env, draft.channel, token, now) });
     return desk(env).published({ id: draft.id, remoteId: r.remote_id }, now);
   } catch (error) {
     return desk(env).published({ id: draft.id, error: String(error?.message ?? error) }, now);
@@ -191,21 +224,21 @@ export async function refreshTokens(env, { now = Date.now() } = {}) {
   if (!publishOn(env)) return { status: "publishing_off" };
   const out = {};
   for (const channel of channelsOf(env).filter((c) => c === "threads" || c === "instagram")) {
-    const account = await accountOf(env, channel, { stored: await desk(env).token(channel).catch(() => null) });
+    const account = await accountFor(env, channel, { now });
     if (!account) { out[channel] = "not_configured"; continue; }
     const age = account.refreshed_at ? now - Date.parse(account.refreshed_at) : Infinity;
     if (age < REFRESH_AFTER_DAYS * 86_400_000) { out[channel] = "fresh"; continue; }
-    try { await desk(env).saveToken(channel, await refreshToken({ channel, token: account.access_token }), now); out[channel] = "refreshed"; }
+    try { await saveTokenSealed(env, channel, await refreshToken({ channel, token: account.access_token }), now); out[channel] = "refreshed"; }
     catch (e) { out[channel] = `failed: ${String(e?.message ?? e).slice(0, 120)}`; }
   }
   // TikTok's refresh token lives 180 days and rotates on use: refreshed here too when no post used it lately.
   if (channelsOf(env).includes("tiktok")) {
-    const account = await accountOf(env, "tiktok", { stored: await desk(env).token("tiktok").catch(() => null) });
+    const account = await accountFor(env, "tiktok", { now });
     const age = account?.refreshed_at ? now - Date.parse(account.refreshed_at) : Infinity;
     if (!account) out.tiktok = "not_configured";
     else if (age < REFRESH_AFTER_DAYS * 86_400_000) out.tiktok = "fresh";
     else {
-      try { await desk(env).saveToken("tiktok", await tiktokAccessToken({ account, fetcher: (...a) => fetch(...a) }), now); out.tiktok = "refreshed"; }
+      try { await saveTokenSealed(env, "tiktok", await tiktokAccessToken({ account, fetcher: (...a) => fetch(...a) }), now); out.tiktok = "refreshed"; }
       catch (e) { out.tiktok = `failed: ${String(e?.message ?? e).slice(0, 120)}`; }
     }
   }
@@ -226,7 +259,7 @@ export async function collectInsights(env, { now = Date.now(), fetcher = (...a) 
   for (const p of posts) {
     if (!channels.includes(p.channel)) { out.skipped[p.channel] = "not_read"; continue; }
     try {
-      if (!(p.channel in accounts)) accounts[p.channel] = await accountOf(env, p.channel, { stored: await d.token(p.channel).catch(() => null) });
+      if (!(p.channel in accounts)) accounts[p.channel] = await accountFor(env, p.channel, { now, fetcher });
       const account = accounts[p.channel];
       if (!account) { out.skipped[p.channel] = "account_not_configured"; continue; }
       if (p.channel === "youtube" && !tokens.youtube) tokens.youtube = await googleAccessToken({ account, fetcher });
@@ -243,12 +276,44 @@ export async function studioPerformance(env, { now = Date.now() } = {}) {
   return { ...performanceReport(posts, { channels: channelsOf(env) }), read: insightChannelsOf(env), posts: posts.slice(0, 50).map((p) => ({ id: p.id, channel: p.channel, kind: p.kind, published_at: p.published_at, metrics: p.metrics, metrics_at: p.metrics_at })) };
 }
 
+/**
+ * Each channel's connection for the Channels page: how it connects (OAuth or a bot), whether the provider app's
+ * secrets and the token key are set, the connected account's name, scopes and expiry, and the redirect URI to
+ * register with the provider. Never a token, a secret, or an app secret's value.
+ */
+export async function studioConnections(env) {
+  const conns = await desk(env).connections().catch(() => ({}));
+  const keyReady = await encryptionReady(env);
+  const out = {};
+  for (const c of CHANNELS) {
+    const p = PROVIDERS[c];
+    const conn = conns[c] ?? null;
+    const account = await accountFor(env, c).catch(() => null);
+    out[c] = {
+      name: CHANNEL_SPECS[c].name,
+      method: BOT_CHANNELS.includes(c) ? "bot" : "oauth",
+      provider: p?.name ?? "Telegram Bot API",
+      app_configured: p ? Boolean(appOf(env, c)) : Boolean(env?.TELEGRAM_BOT_TOKEN && env?.TELEGRAM_CHAT_ID),
+      app_secrets: p ? [p.app.id, p.app.secret] : ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"],
+      scopes_asked: p?.scopes ?? [],
+      connected: Boolean(account),
+      via: conn ? "oauth" : account ? "secrets" : null,
+      account_name: conn?.account_name ?? null,
+      scopes: conn?.scopes ?? null,
+      connected_at: conn?.connected_at ?? null,
+      connected_by: conn?.connected_by ?? null,
+      expires_at: conn?.expires_at ?? null
+    };
+  }
+  return { channels: out, redirect_uri: redirectUri(originOf(env)), token_key_set: keyReady, key_secret: "TOKEN_ENC_KEY" };
+}
+
 /** The studio's status: publishing, channels (configured or not, never a token), counts. */
 export async function studioStatus(env) {
   const channels = {};
   for (const c of CHANNELS) {
     const spec = CHANNEL_SPECS[c];
-    const account = await accountOf(env, c, { stored: await desk(env).token(c).catch(() => null) });
+    const account = await accountFor(env, c);
     channels[c] = {
       name: spec.name, enabled: channelsOf(env).includes(c), media: spec.media, publisher: spec.publisher, note: spec.note,
       configured: Boolean(account),
@@ -292,7 +357,7 @@ async function rpc(fn, failure) {
 }
 
 const isStudio = (path) => path === "/studio" || path.startsWith("/studio/") || path.startsWith("/api/studio/");
-const STUDIO_ROUTES = ["/api/studio/growth", "/api/studio/links", "/api/studio/hashtag-sets", "/api/studio/mix", "/api/studio/schedule", "/api/studio/library", "/api/studio/edit", "/api/studio/duplicate", "/api/studio/calendar", "/api/studio/media-library", "/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
+const STUDIO_ROUTES = ["/api/studio/connections", "/api/studio/connect/start", "/api/studio/connect/disconnect", "/api/studio/connect/check", "/api/studio/growth", "/api/studio/links", "/api/studio/hashtag-sets", "/api/studio/mix", "/api/studio/schedule", "/api/studio/library", "/api/studio/edit", "/api/studio/duplicate", "/api/studio/calendar", "/api/studio/media-library", "/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
 /** The public origin of the cards Instagram fetches (GET /media/<id>.jpg). */
 export const originOf = (env) => String(env?.PUBLIC_ORIGIN || "https://cta.cryptophys.work").replace(/\/+$/, "");
 const MEDIA_PATH = /^\/media\/([0-9a-f]{32})\.(jpg|webm)$/;
@@ -408,6 +473,44 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
           if (!out.ok || out.status !== "approved") return out;
           return { ...out, publish: await publishDraft(env, await desk(env).get(out.id), { now: at }) };
         }, "decide_failed");
+      }
+      // Channel accounts (src/oauth.mjs): Connect, Disconnect and Check by an approver; the status for anyone signed in.
+      if (route === "GET /api/studio/connections") return rpc(async () => ({ ...(await studioConnections(env)), can_connect: role === "approver" }), "connections_failed");
+      if (route === "POST /api/studio/connect/start" || route === "POST /api/studio/connect/disconnect" || route === "POST /api/studio/connect/check") {
+        const r = await personJson(request, url, identity, 512);
+        if (r.response) return r.response;
+        const denied = approverOnly(role);
+        if (denied) return denied;
+        const channel = typeof r.body.channel === "string" ? r.body.channel : "";
+        if (!CHANNELS.includes(channel)) return json({ error: "unknown channel" }, 400);
+        const at = now ? now * 1000 : Date.now();
+        if (route === "POST /api/studio/connect/disconnect") return rpc(() => desk(env).removeConnection({ channel, actor: identity.subject }, at), "disconnect_failed");
+        if (route === "POST /api/studio/connect/check") {
+          return rpc(async () => {
+            try {
+              if (channel === "telegram") {
+                if (!env?.TELEGRAM_BOT_TOKEN || !env?.TELEGRAM_CHAT_ID) return { ok: false, error: "TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are not set (the platform sets them)" };
+                return { ok: true, check: await checkTelegram({ bot_token: env.TELEGRAM_BOT_TOKEN, chat_id: env.TELEGRAM_CHAT_ID }, { fetcher: fetchImpl }) };
+              }
+              const account = await accountFor(env, channel, { now: at });
+              if (!account) return { ok: false, error: "not connected" };
+              let token = account.access_token;
+              if (channel === "youtube") token = await googleAccessToken({ account, fetcher: fetchImpl });
+              if (channel === "tiktok") { const t = await tiktokAccessToken({ account, fetcher: fetchImpl }); await saveTokenSealed(env, "tiktok", t, at); token = t.access_token; }
+              return { ok: true, check: await identify(channel, { access_token: token }, { fetcher: fetchImpl }) };
+            } catch (e) { return { ok: false, error: String(e?.message ?? e).slice(0, 200) }; }
+          }, "check_failed");
+        }
+        // Start: the provider's sign-in URL for a one-time state (PKCE for X). The tokens never reach this page.
+        if (BOT_CHANNELS.includes(channel)) return json({ error: "Telegram connects with a bot token the platform sets, not OAuth" }, 400);
+        const app = appOf(env, channel);
+        if (!app) return json({ error: `the ${PROVIDERS[channel].name} app is not set up: the platform sets ${PROVIDERS[channel].app.id} and ${PROVIDERS[channel].app.secret}` }, 400);
+        if (!(await encryptionReady(env))) return json({ error: "TOKEN_ENC_KEY is not set: the platform sets it (32 random bytes, base64) before any account is connected" }, 400);
+        return rpc(async () => {
+          const attempt = await newAttempt(channel);
+          await desk(env).putOAuthState({ state: attempt.state, channel, verifier: attempt.verifier, actor: identity.subject }, at);
+          return { ok: true, url: authorizeUrl(channel, { clientId: app.id, redirect: redirectUri(originOf(env)), state: attempt.state, challenge: attempt.challenge }) };
+        }, "connect_failed");
       }
       // Growth (src/growth.mjs): A/B results, best posting times per channel, evergreen suggestions.
       if (route === "GET /api/studio/growth") {
@@ -568,6 +671,9 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
       if (STUDIO_ROUTES.includes(path)) return json({ error: "method_not_allowed" }, 405);
       return json({ error: "not_found" }, 404);
     }
+    // The provider's redirect after the person signed in (src/oauth.mjs): the one-time state, then the code is
+    // exchanged here, server-side; the tokens are stored encrypted and the person returns to the Channels page.
+    if (path === CALLBACK_PATH && request.method === "GET") return oauthCallback(env, url, identity, role, { fetchImpl, now: now ? now * 1000 : Date.now() });
     // /studio: the studio page; /studio/<file> (studio.js): that asset itself. Both after the JWT check. Before
     // 2026-11-16 every /studio/* path got the page, so /studio/studio.js came back as HTML and the studio never ran.
     return asset(env, request, url, path === "/studio" ? "/studio/" : null);
@@ -575,6 +681,31 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
 
   if (request.method === "GET" || request.method === "HEAD") return asset(env, request, url, path === "/" ? "/index.html" : null);
   return json({ error: "not_found" }, 404);
+}
+
+/** The OAuth callback: never shows a token; any failure returns to the Channels page with a short reason. */
+async function oauthCallback(env, url, identity, role, { fetchImpl, now }) {
+  const back = (params) => new Response(null, { status: 302, headers: { location: `/studio?${new URLSearchParams(params)}#channels`, "cache-control": "no-store", "referrer-policy": "no-referrer" } });
+  const state = url.searchParams.get("state") || "";
+  if (role !== "approver") return back({ oauth: "error", reason: "only an approver connects accounts" });
+  if (!STATE_RE.test(state)) return back({ oauth: "error", reason: "missing or malformed state" });
+  const taken = await desk(env).takeOAuthState({ state, actor: identity.subject }, now).catch(() => ({ ok: false, error: "the desk did not answer" }));
+  if (!taken.ok) return back({ oauth: "error", reason: taken.error });
+  const channel = taken.channel;
+  if (url.searchParams.get("error")) return back({ oauth: "error", channel, reason: String(url.searchParams.get("error_description") || url.searchParams.get("error")).slice(0, 160) });
+  const code = url.searchParams.get("code") || "";
+  if (!code || code.length > 2048) return back({ oauth: "error", channel, reason: "no code from the provider" });
+  const app = appOf(env, channel);
+  if (!app || !(await encryptionReady(env))) return back({ oauth: "error", channel, reason: "the app secrets or TOKEN_ENC_KEY are not set" });
+  try {
+    const t = await exchangeCode(channel, { code, verifier: taken.verifier, app, redirect: redirectUri(originOf(env)), fetcher: fetchImpl });
+    await desk(env).saveConnection({ channel, account_id: t.account_id, account_name: t.account_name, scopes: t.scopes, actor: identity.subject,
+      token: { access_token: await sealToken(env, t.access_token), refresh_token: t.refresh_token ? await sealToken(env, t.refresh_token) : null, expires_in: t.expires_in } }, now);
+    return back({ oauth: "ok", channel });
+  } catch (e) {
+    console.error("oauth_exchange_failed", channel, String(e?.message ?? e).slice(0, 160));
+    return back({ oauth: "error", channel, reason: String(e?.message ?? e).slice(0, 160) });
+  }
 }
 
 async function asset(env, request, url, rewrite, status) {

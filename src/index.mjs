@@ -15,7 +15,7 @@
 // Kernel: the OrganismDna and CtaHealth entrypoints serve the platform's census and drift checks.
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import puppeteer from "@cloudflare/puppeteer";
-import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince } from "./desk.mjs";
+import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection } from "./desk.mjs";
 import { editCheck } from "./compose.mjs";
 import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, collectInsights, runSchedule, ANALYSIS_CRON } from "./app.mjs";
 import { SCHEDULE_CRON } from "./scheduler.mjs";
@@ -67,6 +67,11 @@ export class ContentDesk extends DurableObject {
   async abTests() { return listAbTests(this.sql); }
   async measuredPosts() { return measuredPosts(this.sql); }
   async copiedSince(sinceIso) { return copiedSince(this.sql, sinceIso); }
+  async putOAuthState(input, now) { return putOAuthState(this.sql, input, { now }); }
+  async takeOAuthState(input, now) { return takeOAuthState(this.sql, input, { now }); }
+  async saveConnection(input, now) { return saveConnection(this.sql, input, { now }); }
+  async connections() { return connectionsOf(this.sql); }
+  async removeConnection(input, now) { return removeConnection(this.sql, input, { now }); }
 }
 /** The platform's census: this organ's DNA (agents, AI tasks), read through the Forge (EXT_ORGANISM_CTA). */
 export class OrganismDna extends WorkerEntrypoint {

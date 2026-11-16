@@ -113,6 +113,77 @@
     }
   }
 
+
+  // ---- channel accounts: Connect by OAuth, Disconnect, Check (GET /api/studio/connections; POST connect/*) ----
+  const shortDate = (iso) => (iso ? iso.slice(0, 10) : "");
+  function accountSection(c, conns) {
+    const f = field("Account", null);
+    const x = conns?.channels?.[c];
+    if (!x) { f.appendChild(make("div", "hint", "Connection status not available.")); return f; }
+    const line = make("div", "acct");
+    if (x.connected && x.via === "oauth") line.appendChild(make("span", "ok", `Connected${x.account_name ? ` as ${x.account_name}` : ""} by OAuth`));
+    else if (x.connected) line.appendChild(make("span", "ok", x.method === "bot" ? "Bot set by the platform" : "Connected by the platform's secrets"));
+    else line.appendChild(make("span", "no", "Not connected"));
+    f.appendChild(line);
+    const meta = [];
+    if (x.connected_by) meta.push(`by ${x.connected_by} · ${when(x.connected_at)}`);
+    if (x.expires_at) meta.push(`token renews before ${shortDate(x.expires_at)}`);
+    if (x.scopes) meta.push(`scopes: ${x.scopes}`);
+    if (meta.length) f.appendChild(make("div", "hint", meta.join(" · ")));
+    if (x.method === "oauth" && !x.app_configured) f.appendChild(make("div", "hint warnline", `${x.provider} app not set up: the platform sets ${x.app_secrets.join(" and ")}, and the app registers this redirect URI: ${conns.redirect_uri}`));
+    if (x.method === "oauth" && !conns.token_key_set) f.appendChild(make("div", "hint warnline", `The token key is not set: the platform sets ${conns.key_secret} (32 random bytes, base64) before any account is connected.`));
+    if (x.method === "bot" && !x.app_configured) f.appendChild(make("div", "hint warnline", `The platform sets ${x.app_secrets.join(" and ")} (Telegram has no OAuth; the bot must be an administrator of the channel).`));
+    const out = make("div", "hint"); const err = make("div", "err");
+    const acts = make("div", "toolbar");
+    if (conns.can_connect) {
+      if (x.method === "oauth") {
+        const go = make("button", "btn sm primary", x.via === "oauth" ? "Reconnect" : "Connect"); go.type = "button";
+        go.disabled = !x.app_configured || !conns.token_key_set;
+        go.title = go.disabled ? "Needs the app secrets and the token key first" : `Sign in at ${x.provider}; the tokens go straight to this Worker`;
+        go.addEventListener("click", async () => {
+          go.disabled = true; err.textContent = "";
+          try { const r = await call("/api/studio/connect/start", "POST", { channel: c }); window.location.assign(r.url); }
+          catch (e) { err.textContent = e.message; go.disabled = false; }
+        });
+        acts.appendChild(go);
+        if (x.via === "oauth") {
+          const off = make("button", "btn sm outline", "Disconnect"); off.type = "button";
+          off.addEventListener("click", async () => {
+            if (!window.confirm(`Disconnect ${x.name}? Its stored tokens are deleted.`)) return;
+            off.disabled = true;
+            try { await call("/api/studio/connect/disconnect", "POST", { channel: c }); await refresh(); await loadChannels(); }
+            catch (e) { err.textContent = e.message; off.disabled = false; }
+          });
+          acts.appendChild(off);
+        }
+      }
+      if (x.connected || x.method === "bot") {
+        const chk = make("button", "btn sm outline", "Check"); chk.type = "button";
+        chk.addEventListener("click", async () => {
+          chk.disabled = true; err.textContent = ""; out.textContent = "";
+          try {
+            const r = await call("/api/studio/connect/check", "POST", { channel: c });
+            const k = r.check || {};
+            out.textContent = c === "telegram" ? `Bot ${k.bot ?? "?"} in ${k.chat ?? "?"}: ${k.can_post ? "can post" : `cannot post (${k.status ?? "?"})`}` : `Works: ${k.name ?? k.id ?? "account found"}`;
+          } catch (e) { err.textContent = e.message; }
+          finally { chk.disabled = false; }
+        });
+        acts.appendChild(chk);
+      }
+    }
+    f.append(acts, out, err);
+    return f;
+  }
+  /** After the provider's redirect: say whether the account was connected, then clean the address bar. */
+  function oauthNotice() {
+    const q = new URLSearchParams(location.search);
+    if (!q.has("oauth")) return;
+    const name = status?.channels?.[q.get("channel")]?.name ?? q.get("channel") ?? "";
+    if (q.get("oauth") === "ok") { const n = $("chnotice"); n.textContent = ""; n.appendChild(make("b", null, `${name} connected. `)); n.appendChild(document.createTextNode("The tokens are stored encrypted; they are never shown.")); }
+    else showErr(`${name ? `${name}: ` : ""}not connected (${q.get("reason") || "unknown reason"}).`);
+    history.replaceState(null, "", `/studio${location.hash || "#channels"}`);
+  }
+
   // ---- channels: each channel's settings (GET/POST /api/studio/settings) ----
   const FORMAT_NAMES = { text: "Text only", image: "Image", video: "Video" };
   const FORMAT_NOTE = { planned: "planned", na: "not available" };
@@ -120,7 +191,8 @@
 
   async function loadChannels() {
     try {
-      const cfg = await call("/api/studio/settings");
+      const [cfg, conns] = await Promise.all([call("/api/studio/settings"), call("/api/studio/connections").catch(() => null)]);
+      cfg.connections = conns;
       const n = $("chnotice"); n.textContent = "";
       const line = make("span");
       line.appendChild(make("b", null, "Times are in WIB (UTC+7). "));
@@ -131,6 +203,7 @@
       const box = $("channels"); box.textContent = "";
       for (const c of Object.keys(cfg.settings || {})) box.appendChild(channelCard(c, cfg));
       showErr(null);
+      oauthNotice();
     } catch (e) { showErr(e); }
   }
 
@@ -160,6 +233,7 @@
     card.appendChild(hd);
 
     const bd = make("div", "bd");
+    bd.appendChild(accountSection(c, cfg.connections));
     const sync = () => card.classList.toggle("off", !s.enabled);
     // On or off
     const sw = make("label", "switch");

@@ -46,6 +46,12 @@ export const DESK_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS studio_settings (
     key TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL)`,
   // A/B captions (src/growth.mjs): the two drafts of one test.
+  // Channel accounts connected by OAuth (src/oauth.mjs): who and what, never a token (the tokens are in `tokens`,
+  // encrypted), and the one-time states of the sign-ins under way.
+  `CREATE TABLE IF NOT EXISTS connections (
+    channel TEXT PRIMARY KEY, account_id TEXT, account_name TEXT, scopes TEXT, connected_at TEXT NOT NULL, connected_by TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS oauth_states (
+    state TEXT PRIMARY KEY, channel TEXT NOT NULL, verifier TEXT, actor TEXT NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS ab_tests (
     draft_id TEXT PRIMARY KEY, grp TEXT NOT NULL, variant TEXT NOT NULL, channel TEXT NOT NULL, created_at TEXT NOT NULL)`
 ];
@@ -496,4 +502,46 @@ export function measuredPosts(sql, { limit = 1000 } = {}) {
 export function copiedSince(sql, sinceIso) {
   ensureDesk(sql);
   return rows(sql, "SELECT detail FROM events WHERE action = 'duplicated' AND at >= ?", sinceIso).map((r) => String(r.detail ?? "").replace(/^from /, ""));
+}
+
+// ---- Channel connections (src/oauth.mjs) ----
+/** Records a sign-in under way (one-time state, PKCE verifier) and drops expired ones. */
+export function putOAuthState(sql, { state, channel, verifier = null, actor }, { now = Date.now(), ttlMs = 600_000 } = {}) {
+  ensureDesk(sql);
+  sql.exec("DELETE FROM oauth_states WHERE created_at < ?", iso(now - ttlMs));
+  sql.exec("INSERT INTO oauth_states (state, channel, verifier, actor, created_at) VALUES (?, ?, ?, ?, ?)", state, channel, verifier, clip(actor, 200) || "unknown", iso(now));
+  return { ok: true };
+}
+/** Takes a state once: the same person, within its time; it is deleted whatever the answer. */
+export function takeOAuthState(sql, { state, actor }, { now = Date.now(), ttlMs = 600_000 } = {}) {
+  ensureDesk(sql);
+  const r = rows(sql, "SELECT state, channel, verifier, actor, created_at FROM oauth_states WHERE state = ?", String(state ?? ""))[0] ?? null;
+  if (r) sql.exec("DELETE FROM oauth_states WHERE state = ?", r.state);
+  if (!r) return { ok: false, error: "unknown or used sign-in (start again from the Channels page)" };
+  if (Date.parse(r.created_at) < now - ttlMs) return { ok: false, error: "the sign-in took too long (start again)" };
+  if (r.actor !== (clip(actor, 200) || "unknown")) return { ok: false, error: "the sign-in was started by someone else" };
+  return { ok: true, channel: r.channel, verifier: r.verifier };
+}
+/** Stores a connected account (its sealed tokens go through storeToken) with an event; replaces the previous one. */
+export function saveConnection(sql, { channel, account_id = null, account_name = null, scopes = null, actor, token }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  sql.exec("DELETE FROM tokens WHERE channel = ?", channel);
+  sql.exec("INSERT INTO tokens (channel, access_token, refreshed_at, expires_at, refresh_token) VALUES (?, ?, ?, ?, ?)",
+    channel, token.access_token ?? "", iso(now), token.expires_in ? iso(now + Number(token.expires_in) * 1000) : null, token.refresh_token ?? null);
+  sql.exec("INSERT INTO connections (channel, account_id, account_name, scopes, connected_at, connected_by) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(channel) DO UPDATE SET account_id = excluded.account_id, account_name = excluded.account_name, scopes = excluded.scopes, connected_at = excluded.connected_at, connected_by = excluded.connected_by",
+    channel, account_id ? clip(String(account_id), 100) : null, account_name ? clip(String(account_name), 120) : null, scopes ? clip(String(scopes), 400) : null, iso(now), clip(actor, 200) || "unknown");
+  event(sql, { at: iso(now), id: `connection:${channel}`, action: "connected", actor: clip(actor, 200) || "unknown", detail: account_name ? clip(String(account_name), 120) : null });
+  return { ok: true, channel };
+}
+export function connectionsOf(sql) {
+  ensureDesk(sql);
+  return Object.fromEntries(rows(sql, "SELECT c.channel, c.account_id, c.account_name, c.scopes, c.connected_at, c.connected_by, t.expires_at, t.refreshed_at FROM connections c LEFT JOIN tokens t ON t.channel = c.channel").map((r) => [r.channel, r]));
+}
+/** Disconnects a channel: its stored tokens and its connection are deleted (the account secrets, if any, stay). */
+export function removeConnection(sql, { channel, actor }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  sql.exec("DELETE FROM tokens WHERE channel = ?", channel);
+  sql.exec("DELETE FROM connections WHERE channel = ?", channel);
+  event(sql, { at: iso(now), id: `connection:${channel}`, action: "disconnected", actor: clip(actor, 200) || "unknown", detail: null });
+  return { ok: true, channel };
 }
