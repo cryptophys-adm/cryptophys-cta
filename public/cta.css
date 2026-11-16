@@ -255,3 +255,32 @@ textarea.editor:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 3px
 .preview .pm.image{aspect-ratio:4/5;max-width:220px;display:grid;place-items:center;margin:0 auto}
 .notice.ok{background:var(--green-soft);border-color:#b7dfc2;color:var(--green)}
 .notice.ok a{font-weight:600}
+
+/* Library, Calendar, Media (studio.js) */
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--line2)}
+.filters .text{min-width:200px;flex:1;width:auto}
+.filters .dates{display:inline-flex;align-items:center;gap:6px}
+.filters input.time{width:150px}
+.lcount{padding:10px 20px 0}
+.draft .editbox{display:grid;gap:8px}
+.draft .note{font-size:13px;color:var(--green)}
+.draft .note:empty{display:none}
+.calmonth{min-width:150px;text-align:center;font-size:15px}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-top:1px solid var(--line2)}
+.cal .dow{padding:8px 10px;font-size:12px;font-weight:600;color:var(--muted);border-bottom:1px solid var(--line2);background:var(--subtle)}
+.cal .day{min-height:96px;padding:8px 10px;border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);display:grid;align-content:start;gap:4px;background:var(--surface);text-align:left;font:inherit;color:inherit;border-top:0;border-left:0;cursor:pointer}
+.cal .day:nth-child(7n){border-right:0}
+.cal .day:hover{background:var(--hover)}
+.cal .day.out{background:var(--subtle);cursor:default}
+.cal .day.today .dn{background:var(--blue);color:#fff;border-radius:12px;padding:0 7px}
+.cal .dn{font-size:13px;font-weight:600;justify-self:start}
+.cal .chip{font-size:11px;font-weight:600;border-radius:4px;padding:1px 6px;justify-self:start}
+.cal .chip.c{background:var(--blue-soft);color:var(--blue)}
+.cal .chip.p{background:var(--green-soft);color:var(--green)}
+.cal .chs{font-size:11px;color:var(--faint)}
+.grid.media{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+.mtile{display:grid;gap:6px;padding:10px}
+.mtile img,.mtile video{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:var(--radius-sm);background:var(--subtle)}
+.mtile video{aspect-ratio:9/16}
+.mtile .row{display:flex;flex-wrap:wrap;gap:4px}
+@media (max-width:720px){.cal .day{min-height:64px;padding:4px}.cal .chs{display:none}}

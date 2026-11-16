@@ -114,3 +114,12 @@ export function overlayFor(kind, analysis, ref) {
   }
   return null;
 }
+
+/**
+ * The guardian's check of an edited or copied draft, as for a composed post: its kind's rules, the decisions it covers
+ * (the recap's delay rule, counted from now), TradingView's credit where its post is the chart card or video, its
+ * channel's limit. A custom post still needs its own words. Runs inside the desk (functions do not cross RPC).
+ */
+export function editCheck(draft, { delayHours = 24, now = Date.now() } = {}) {
+  return checkPost({ channel: draft.channel, kind: COMPOSE_KINDS.includes(draft.kind) ? draft.kind : "custom", text: draft.text, decisionTimes: draft.decision_times ?? [], delayHours, now });
+}

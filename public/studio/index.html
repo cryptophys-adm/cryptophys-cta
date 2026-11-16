@@ -25,6 +25,9 @@
     <a href="#dashboard" data-view="dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 13h8V3H3zm0 8h8v-6H3zm10 0h8V11h-8zm0-18v6h8V3z"/></svg>Dashboard</a>
     <a href="#queue" data-view="queue"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z"/></svg>Content queue<span class="n" id="navpending"></span></a>
     <a href="#create" data-view="create"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 17.3V21h3.7l11-11-3.7-3.7zM20.7 7a1 1 0 0 0 0-1.4l-2.3-2.3a1 1 0 0 0-1.4 0l-1.8 1.8 3.7 3.7z"/></svg>Create</a>
+    <a href="#library" data-view="library"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h4v16H4zm6 0h4v16h-4zm6.4.6 3.8-1 4 15.5-3.8 1z"/></svg>Library</a>
+    <a href="#calendar" data-view="calendar"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 2h2v2h6V2h2v2h3v18H4V4h3zm-1 8v10h12V10zm0-4v2h12V6z"/></svg>Calendar</a>
+    <a href="#media" data-view="media"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 4h18v16H3zm2 2v9.6l4-4 3 3 4-5 3 3.8V6zm4 1.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></svg>Media</a>
     <a href="#performance" data-view="performance"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 19h2v-7H5zm6 0h2V5h-2zm6 0h2v-10h-2z"/></svg>Performance</a>
     <a href="#channels" data-view="channels"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M18 16a3 3 0 0 0-2.2 1l-7-4a3 3 0 0 0 0-2l7-4A3 3 0 1 0 15 5l-7 4a3 3 0 1 0 0 6l7 4a3 3 0 1 0 3-3z"/></svg>Channels</a>
     <div class="group">Public</div>
@@ -72,6 +75,41 @@
       <div class="err" id="cerr" role="alert"></div>
       <div class="notice ok" id="cdone"></div>
       <div class="grid two" id="ceditors"></div>
+    </section>
+
+    <section class="view" id="view-library" aria-labelledby="h-library" hidden>
+      <div class="crumbs">CTA Studio / Library</div>
+      <div class="pagehead"><div><h1 id="h-library">Library</h1><p>Every draft and post. Search and filter, edit a draft before it is approved (the guardian checks it again), or copy any post to use it again.</p></div></div>
+      <div class="card">
+        <div class="filters">
+          <input class="text grow" id="lq" type="search" placeholder="Search words or id" aria-label="Search">
+          <select class="select" id="lstatus" aria-label="Status"></select>
+          <select class="select" id="lchannel" aria-label="Channel"></select>
+          <select class="select" id="lkind" aria-label="Type"></select>
+          <label class="meta dates">From <input class="time" id="lfrom" type="date" aria-label="From (WIB)"></label>
+          <label class="meta dates">To <input class="time" id="lto" type="date" aria-label="To (WIB)"></label>
+          <button class="btn outline" id="lclear" type="button">Clear</button>
+        </div>
+        <div class="lcount meta" id="lcount"></div>
+        <div class="list" id="library"><div class="empty">Loading…</div></div>
+        <div class="ft"><button class="btn outline" id="lmore" type="button" hidden>Load more</button></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-calendar" aria-labelledby="h-calendar" hidden>
+      <div class="crumbs">CTA Studio / Calendar</div>
+      <div class="pagehead">
+        <div><h1 id="h-calendar">Calendar</h1><p>Drafts made and posts published per day (WIB). Choose a day to see its drafts in the library.</p></div>
+        <div class="actions"><button class="btn outline" id="calprev" type="button" aria-label="Previous month">‹</button><b id="calmonth" class="calmonth"></b><button class="btn outline" id="calnext" type="button" aria-label="Next month">›</button></div>
+      </div>
+      <div class="card"><div class="cal" id="cal"></div></div>
+    </section>
+
+    <section class="view" id="view-media" aria-labelledby="h-media" hidden>
+      <div class="crumbs">CTA Studio / Media</div>
+      <div class="pagehead"><div><h1 id="h-media">Media</h1><p>Every chart card and video made for a draft, newest first. A card is public only once its draft is approved.</p></div></div>
+      <div class="grid media" id="medialist"></div>
+      <div><button class="btn outline" id="mmore" type="button" hidden>Load more</button></div>
     </section>
 
     <section class="view" id="view-performance" aria-labelledby="h-performance" hidden>

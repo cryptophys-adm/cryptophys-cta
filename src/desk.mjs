@@ -6,6 +6,7 @@
 // (the guardian failed), approved (waits for publishing, or publishing is off), rejected, published, failed.
 // Each change is an event with who and why. An approval runs the guardian again on the stored text.
 import { checkContentDraft } from "./guardian.mjs";
+import { initialStatus } from "./channels.mjs";
 
 export const DESK_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS drafts (
@@ -257,4 +258,99 @@ export function saveChannelSettings(sql, { channel, settings, actor }, { now = D
 export function channelCountsSince(sql, sinceIso) {
   ensureDesk(sql);
   return Object.fromEntries(rows(sql, "SELECT channel, COUNT(*) AS n FROM drafts WHERE created_at >= ? GROUP BY channel", sinceIso).map((r) => [r.channel, Number(r.n)]));
+}
+
+// ---- Content management (owner 2026-11-16: "content management"): the library, edits, copies, the calendar, media ----
+/** Statuses whose text a person may still change (nothing approved, published or rejected is rewritten). */
+export const EDITABLE = Object.freeze(["pending", "blocked", "needs_image", "needs_video"]);
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** The WIB day (UTC+7) of an ISO time, as SQLite computes it: the calendar's and the filters' day. */
+const WIB_DAY = (col) => `date(datetime(${col}, '+7 hours'))`;
+
+/** The library: every draft, filtered by status, channel, kind, words and WIB days, newest first, with the total. */
+export function searchDrafts(sql, { status = null, channel = null, kind = null, q = null, from = null, to = null, limit = 30, offset = 0 } = {}) {
+  ensureDesk(sql);
+  const where = [], binds = [];
+  if (status && STATUSES.includes(status)) { where.push("d.status = ?"); binds.push(status); }
+  if (channel) { where.push("d.channel = ?"); binds.push(String(channel).slice(0, 40)); }
+  if (kind) { where.push("d.kind = ?"); binds.push(String(kind).slice(0, 40)); }
+  const words = clip(q ?? "", 100);
+  if (words) { where.push("(instr(lower(d.text), lower(?)) > 0 OR instr(lower(d.id), lower(?)) > 0)"); binds.push(words, words); }
+  if (from && DAY.test(from)) { where.push(`${WIB_DAY("d.created_at")} >= ?`); binds.push(from); }
+  if (to && DAY.test(to)) { where.push(`${WIB_DAY("d.created_at")} <= ?`); binds.push(to); }
+  const w = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const n = Math.min(100, Math.max(1, Number(limit) || 30));
+  const off = Math.max(0, Math.min(100_000, Number(offset) || 0));
+  const total = Number(rows(sql, `SELECT COUNT(*) AS n FROM drafts d ${w}`, ...binds)[0]?.n ?? 0);
+  const list = rows(sql, `SELECT d.*, m.data AS metrics, m.fetched_at AS metrics_at FROM drafts d LEFT JOIN post_metrics m ON m.draft_id = d.id ${w} ORDER BY d.created_at DESC, d.id LIMIT ? OFFSET ?`, ...binds, n, off).map(shape);
+  return { drafts: list, total, offset: off, limit: n };
+}
+
+/**
+ * A person's edit of a draft's text. `check(draft)` is the guardian's check of the new text (the caller's, as for a
+ * composed post); a text it refuses is not stored. A draft whose card or video carries the old text loses that media
+ * and waits for a new one; otherwise it waits for approval again.
+ */
+export function editDraft(sql, { id, text, actor, check }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  const who = clip(actor, 200);
+  if (!who) return { ok: false, error: "actor is required" };
+  const d = getDraft(sql, id);
+  if (!d) return { ok: false, error: "no such draft" };
+  if (!EDITABLE.includes(d.status)) return { ok: false, error: `a ${d.status} draft cannot be edited; duplicate it instead` };
+  const t = typeof text === "string" ? text.replace(/\r\n/g, "\n") : "";
+  if (t === d.text) return { ok: false, error: "nothing changed" };
+  const r = check({ ...d, text: t });
+  if (!r.guardian.pass) return { ok: false, error: "the guardian refused the new text; nothing was saved", guardian: r.guardian };
+  const status = initialStatus(d.channel);
+  sql.exec("UPDATE drafts SET text = ?, guardian = ?, status = ?, image_url = NULL WHERE id = ?", t, JSON.stringify(r.guardian), status, d.id);
+  event(sql, { at: iso(now), id: d.id, action: "edited", actor: who, detail: `${d.text.length} → ${t.length} characters; ${d.status} → ${status}` });
+  return { ok: true, id: d.id, status, guardian: r.guardian };
+}
+
+/**
+ * A copy of any draft as a new draft (a reused post), checked again, waiting for approval; its history names the
+ * source. `newId` is the new id's stem; the channel is appended.
+ */
+export function duplicateDraft(sql, { id, newId: stem, actor, check }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  const who = clip(actor, 200);
+  if (!who) return { ok: false, error: "actor is required" };
+  const d = getDraft(sql, id);
+  if (!d) return { ok: false, error: "no such draft" };
+  const newId = `${clip(stem, 120)}:${d.channel}`;
+  const r = check(d);
+  if (!r.guardian.pass) return { ok: false, error: "the guardian refused the copy (check its text in the library); nothing was saved", guardian: r.guardian };
+  const copy = { id: newId, kind: d.kind, channel: d.channel, text: d.text, image_url: null, window: d.window_from ? { from: d.window_from, to: d.window_to } : null,
+    decision_times: d.decision_times, guardian: r.guardian, overlay: d.overlay, status: initialStatus(d.channel) };
+  const added = addDrafts(sql, [copy], { now, actor: who });
+  if (!added.length) return { ok: false, error: "the copy exists already" };
+  event(sql, { at: iso(now), id: newId, action: "duplicated", actor: who, detail: `from ${d.id}` });
+  return { ok: true, id: newId, status: copy.status, from: d.id };
+}
+
+/** The calendar of a month (YYYY-MM, WIB days): drafts made and posts published per day and channel. */
+export function calendarMonth(sql, month) {
+  ensureDesk(sql);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(month ?? ""))) return { ok: false, error: "month must be YYYY-MM" };
+  const days = {};
+  const add = (day, channel, key) => {
+    const x = (days[day] ??= { created: 0, published: 0, channels: {} });
+    x[key] += 1;
+    const c = (x.channels[channel] ??= { created: 0, published: 0 });
+    c[key] += 1;
+  };
+  for (const r of rows(sql, `SELECT ${WIB_DAY("created_at")} AS day, channel FROM drafts WHERE substr(${WIB_DAY("created_at")}, 1, 7) = ?`, month)) add(r.day, r.channel, "created");
+  for (const r of rows(sql, `SELECT ${WIB_DAY("published_at")} AS day, channel FROM drafts WHERE published_at IS NOT NULL AND substr(${WIB_DAY("published_at")}, 1, 7) = ?`, month)) add(r.day, r.channel, "published");
+  return { ok: true, month, days };
+}
+
+/** The media library: every card and video (no bytes), newest first, with its draft's channel and status. */
+export function listMedia(sql, { limit = 24, offset = 0 } = {}) {
+  ensureDesk(sql);
+  const n = Math.min(60, Math.max(1, Number(limit) || 24));
+  const off = Math.max(0, Number(offset) || 0);
+  const total = Number(rows(sql, "SELECT COUNT(*) AS n FROM media")[0]?.n ?? 0);
+  const list = rows(sql, "SELECT m.id, m.draft_id, m.content_type, m.bytes, m.created_at, d.channel, d.kind, d.status FROM media m LEFT JOIN drafts d ON d.id = m.draft_id ORDER BY m.created_at DESC, m.id LIMIT ? OFFSET ?", n, off);
+  return { media: list, total, offset: off, limit: n };
 }
