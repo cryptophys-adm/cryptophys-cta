@@ -43,6 +43,22 @@ export const SECRETS = Object.freeze({
   tiktok: { client_key: "TIKTOK_CLIENT_KEY", client_secret: "TIKTOK_CLIENT_SECRET", refresh_token: "TIKTOK_REFRESH_TOKEN" }
 });
 
+/**
+ * Team roles (owner 2026-11-16, pro marketing extras): STUDIO_APPROVERS, a Worker secret set through the platform
+ * (comma-separated sign-in emails; never in the repository), names who approves. Unset: every signed-in person
+ * approves, as before. Set: a person on it is an approver; anyone else signed in is an editor, who writes, edits and
+ * copies drafts and manages links and hashtag sets, but never approves, rejects, or changes channel settings or the
+ * content-mix targets. A service token only reads.
+ */
+export const STUDIO_SECRETS = Object.freeze(["STUDIO_APPROVERS"]);
+export function roleOf(env, identity) {
+  if (identity?.type !== "user") return "service";
+  const list = String(env?.STUDIO_APPROVERS ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
+  if (!list.length) return "approver";
+  return list.includes(String(identity.subject ?? "").toLowerCase()) ? "approver" : "editor";
+}
+const approverOnly = (role) => (role === "approver" ? null : json({ error: "approver_only", hint: "only an approver can do this (STUDIO_APPROVERS)" }, 403));
+
 export const desk = (env) => env.CONTENT_DESK.get(env.CONTENT_DESK.idFromName("desk"));
 
 /** A channel's account from its secrets (a refreshed token from the desk wins). Never returned to a caller. */
@@ -357,12 +373,13 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
       return json({ error: "access_denied", reason: v.reason }, 403);
     }
     const identity = v.identity;
+    const role = roleOf(env, identity);
     if (path.startsWith("/api/studio/")) {
-      if (route === "GET /api/studio/whoami") return json({ subject: identity.subject, type: identity.type, can_decide: identity.type === "user" });
+      if (route === "GET /api/studio/whoami") return json({ subject: identity.subject, type: identity.type, role, can_decide: role === "approver", can_write: role !== "service", roles_set: Boolean(String(env?.STUDIO_APPROVERS ?? "").trim()) });
       if (route === "GET /api/studio/status") return rpc(() => studioStatus(env), "status_failed");
       if (route === "GET /api/studio/drafts") {
         const status = url.searchParams.get("status") || null;
-        return rpc(async () => ({ drafts: await desk(env).list({ status, limit: 50 }), counts: await desk(env).counts(), can_decide: identity.type === "user" }), "drafts_failed");
+        return rpc(async () => ({ drafts: await desk(env).list({ status, limit: 50 }), counts: await desk(env).counts(), can_decide: role === "approver", can_write: role !== "service" }), "drafts_failed");
       }
       if (route === "GET /api/studio/draft") return rpc(async () => (await desk(env).get(String(url.searchParams.get("id") || "").slice(0, 160))) ?? { ok: false, error: "no such draft" }, "draft_failed");
       if (route === "GET /api/studio/preview") {
@@ -377,6 +394,8 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
       if (route === "POST /api/studio/decide") {
         const r = await personJson(request, url, identity);
         if (r.response) return r.response;
+        const denied = approverOnly(role);
+        if (denied) return denied;
         const id = typeof r.body.id === "string" ? r.body.id.slice(0, 160) : "";
         const decision = typeof r.body.decision === "string" ? r.body.decision : "";
         const reason = typeof r.body.reason === "string" ? r.body.reason.trim().slice(0, 300) : "";
@@ -440,6 +459,8 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
       if (route === "POST /api/studio/mix") {
         const r = await personJson(request, url, identity);
         if (r.response) return r.response;
+        const denied = approverOnly(role);
+        if (denied) return denied;
         const n = normalizeMix(r.body.targets);
         if (!n.ok) return json({ error: n.error }, 400);
         return rpc(() => desk(env).saveStudioSetting({ key: "mix", value: n.mix, actor: identity.subject }, now ? now * 1000 : Date.now()), "mix_failed");
@@ -512,11 +533,13 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
       // The Channels page: each channel's settings, what it can take, and who changed them last. Never a token.
       if (route === "GET /api/studio/settings") {
         return rpc(async () => ({ ...(await channelSettings(env, { strict: true })), formats: FORMATS, planned: PLANNED_FORMATS, kinds: KINDS, kind_names: KIND_NAMES, days: DAYS,
-          timezone: TIMEZONE, max_per_day: MAX_PER_DAY, max_slots: MAX_SLOTS, can_edit: identity.type === "user" }), "settings_failed");
+          timezone: TIMEZONE, max_per_day: MAX_PER_DAY, max_slots: MAX_SLOTS, can_edit: role === "approver" }), "settings_failed");
       }
       if (route === "POST /api/studio/settings") {
         const r = await personJson(request, url, identity);
         if (r.response) return r.response;
+        const denied = approverOnly(role);
+        if (denied) return denied;
         const channel = typeof r.body.channel === "string" ? r.body.channel : "";
         const n = normalizeSettings(channel, r.body.settings);
         if (!n.ok) return json({ error: n.error }, 400);

@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { handle, accountOf, publishDraft, SECRETS, channelsOf, renderImages, collectInsights, runSchedule } from "../src/app.mjs";
+import { handle, accountOf, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule } from "../src/app.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
@@ -103,7 +103,7 @@ test("the studio: 403 without a valid Access JWT, the page and API with one; a s
   // The studio's script is served as itself, never as the page (2026-11-16: it came back as HTML and nothing ran).
   assert.equal(await (await handle(req("/studio/studio.js", { token: person }), e, opts)).text(), "asset /studio/studio.js");
   assert.equal(await (await handle(req("/studio/", { token: person }), e, opts)).text(), "asset /studio/");
-  assert.deepEqual(await (await handle(req("/api/studio/whoami", { token: person }), e, opts)).json(), { subject: "owner@example.com", type: "user", can_decide: true });
+  assert.deepEqual(await (await handle(req("/api/studio/whoami", { token: person }), e, opts)).json(), { subject: "owner@example.com", type: "user", role: "approver", can_decide: true, can_write: true, roles_set: false });
   const st = await (await handle(req("/api/studio/status", { token: person }), e, opts)).json();
   assert.equal(st.publish, "off");
   assert.deepEqual(Object.keys(st.channels), CHANNELS);
@@ -201,7 +201,7 @@ test("the native deploy block in organism.json equals wrangler.jsonc, and the or
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   assert.deepEqual(Object.keys(pkg.dependencies ?? {}), ["@cloudflare/puppeteer"], "one runtime dependency, declared in the deploy block");
   assert.deepEqual(d.crons, cfg.triggers.crons);
-  assert.deepEqual(d.secrets_kept, Object.values(SECRETS).flatMap((s) => Object.values(s)));
+  assert.deepEqual(d.secrets_kept, [...Object.values(SECRETS).flatMap((s) => Object.values(s)), ...STUDIO_SECRETS]);
   const src = readFileSync(new URL("../src/index.mjs", import.meta.url), "utf8");
   for (const e of [...d.entrypoints, ...d.durable_objects.map((o) => o.class_name)]) assert.match(src, new RegExp(`export class ${e}\\b`));
   assert.equal(d.via, "forge");
@@ -530,4 +530,32 @@ test("growth through the studio API: an A/B pair from Create, its result once me
   assert.deepEqual([g.ab.length, g.ab[0].state, g.ab[0].winner, g.measured], [1, "measured", "B", 2]);
   assert.ok("threads" in g.best_times);
   assert.deepEqual(g.evergreen, [], "not old enough yet");
+});
+
+test("team roles: unset, every person approves; set, approvers decide and set channels and the mix, editors write only", async () => {
+  resetKeyCacheForTests();
+  assert.equal(roleOf({}, { type: "user", subject: "a@x.com" }), "approver");
+  assert.equal(roleOf({ STUDIO_APPROVERS: " Owner@Example.com , boss@x.com" }, { type: "user", subject: "owner@example.com" }), "approver");
+  assert.equal(roleOf({ STUDIO_APPROVERS: "owner@example.com" }, { type: "user", subject: "writer@example.com" }), "editor");
+  assert.equal(roleOf({}, { type: "service", subject: "ci" }), "service");
+  const { env: e, d } = env({ CONTENT_CHANNELS: "threads", STUDIO_APPROVERS: "owner@example.com" });
+  const owner = await jwt({ email: "owner@example.com" });
+  const writer = await jwt({ email: "writer@example.com" });
+  const who = await (await handle(req("/api/studio/whoami", { token: writer }), e, opts)).json();
+  assert.deepEqual([who.role, who.can_decide, who.can_write, who.roles_set], ["editor", false, true, true]);
+  const text = "Education · XAUUSD\n\nGold held its range through London.\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD";
+  const post = (p, body, token) => handle(req(p, { token, method: "POST", body }), e, opts);
+  const made = await (await post("/api/studio/compose", { kind: "custom", posts: [{ channel: "threads", text }] }, writer)).json();
+  assert.equal(made.ok, true, "an editor writes");
+  const id = made.added[0];
+  const denied = await post("/api/studio/decide", { id, decision: "approve" }, writer);
+  assert.equal(denied.status, 403);
+  assert.equal((await denied.json()).error, "approver_only");
+  assert.equal((await post("/api/studio/settings", { channel: "threads", settings: { enabled: false } }, writer)).status, 403);
+  assert.equal((await post("/api/studio/mix", { targets: { key_levels: 25, pattern: 25, daily_recap: 25, custom: 25 } }, writer)).status, 403);
+  assert.equal((await (await handle(req("/api/studio/settings", { token: writer }), e, opts)).json()).can_edit, false);
+  assert.equal((await post("/api/studio/hashtag-sets", { name: "core", tags: "#XAUUSD" }, writer)).status, 200, "an editor manages hashtag sets");
+  const ok = await (await post("/api/studio/decide", { id, decision: "approve" }, owner)).json();
+  assert.equal(ok.status, "approved", "the approver decides");
+  assert.deepEqual(draftEvents(d.sql, id).map((x) => [x.action, x.actor]).sort(), [["approved", "owner@example.com"], ["composed", "writer@example.com"]], "who wrote and who approved, in the history");
 });

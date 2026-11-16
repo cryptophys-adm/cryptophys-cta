@@ -14,7 +14,7 @@
   const FILTERS = ["pending", "needs_image", "needs_video", "blocked", "approved", "published", "rejected", "failed", ""];
   const VIEWS = ["dashboard", "queue", "create", "library", "calendar", "media", "marketing", "performance", "channels"];
   const EDITABLE = ["pending", "blocked", "needs_image", "needs_video"];
-  let filter = "pending", status = null, canDecide = false, perf = null, sched = null;
+  let filter = "pending", status = null, canDecide = false, canWrite = false, role = null, perf = null, sched = null;
 
   async function call(path, method = "GET", body) {
     const res = await fetch(path, { method, credentials: "same-origin", headers: { accept: "application/json", ...(body !== undefined ? { "content-type": "application/json" } : {}) }, body: body !== undefined ? JSON.stringify(body) : undefined });
@@ -336,7 +336,7 @@
       actions.append(reason, no, ok);
     }
     const note = make("div", "note");
-    if (canDecide && EDITABLE.includes(d.status)) {
+    if (canWrite && EDITABLE.includes(d.status)) {
       const edit = make("button", "btn outline", "Edit"); edit.type = "button";
       edit.addEventListener("click", () => {
         const textEl = card.querySelector(".text");
@@ -362,7 +362,7 @@
       });
       actions.appendChild(edit);
     }
-    if (canDecide) {
+    if (canWrite) {
       const dup = make("button", "btn outline", "Duplicate"); dup.type = "button"; dup.title = "Copy this post as a new draft (checked again, waits for approval)";
       dup.addEventListener("click", async () => {
         dup.disabled = true; err.textContent = "";
@@ -468,7 +468,7 @@
         row.appendChild(make("span", "meta", `${fmt(p.views)} views · ${p.engagement} engagement · published ${when(p.published_at)}`));
         card.appendChild(row);
         card.appendChild(make("div", "text", p.text));
-        if (canDecide) {
+        if (canWrite) {
           const dup = make("button", "btn outline", "Duplicate to the queue"); dup.type = "button";
           dup.addEventListener("click", async () => { dup.disabled = true; try { const r = await call("/api/studio/duplicate", "POST", { id: p.id }); dup.textContent = `Copied: ${LABEL[r.status] ?? r.status}`; } catch (e) { dup.textContent = e.message; } });
           const a = make("div", "actions"); a.appendChild(dup); card.appendChild(a);
@@ -527,7 +527,8 @@
         try { await call("/api/studio/mix", "POST", { targets }); $("mixsaved").textContent = "Saved"; renderMix(await call("/api/studio/mix")); }
         catch (e) { $("mixerr").textContent = e.message; }
       });
-      for (const id of ["laddbtn", "haddbtn", "mixsave"]) $(id).disabled = !canDecide;
+      for (const id of ["laddbtn", "haddbtn"]) $(id).disabled = !canWrite;
+      $("mixsave").disabled = !canDecide;
     }
     try {
       const [l, h, m] = await Promise.all([call("/api/studio/links"), call("/api/studio/hashtag-sets"), call("/api/studio/mix")]);
@@ -559,7 +560,7 @@
         const row = make("div", "setrow");
         row.appendChild(make("b", null, x.name));
         row.appendChild(make("span", "grow", x.tags));
-        if (canDecide) {
+        if (canWrite) {
           const rm = make("button", "btn sm outline", "Remove"); rm.type = "button";
           rm.addEventListener("click", async () => { try { await call("/api/studio/hashtag-sets", "POST", { name: x.name, remove: true }); await loadMarketing(); } catch (e) { $("herr").textContent = e.message; } });
           row.appendChild(rm);
@@ -623,7 +624,7 @@
     if (lib.offset) q.set("offset", String(lib.offset));
     try {
       const r = await call(`/api/studio/library?${q}`);
-      canDecide = canDecide && r.can_edit !== false;
+      canWrite = canWrite && r.can_edit !== false;
       const box = $("library");
       if (reset) box.textContent = "";
       lib.total = r.total; lib.offset = r.offset + r.drafts.length;
@@ -747,7 +748,7 @@
     }
     if (!all.length) box.appendChild(make("span", "meta", "No channel is enabled in this Worker."));
     $("cpattern").addEventListener("change", () => { cs.ref = $("cpattern").value; loadTemplate([...cs.chosen]); });
-    if (!canDecide) { $("composesend").disabled = true; $("composesend").title = "Only a signed-in person can send a post"; }
+    if (!canWrite) { $("composesend").disabled = true; $("composesend").title = "Only a signed-in person can send a post"; }
     $("composesend").addEventListener("click", sendCompose);
     await loadTemplate([...cs.chosen]);
   }
@@ -814,7 +815,7 @@
       };
       const changed = () => { cs.texts[c] = ta.value; cs.dirty = true; delete cs.results[c]; paint(); checkSoon(c, 500); };
       ta.addEventListener("input", changed);
-      if (canDecide) editorTools(c, ta, changed).then((bar) => ta.before(bar));
+      if (canWrite) editorTools(c, ta, changed).then((bar) => ta.before(bar));
       card.paint = paint; card.dataset.channel = c;
       bd.append(ta, meta, pv);
       // A/B caption: a second text for this channel (both wait for approval; the Performance page compares them).
@@ -836,7 +837,7 @@
       };
       bta.addEventListener("input", () => { cs.textsB[c] = bta.value; delete cs.results[`${c}:b`]; paintB(); checkSoon(c, 500, "b"); });
       card.paintB = paintB;
-      if (canDecide) {
+      if (canWrite) {
         const tog = make("label", "switch");
         const ti = make("input"); ti.type = "checkbox"; ti.checked = cs.textsB[c] != null;
         ti.addEventListener("change", () => showB(ti.checked));
@@ -860,7 +861,7 @@
     const key = variant === "b" ? `${c}:b` : c;
     const src = variant === "b" ? cs.textsB : cs.texts;
     clearTimeout(cs.timers[key]);
-    if (!canDecide) return;
+    if (!canWrite) return;
     cs.timers[key] = setTimeout(async () => {
       const text = src[c] ?? "";
       try {
@@ -889,7 +890,7 @@
       cs.dirty = false;
       await refresh();
     } catch (e) { $("cerr").textContent = e.message; }
-    finally { b.disabled = !canDecide; }
+    finally { b.disabled = !canWrite; }
   }
 
   // ---- performance ----
@@ -938,8 +939,9 @@
       const who = await call("/api/studio/whoami");
       $("who").textContent = who.subject;
       $("avatar").textContent = initial(who.subject);
-      $("avatar").title = who.can_decide ? "can approve" : "read only";
-      canDecide = Boolean(who.can_decide);
+      $("avatar").title = who.can_decide ? "can approve" : who.can_write ? "editor: writes, never approves" : "read only";
+      canDecide = Boolean(who.can_decide); canWrite = Boolean(who.can_write ?? who.can_decide); role = who.role ?? null;
+      if (role) $("role").textContent = role === "approver" ? "Approver" : role === "editor" ? "Editor" : "Read only";
     } catch (e) { showErr(e); }
     const busy = (id, fn) => $(id).addEventListener("click", async (ev) => {
       ev.currentTarget.disabled = true; const b = ev.currentTarget;
