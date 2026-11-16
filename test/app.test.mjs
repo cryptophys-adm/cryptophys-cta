@@ -5,9 +5,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { handle, accountOf, publishDraft, SECRETS, channelsOf, renderImages, collectInsights } from "../src/app.mjs";
+import { handle, accountOf, publishDraft, SECRETS, channelsOf, renderImages, collectInsights, runSchedule } from "../src/app.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
-import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia } from "../src/desk.mjs";
+import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
@@ -45,7 +45,9 @@ function deskStub() {
     settings: async () => storedSettings(sql), saveSettings: async (i, now) => saveChannelSettings(sql, i, { now }), channelCounts: async (s) => channelCountsSince(sql, s),
     library: async (i) => searchDrafts(sql, i ?? {}), calendar: async (m) => calendarMonth(sql, m), mediaList: async (i) => listMedia(sql, i ?? {}),
     edit: async (i, now) => editDraft(sql, { ...i, check: (x) => editCheck(x, i.checkOptions ?? {}) }, { now }),
-    duplicate: async (i, now) => duplicateDraft(sql, { ...i, check: (x) => editCheck(x, i.checkOptions ?? {}) }, { now })
+    duplicate: async (i, now) => duplicateDraft(sql, { ...i, check: (x) => editCheck(x, i.checkOptions ?? {}) }, { now }),
+    nextApproved: async (c) => nextApproved(sql, c), approvedCounts: async () => approvedCounts(sql), claimSlot: async (i, now) => claimSlot(sql, i, { now }),
+    slotOutcome: async (i) => { slotOutcome(sql, i); return true; }, recentSlots: async (n) => recentSlots(sql, { limit: n })
   };
   return { sql, api, ns: { idFromName: () => "desk", get: () => api } };
 }
@@ -443,4 +445,43 @@ test("content management through the studio API: library, edit, duplicate, calen
   assert.equal(Object.values(cal.days).reduce((n, x) => n + x.created, 0), 2);
   assert.equal((await handle(req("/api/studio/calendar?month=nope", { token: person }), e, opts)).status, 400);
   assert.deepEqual(await get("/api/studio/media-library"), { media: [], total: 0, offset: 0, limit: 24 });
+});
+
+test("the per-channel scheduler: a scheduled channel posts in its slots only, one post per slot, never twice, never late", async () => {
+  resetKeyCacheForTests();
+  const { env: e, d } = env({ CONTENT_PUBLISH: "on", CONTENT_CHANNELS: "telegram,x", TELEGRAM_BOT_TOKEN: "123:SECRET", TELEGRAM_CHAT_ID: "@c" });
+  const text = "Education only. Not financial advice.";
+  addDrafts(d.sql, [1, 2, 3].map((n) => ({ id: `t${n}:telegram`, channel: "telegram", kind: "custom", text: `${text} ${n}`, status: "pending" })));
+  saveChannelSettings(d.sql, { channel: "telegram", settings: { ...JSON.parse(JSON.stringify((await import("../src/settings.mjs")).defaultSettings("telegram"))), schedule: [{ days: ["mon"], time: "19:00" }] }, actor: "owner" });
+  const MON_1900 = Date.parse("2026-11-16T12:00:00Z"); // Monday 19:00 WIB
+  for (const n of [2, 1, 3]) decideDraft(d.sql, { id: `t${n}:telegram`, decision: "approve", actor: "owner" }, { now: MON_1900 - (4 - n) * 3_600_000 });
+  // An approval of a scheduled channel's draft waits for the slot, even with publishing on.
+  const held = await publishDraft(e, getDraft(d.sql, "t1:telegram"), { now: MON_1900 - 60_000 });
+  assert.deepEqual([held.held, held.next.wib], ["waiting_for_slot", "2026-11-16T19:00"]);
+  const calls = [];
+  const fetcher = async (url, init) => { calls.push(JSON.parse(init.body)); return Response.json({ ok: true, result: { message_id: 90 + calls.length } }); };
+  assert.deepEqual((await runSchedule(e, { now: MON_1900 - 60_000, fetcher })).slots, [], "before the slot: nothing");
+  const r = await runSchedule(e, { now: MON_1900 + 4 * 60_000, fetcher });
+  assert.deepEqual(r.slots.map((x) => [x.channel, x.slot, x.id, x.outcome]), [["telegram", "2026-11-16T19:00", "t1:telegram", "published"]], "the oldest approved first");
+  assert.equal(calls.length, 1);
+  assert.deepEqual((await runSchedule(e, { now: MON_1900 + 9 * 60_000, fetcher })).slots, [], "a slot is used once");
+  assert.equal(getDraft(d.sql, "t2:telegram").status, "approved", "the next one waits for the next slot");
+  // A missed slot (the Worker did not run for over 30 minutes) is skipped, never posted late.
+  const NEXT = MON_1900 + 7 * 86_400_000;
+  assert.deepEqual((await runSchedule(e, { now: NEXT + 31 * 60_000, fetcher })).slots, []);
+  assert.equal(calls.length, 1);
+  // Publishing off: nothing at all, not even a Desk read.
+  const off = env({ CONTENT_CHANNELS: "telegram" });
+  off.env.CONTENT_DESK = { idFromName: () => { throw new Error("no desk call while publishing is off"); } };
+  assert.deepEqual(await runSchedule(off.env, { now: MON_1900 }), { status: "publishing_off" });
+  // An empty slot is recorded; the studio shows the schedule.
+  addDrafts(d.sql, []);
+  const person = await jwt({ email: "owner@example.com" });
+  const sch = await (await handle(req("/api/studio/schedule", { token: person }), e, opts)).json();
+  assert.equal(sch.channels.telegram.scheduled, true);
+  assert.equal(sch.channels.telegram.waiting, 2);
+  assert.equal(sch.channels.telegram.next_draft.id, "t2:telegram");
+  assert.equal(sch.channels.x.scheduled, false);
+  assert.deepEqual(sch.recent.map((x) => [x.key, x.outcome, x.draft_id]), [["telegram@2026-11-16T19:00", "published", "t1:telegram"]]);
+  assert.ok(!JSON.stringify(sch).includes("SECRET"));
 });

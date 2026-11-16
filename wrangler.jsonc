@@ -32,7 +32,7 @@
   // The recap Tuesday to Saturday at 22:17 UTC (05:17 WIB); the analysis every hour at :09 Monday to Friday, with the
   // key-level map at 06:09 UTC (13:09 WIB).
   "triggers": {
-    "crons": ["17 22 * * 2-6", "9 * * * 1-5"]
+    "crons": ["17 22 * * 2-6", "9 * * * 1-5", "*/5 * * * *"]
   },
   "vars": {
     // Nothing is published while this is "off": an approved draft waits. Turning it on is an owner PR, after the

@@ -15,9 +15,10 @@
 // Kernel: the OrganismDna and CtaHealth entrypoints serve the platform's census and drift checks.
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import puppeteer from "@cloudflare/puppeteer";
-import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia } from "./desk.mjs";
+import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots } from "./desk.mjs";
 import { editCheck } from "./compose.mjs";
-import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, collectInsights, ANALYSIS_CRON } from "./app.mjs";
+import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, collectInsights, runSchedule, ANALYSIS_CRON } from "./app.mjs";
+import { SCHEDULE_CRON } from "./scheduler.mjs";
 import ORGANISM from "../organism.json" with { type: "json" };
 
 /** The queue: one Durable Object (SQLite storage), named "desk". */
@@ -48,6 +49,11 @@ export class ContentDesk extends DurableObject {
   async duplicate(input, now) { return duplicateDraft(this.sql, { ...input, check: (d) => editCheck(d, input.checkOptions ?? {}) }, { now }); }
   async calendar(month) { return calendarMonth(this.sql, month); }
   async mediaList(input) { return listMedia(this.sql, input ?? {}); }
+  async nextApproved(channel) { return nextApproved(this.sql, channel); }
+  async approvedCounts() { return approvedCounts(this.sql); }
+  async claimSlot(input, now) { return claimSlot(this.sql, input, { now }); }
+  async slotOutcome(input) { slotOutcome(this.sql, input); return true; }
+  async recentSlots(limit) { return recentSlots(this.sql, { limit }); }
 }
 /** The platform's census: this organ's DNA (agents, AI tasks), read through the Forge (EXT_ORGANISM_CTA). */
 export class OrganismDna extends WorkerEntrypoint {
@@ -68,6 +74,12 @@ export default {
   fetch(request, env) { return handle(request, env, { launch: launcher(env) }); },
   async scheduled(event, env) {
     const fail = (e) => ({ status: "error", message: String(e?.message ?? e).slice(0, 200) });
+    // Every 5 minutes: the channels' posting slots (nothing while publishing is off; no Desk call then).
+    if (event?.cron === SCHEDULE_CRON) {
+      const r = await runSchedule(env, { now: event.scheduledTime || Date.now() }).catch(fail);
+      if (r?.slots?.length || r?.status === "error") console.log("cta_schedule", JSON.stringify(r));
+      return;
+    }
     if (event?.cron === ANALYSIS_CRON) {
       const drafted = await draftAnalysis(env, { now: event.scheduledTime || Date.now() }).catch(fail);
       if (drafted?.added?.length || drafted?.status === "error") console.log("cta_analysis_drafts", JSON.stringify(drafted));
