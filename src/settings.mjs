@@ -8,8 +8,8 @@
 //                are listed as planned (PLANNED_FORMATS) and refused until their publisher is built
 //   kinds        which drafts the channel gets: key-level map, chart pattern, daily recap
 //   max_per_day  at most this many drafts a day for the channel (all kinds)
-//   schedule     posting slots: days of the week and times in WIB (UTC+7). Stored now; the per-channel scheduler
-//                (next studio update) publishes approved posts in these slots
+//   schedule     posting slots: days of the week and times in WIB (UTC+7). The per-channel scheduler
+//                (src/scheduler.mjs) publishes the channel's oldest approved post at each slot; no slots: at approval
 //   hashtags     the hashtag line of the channel's drafts (only #words; the guardian checks the draft again)
 // Never a token or account id: accounts are Worker secrets set through the platform, shown only as connected or not.
 import { CHANNELS, CHANNEL_SPECS, HASHTAGS } from "./channels.mjs";

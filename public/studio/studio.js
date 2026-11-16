@@ -14,7 +14,7 @@
   const FILTERS = ["pending", "needs_image", "needs_video", "blocked", "approved", "published", "rejected", "failed", ""];
   const VIEWS = ["dashboard", "queue", "create", "library", "calendar", "media", "performance", "channels"];
   const EDITABLE = ["pending", "blocked", "needs_image", "needs_video"];
-  let filter = "pending", status = null, canDecide = false, perf = null;
+  let filter = "pending", status = null, canDecide = false, perf = null, sched = null;
 
   async function call(path, method = "GET", body) {
     const res = await fetch(path, { method, credentials: "same-origin", headers: { accept: "application/json", ...(body !== undefined ? { "content-type": "application/json" } : {}) }, body: body !== undefined ? JSON.stringify(body) : undefined });
@@ -84,6 +84,34 @@
     renderDashboard();
   }
 
+
+  // ---- up next: the scheduler (GET /api/studio/schedule) ----
+  const wibLabel = (key) => { const d = new Date(`${key.slice(0, 10)}T00:00:00Z`); return `${d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })} ${key.slice(11)} WIB`; };
+  const OUTCOME = { published: "Published", failed: "Failed", empty: "No approved post", claimed: "Running" };
+  function renderUpNext() {
+    const box = $("upnext"); box.textContent = "";
+    const rows = Object.entries(sched?.channels ?? {});
+    if (!rows.length) { box.appendChild(make("div", "empty", "No channel is enabled.")); return; }
+    const table = make("table", "data");
+    const head = make("tr");
+    for (const [h, num] of [["Channel"], ["Next slots"], ["Approved, waiting", 1], ["Next post"]]) head.appendChild(make("th", num ? "num" : null, h));
+    table.appendChild(make("thead")).appendChild(head);
+    const body = table.appendChild(make("tbody"));
+    for (const [c, x] of rows) {
+      const tr = make("tr");
+      tr.appendChild(make("td", null, status?.channels?.[c]?.name ?? c));
+      tr.appendChild(make("td", null, x.scheduled ? (x.next.length ? x.next.map((n) => wibLabel(n.wib)).join(" · ") : x.enabled ? "—" : "drafts off") : "At approval (no slots)"));
+      tr.appendChild(make("td", "num", String(x.waiting)));
+      tr.appendChild(make("td", "meta", x.next_draft ? x.next_draft.text.split("\n")[0] : x.scheduled ? "nothing approved yet" : "—"));
+      body.appendChild(tr);
+    }
+    box.appendChild(table);
+    if (sched.publish !== "on") box.appendChild(make("div", "meta pad", "Publishing is off: the slots pass without posting until the owner turns publishing on."));
+    if (sched.recent?.length) {
+      box.appendChild(make("div", "meta pad", "Latest slots: " + sched.recent.slice(0, 6).map((r) => `${status?.channels?.[r.channel]?.name ?? r.channel} ${wibLabel(r.key.split("@")[1])}: ${OUTCOME[r.outcome] ?? r.outcome}`).join(" · ")));
+    }
+  }
+
   // ---- channels: each channel's settings (GET/POST /api/studio/settings) ----
   const FORMAT_NAMES = { text: "Text only", image: "Image", video: "Video" };
   const FORMAT_NOTE = { planned: "planned", na: "not available" };
@@ -97,8 +125,8 @@
       line.appendChild(make("b", null, "Times are in WIB (UTC+7). "));
       n.appendChild(line);
       line.appendChild(document.createTextNode(status?.publish === "on"
-        ? "Approved posts go out in each channel's slots once the per-channel scheduler is on (next studio update)."
-        : "Publishing is off: the slots are saved now, and approved posts wait. The per-channel scheduler comes in the next studio update."));
+        ? "At each slot, the channel's oldest approved post goes out (one per slot). A channel without slots posts at approval."
+        : "Publishing is off: the slots pass without posting and approved posts wait. Once publishing is on, each slot posts the channel's oldest approved post."));
       const box = $("channels"); box.textContent = "";
       for (const c of Object.keys(cfg.settings || {})) box.appendChild(channelCard(c, cfg));
       showErr(null);
@@ -212,6 +240,8 @@
     };
     drawSlots();
     sf.appendChild(slots);
+    const sx = sched?.channels?.[c];
+    if (sx?.scheduled) sf.appendChild(make("div", "hint", `Next: ${sx.next.length ? sx.next.map((n) => wibLabel(n.wib)).join(" · ") : "—"} · ${sx.waiting} approved waiting`));
     bd.appendChild(sf);
 
     // Hashtags
@@ -292,7 +322,8 @@
     if (d.status === "pending" && canDecide) {
       const reason = make("input", "reason"); reason.placeholder = "Reason (required to reject)"; reason.setAttribute("aria-label", "Reason");
       const no = make("button", "btn danger", "Reject"); no.type = "button";
-      const ok = make("button", "btn primary", status?.publish === "on" ? "Approve & publish" : "Approve (publishing off)"); ok.type = "button";
+      const slotted = sched?.channels?.[d.channel]?.scheduled;
+      const ok = make("button", "btn primary", status?.publish !== "on" ? "Approve (publishing off)" : slotted ? "Approve (posts at the next slot)" : "Approve & publish"); ok.type = "button";
       const decide = async (decision) => {
         if (decision === "reject" && !reason.value.trim()) { err.textContent = "a reason is required to reject"; return; }
         ok.disabled = no.disabled = true;
@@ -666,6 +697,7 @@
 
   async function refresh() {
     try { status = await call("/api/studio/status"); renderStatus(); } catch (e) { showErr(e); }
+    try { sched = await call("/api/studio/schedule"); renderUpNext(); } catch (e) { showErr(e); }
     if (!$("view-queue").hidden) await load();
   }
 

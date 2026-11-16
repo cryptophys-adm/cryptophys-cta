@@ -31,7 +31,10 @@ export const DESK_SCHEMA = [
     media_id TEXT NOT NULL, seq INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (media_id, seq))`,
   // Each channel's settings (src/settings.mjs), set by a person in the studio's Channels page. Never a token.
   `CREATE TABLE IF NOT EXISTS channel_settings (
-    channel TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL)`
+    channel TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL)`,
+  // The scheduler's slots that ran (src/scheduler.mjs): a slot is used once.
+  `CREATE TABLE IF NOT EXISTS slot_runs (
+    key TEXT PRIMARY KEY, channel TEXT NOT NULL, slot_at TEXT NOT NULL, ran_at TEXT NOT NULL, draft_id TEXT, outcome TEXT NOT NULL)`
 ];
 /** A media chunk: 1 MB of base64 per row (a Durable Object's SQLite row holds up to 2 MB). */
 export const MEDIA_CHUNK = 1_000_000;
@@ -353,4 +356,35 @@ export function listMedia(sql, { limit = 24, offset = 0 } = {}) {
   const total = Number(rows(sql, "SELECT COUNT(*) AS n FROM media")[0]?.n ?? 0);
   const list = rows(sql, "SELECT m.id, m.draft_id, m.content_type, m.bytes, m.created_at, d.channel, d.kind, d.status FROM media m LEFT JOIN drafts d ON d.id = m.draft_id ORDER BY m.created_at DESC, m.id LIMIT ? OFFSET ?", n, off);
   return { media: list, total, offset: off, limit: n };
+}
+
+// ---- The scheduler (src/scheduler.mjs): one row per channel slot that ran, so a slot is never used twice ----
+
+/** The oldest approved draft of a channel (the next post of its schedule), or null. */
+export function nextApproved(sql, channel) {
+  ensureDesk(sql);
+  return rows(sql, "SELECT * FROM drafts WHERE status = 'approved' AND channel = ? ORDER BY COALESCE(decided_at, created_at) ASC, id LIMIT 1", channel).map(shape)[0] ?? null;
+}
+/** How many approved drafts each channel holds (waiting for publishing or for a slot). */
+export function approvedCounts(sql) {
+  ensureDesk(sql);
+  return Object.fromEntries(rows(sql, "SELECT channel, COUNT(*) AS n FROM drafts WHERE status = 'approved' GROUP BY channel").map((r) => [r.channel, Number(r.n)]));
+}
+/** Claims a slot once ("<channel>@<WIB date>T<HH:MM>"); false when it already ran. */
+export function claimSlot(sql, { key, channel, at }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  const k = `${channel}@${key}`;
+  if (rows(sql, "SELECT 1 AS x FROM slot_runs WHERE key = ?", k).length) return false;
+  sql.exec("INSERT INTO slot_runs (key, channel, slot_at, ran_at, outcome) VALUES (?, ?, ?, ?, 'claimed')", k, channel, iso(at), iso(now));
+  return true;
+}
+/** What a claimed slot did: the draft it published (or tried), or "empty" when no approved draft waited. */
+export function slotOutcome(sql, { key, channel, draftId = null, outcome }) {
+  ensureDesk(sql);
+  sql.exec("UPDATE slot_runs SET draft_id = ?, outcome = ? WHERE key = ?", draftId, clip(String(outcome ?? ""), 60) || "unknown", `${channel}@${key}`);
+}
+/** The latest slot runs of every channel, newest first. */
+export function recentSlots(sql, { limit = 20 } = {}) {
+  ensureDesk(sql);
+  return rows(sql, "SELECT key, channel, slot_at, ran_at, draft_id, outcome FROM slot_runs ORDER BY slot_at DESC LIMIT ?", Math.min(100, Math.max(1, Number(limit) || 20)));
 }

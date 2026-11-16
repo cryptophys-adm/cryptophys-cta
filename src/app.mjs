@@ -12,6 +12,7 @@ import { postInsights, performanceReport, insightChannelsOf, INSIGHTS_DAYS } fro
 import { ANALYSIS_DISCLAIMER } from "./analysis-drafts.mjs";
 import { effectiveSettings, normalizeSettings, draftingChannels, applySettings, wibDayStart, FORMATS, PLANNED_FORMATS, KINDS, KIND_NAMES, DAYS, TIMEZONE, MAX_PER_DAY, MAX_SLOTS } from "./settings.mjs";
 import { recheck } from "./desk.mjs";
+import { dueSlots, nextSlots } from "./scheduler.mjs";
 import { templateTexts, checkPost, composeDrafts, overlayFor, recapWindow, COMPOSE_KINDS, COMPOSE_KIND_NAMES } from "./compose.mjs";
 
 export const RECAP_CRON = "17 22 * * 2-6";
@@ -55,9 +56,15 @@ export async function accountOf(env, channel, { stored = null } = {}) {
 }
 
 /** Publishes one approved draft now, when publishing is on. Never throws. */
-export async function publishDraft(env, draft, { now = Date.now(), fetcher } = {}) {
+export async function publishDraft(env, draft, { now = Date.now(), fetcher, slot = false } = {}) {
   if (!publishOn(env)) return { status: "approved", held: "publishing_off" };
   if (draft?.status !== "approved") return { status: draft?.status ?? "missing", held: "not_approved" };
+  // A channel with posting slots publishes in its slots only (src/scheduler.mjs), never at the approval.
+  if (!slot) {
+    const { settings } = await channelSettings(env);
+    const s = settings[draft.channel];
+    if (s?.schedule?.length) return { status: "approved", held: "waiting_for_slot", next: nextSlots(s.schedule, now, 1).map((x) => ({ at: new Date(x.at).toISOString(), wib: x.key }))[0] ?? null };
+  }
   if (CHANNEL_SPECS[draft.channel]?.publisher !== "built") return { status: "approved", held: "publisher_not_built" };
   const account = await accountOf(env, draft.channel, { stored: await desk(env).token(draft.channel).catch(() => null) });
   if (!account) return { status: "approved", held: "account_not_configured" };
@@ -117,6 +124,48 @@ export async function draftAnalysis(env, { now = Date.now() } = {}) {
   const drafts = await settled(env, analysisDrafts(analysis, { now, channels: draftingChannels(channelsOf(env), settings), levelsRun: new Date(now).getUTCHours() === 6, postedToday, known }), settings, now);
   const added = drafts.length ? await d.add(drafts, now) : [];
   return { zones: analysis?.zones?.length ?? 0, patterns: analysis?.patterns?.length ?? 0, drafts: drafts.map((x) => ({ id: x.id, status: x.status })), added };
+}
+
+/**
+ * The per-channel scheduler (src/scheduler.mjs), every 5 minutes: for each channel with posting slots, each slot due
+ * now is claimed once and publishes the channel's oldest approved draft (one post per slot). Nothing while publishing
+ * is off. Never throws for one channel's failure (publishDraft records a failed post).
+ */
+export async function runSchedule(env, { now = Date.now(), fetcher } = {}) {
+  if (!publishOn(env)) return { status: "publishing_off" };
+  const { settings } = await channelSettings(env, { strict: true });
+  const d = desk(env);
+  const slots = [];
+  for (const channel of channelsOf(env)) {
+    const s = settings[channel];
+    if (!s?.enabled || !s.schedule?.length) continue;
+    for (const slot of dueSlots(s.schedule, now)) {
+      if (!(await d.claimSlot({ key: slot.key, channel, at: slot.at }, now))) continue;
+      const draft = await d.nextApproved(channel);
+      if (!draft) { await d.slotOutcome({ key: slot.key, channel, outcome: "empty" }); slots.push({ channel, slot: slot.key, outcome: "empty" }); continue; }
+      const r = await publishDraft(env, draft, { now, fetcher, slot: true });
+      const outcome = r?.status ?? "unknown";
+      await d.slotOutcome({ key: slot.key, channel, draftId: draft.id, outcome: r?.held ? `held:${r.held}` : outcome });
+      slots.push({ channel, slot: slot.key, id: draft.id, outcome, ...(r?.held ? { held: r.held } : {}) });
+    }
+  }
+  return { status: "ran", slots };
+}
+
+/** Each channel's next slots, the approved drafts waiting and the next one, and the latest slot runs (the studio). */
+export async function studioSchedule(env, { now = Date.now() } = {}) {
+  const { settings } = await channelSettings(env, { strict: true });
+  const d = desk(env);
+  const waiting = await d.approvedCounts();
+  const channels = {};
+  for (const c of channelsOf(env)) {
+    const s = settings[c];
+    const next = s?.enabled && s.schedule?.length ? nextSlots(s.schedule, now, 3) : [];
+    const draft = s?.schedule?.length ? await d.nextApproved(c) : null;
+    channels[c] = { scheduled: Boolean(s?.schedule?.length), enabled: Boolean(s?.enabled), next: next.map((x) => ({ at: new Date(x.at).toISOString(), wib: x.key })),
+      waiting: waiting[c] ?? 0, next_draft: draft ? { id: draft.id, kind: draft.kind, text: draft.text.slice(0, 160) } : null };
+  }
+  return { publish: publishOn(env) ? "on" : "off", channels, recent: await d.recentSlots(20) };
 }
 
 /** Refreshes Threads' and Instagram's long-lived tokens after REFRESH_AFTER_DAYS (only while publishing is on). */
@@ -225,7 +274,7 @@ async function rpc(fn, failure) {
 }
 
 const isStudio = (path) => path === "/studio" || path.startsWith("/studio/") || path.startsWith("/api/studio/");
-const STUDIO_ROUTES = ["/api/studio/library", "/api/studio/edit", "/api/studio/duplicate", "/api/studio/calendar", "/api/studio/media-library", "/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
+const STUDIO_ROUTES = ["/api/studio/schedule", "/api/studio/library", "/api/studio/edit", "/api/studio/duplicate", "/api/studio/calendar", "/api/studio/media-library", "/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
 /** The public origin of the cards Instagram fetches (GET /media/<id>.jpg). */
 export const originOf = (env) => String(env?.PUBLIC_ORIGIN || "https://cta.cryptophys.work").replace(/\/+$/, "");
 const MEDIA_PATH = /^\/media\/([0-9a-f]{32})\.(jpg|webm)$/;
@@ -330,6 +379,7 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
           return { ...out, publish: await publishDraft(env, await desk(env).get(out.id), { now: at }) };
         }, "decide_failed");
       }
+      if (route === "GET /api/studio/schedule") return rpc(() => studioSchedule(env, { now: now ? now * 1000 : Date.now() }), "schedule_failed");
       // Content management: the library (filters, words, WIB days), a person's edit (the guardian again; a media
       // channel's card is made again), a copy of any draft, the calendar and the media library.
       if (route === "GET /api/studio/library") {

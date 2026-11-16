@@ -63,6 +63,7 @@ Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (dr
 | `POST /api/studio/render-now` | a person, same origin, JSON | renders the waiting cards and videos now |
 | `GET /api/studio/performance` | Access JWT | the last 14 days: posts and summed views, likes, comments, shares per channel, the best post, each post's latest metrics |
 | `POST /api/studio/insights-now` | a person, same origin, JSON | reads the recent posts' metrics now |
+| `GET /api/studio/schedule` | Access JWT | each channel's next slots (WIB), approved drafts waiting, the next one, and the latest slot runs |
 | `GET /api/studio/library?status=&channel=&kind=&q=&from=&to=&offset=` | Access JWT | Library: every draft, filtered (words in the text or id; `from`/`to` are WIB days), 30 a page, with the total |
 | `POST /api/studio/edit` | a person, same origin, JSON | `{ id, text }`: only a pending, blocked, needs_image or needs_video draft; the guardian again (refused text is not stored); a card or video channel's media is made again; event `edited` |
 | `POST /api/studio/duplicate` | a person, same origin, JSON | `{ id }`: a copy of any draft as `manual:<day>:<id>:<channel>`, checked again, waiting for approval; events `composed` and `duplicated` (with the source) |
@@ -83,6 +84,7 @@ rest of the host stays public.
 
 | Cron | What |
 |---|---|
+| `*/5 * * * *` | the per-channel scheduler: each channel's due posting slot publishes its oldest approved draft (only while `CONTENT_PUBLISH` is "on"; no Desk call otherwise) |
 | `9 * * * 1-5` | pattern posts (confirmed on H1/H4/D1, forming on H4/D1; once each; at most four a day per channel); at 06:09 the key-level map |
 | `17 22 * * 2-6` | the recap of the trading day that ended 24 hours earlier; token refresh (only while publishing is on: Threads and Instagram long-lived tokens, TikTok's rotating refresh token); then the metrics of the last 14 days' posts (`src/insights.mjs`; only while publishing is on) |
 
@@ -113,7 +115,7 @@ the studio's Channels page). Per channel, set by a person:
 | `format` | text, image, video: only what the channel's publisher posts today (Threads, X, Telegram text; Instagram image; YouTube, TikTok video); the rest is shown as planned and refused | recorded; a new format needs its publisher first |
 | `kinds` | key-level map, chart pattern, daily recap | a kind not listed is not drafted for the channel |
 | `max_per_day` | 1–24 (default 6: one key-level map, four patterns, one recap) | drafts over it in the WIB day (00:00 Asia/Jakarta) are not made |
-| `schedule` | up to 12 slots, each days of the week and a time in WIB | stored; the per-channel scheduler (next studio update) publishes approved posts in them |
+| `schedule` | up to 12 slots, each days of the week and a time in WIB | the scheduler (`src/scheduler.mjs`, every 5 minutes) publishes the channel's oldest approved draft at each slot, one per slot; a slot missed by over 30 minutes is skipped; no slots: a draft is published at its approval |
 | `hashtags` | up to 8 `#words`; never the internal names | replaces the channel's default hashtag line; the guardian checks the draft again, and a failing line keeps the default |
 
 The defaults are what the engine did before settings existed; a stored row that no longer validates falls back to
