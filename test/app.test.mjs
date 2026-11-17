@@ -342,6 +342,8 @@ test("the bridge deploy workflow: main or by hand, no Worker secret, no delete, 
   // Owner 2026-11-17: publishing on for Telegram only, other channels after it works ("setelah sukses baru ke channel lain").
   assert.deepEqual([cfg.vars.CONTENT_PUBLISH, cfg.vars.PUBLISH_CHANNELS], ["on", "telegram"]);
   assert.match(code, /PUBLISH_CHANNELS/, "the deploy refuses publishing on without a named channel list");
+  assert.doesNotMatch(code, /health\.publish !== "off"/, "the post-deploy check compares the live Worker with the config, not with off");
+  assert.match(code, /health\.publish !== want\.CONTENT_PUBLISH/);
 });
 
 test("the pages: no inline script or style (CSP 'self'), the studio's four views, and no other company's name", () => {
