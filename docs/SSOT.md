@@ -57,7 +57,7 @@ Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (dr
 | `GET /studio` | Access JWT | the studio page; without a valid JWT the sign-in page (`/signin`, 403) |
 | `GET /`, `/archive`, `/about`, `/disclaimer` | none | the public pages (static; the archive and profile from `/api/public/*`) |
 | `GET /api/studio/whoami`, `status`, `drafts`, `draft`, `preview` | Access JWT (person or service token) | read the queue; `preview` is a dry run with tokens redacted |
-| `POST /api/studio/decide` | an approver (a person, same origin, JSON) | approve or reject (a reason is required to reject); an approval publishes at once only while `CONTENT_PUBLISH` is "on" |
+| `POST /api/studio/decide` | an approver (a person, same origin, JSON) | approve or reject (a reason is required to reject); an approval publishes at once only while `CONTENT_PUBLISH` is "on" and the draft's channel is in `PUBLISH_CHANNELS` |
 | `POST /api/studio/draft-now` | a person, same origin, JSON | runs the drafting now |
 | `GET /api/studio/media?id=` | Access JWT | a card or video at any status (the studio's preview) |
 | `POST /api/studio/render-now` | a person, same origin, JSON | renders the waiting cards and videos now |
@@ -95,7 +95,7 @@ rest of the host stays public.
 
 | Cron | What |
 |---|---|
-| `*/5 * * * *` | the per-channel scheduler: each channel's due posting slot publishes its oldest approved draft (only while `CONTENT_PUBLISH` is "on"; no Desk call otherwise) |
+| `*/5 * * * *` | the per-channel scheduler: each channel's due posting slot publishes its oldest approved draft (only while `CONTENT_PUBLISH` is "on", and only for the channels in `PUBLISH_CHANNELS`; no Desk call otherwise) |
 | `9 * * * 1-5` | pattern posts (confirmed on H1/H4/D1, forming on H4/D1; once each; at most four a day per channel); at 06:09 the key-level map |
 | `17 22 * * 2-6` | the recap of the trading day that ended 24 hours earlier; token refresh (only while publishing is on: Threads and Instagram long-lived tokens, TikTok's rotating refresh token); then the metrics of the last 14 days' posts (`src/insights.mjs`; only while publishing is on) |
 
@@ -188,7 +188,7 @@ the forms wait.
 Meta's endpoint shapes follow the published guides (Meta's own pages were unreachable from the build session).
 YouTube's resumable upload and TikTok's Direct Post and media transfer follow their guides, read on 2026-11-15; the
 two token refreshes (Google's token endpoint, TikTok's `/v2/oauth/token/`) follow the standard flows. One dry run and
-one real post on a test account per channel confirm them before `CONTENT_PUBLISH` is turned on. Daily quotas are read
+one real post on a test account per channel confirm them before `CONTENT_PUBLISH` is turned on. Owner 2026-11-17 (the POJK 6/2026 check done): `CONTENT_PUBLISH` "on" with `PUBLISH_CHANNELS` "telegram"; each other channel is added in its own owner PR once the one before works. Unset or empty `PUBLISH_CHANNELS` publishes nothing. Daily quotas are read
 from Meta's limit endpoints at run time.
 
 Metrics (`src/insights.mjs`, `post_metrics` in the Desk): Threads (views, likes, replies, reposts, quotes, shares),
@@ -216,7 +216,7 @@ in `cryptophys-cloud-platform` (its own PRs and consensus):
   custom domain for a new hostname).
 - Until then, the bridge (owner 2026-11-16: "setuju, buatkan PR workflow deploy CTA"): `.github/workflows/deploy.yml`
   deploys from `main` with the repository secret `CLOUDFLARE_API_TOKEN` (skipped with a warning without it), runs the
-  tests, refuses unless `CONTENT_PUBLISH` is "off", sets no Worker secret, and runs `organism.json` `deploy`'s health
+  tests, refuses unless `CONTENT_PUBLISH` is "off" or "on" with a named `PUBLISH_CHANNELS` list, sets no Worker secret, and runs `organism.json` `deploy`'s health
   and smoke checks against `cta.cryptophys.work`. Once the Worker exists, the platform adds the `EXT_ORGANISM_CTA` and
   `EXT_CRYPTOPHYS_CTA` bindings and the Access paths (the owner approves the Access change). The workflow is removed
   in the change that hands the deploy to the Forge.

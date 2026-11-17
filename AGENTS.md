@@ -12,11 +12,13 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
    skipped with a warning. Once the Forge deploys this organ, `deploy.yml` is removed in the same change that hands it
    over. `organism.json` `deploy` declares what the Forge will deploy, and `test/app.test.mjs` keeps that block equal
    to `wrangler.jsonc`; the workflow runs that block's health and smoke checks. The workflow sets no Worker secret,
-   deletes nothing and refuses to deploy unless `CONTENT_PUBLISH` is "off". Never `wrangler deploy`,
+   deletes nothing and refuses to deploy unless `CONTENT_PUBLISH` is "off", or "on" with a named `PUBLISH_CHANNELS` list. Never `wrangler deploy`,
    `wrangler delete` or `wrangler secret put` by hand. Account tokens reach the Worker only as Worker secrets the
    owner sets through the platform; a deploy keeps them. Never paste a secret into a chat, an issue or a file.
 2. **Nothing is published without the owner.** `CONTENT_PUBLISH` stays "off" until the owner turns it on in a PR
-   (after the lawyer's check of POJK 6/2026). Every draft waits in the studio for a person's approval; an approval
+   (after the lawyer's check of POJK 6/2026). Owner 2026-11-17 (check done): on, for the channels in
+   `PUBLISH_CHANNELS` only, starting with `telegram`; another channel is added in its own owner PR after the one
+   before it works. `PUBLISH_CHANNELS` unset or empty publishes nothing. Every draft waits in the studio for a person's approval; an approval
    runs the guardian again. A service token can read the studio, never decide.
 3. **Content policy (owner 2026-11-14):**
    - all public content in English (owner 2026-11-15: "Semua content in english"): posts, captions, cards, the

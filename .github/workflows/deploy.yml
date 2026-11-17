@@ -9,7 +9,7 @@ name: Deploy cryptophys-cta
 #   until the owner adds it, then runs this workflow by hand once).
 # - It sets no Worker secret: the channels' account tokens are set later through the platform; `wrangler deploy`
 #   keeps the secrets a Worker already has.
-# - Publishing stays off: CONTENT_PUBLISH is "off" in wrangler.jsonc, and this workflow refuses to deploy otherwise
+# - Publishing is off, or on only for the channels PUBLISH_CHANNELS names (owner PR): this workflow refuses otherwise
 #   (turning it on is its own owner PR, which removes that guard in the same change).
 # - The health and smoke checks are read from organism.json `deploy` (the same checks the Forge will run).
 on:
@@ -60,8 +60,12 @@ jobs:
           node --input-type=module <<'NODE'
           import { readFileSync } from "node:fs";
           const cfg = JSON.parse(readFileSync("wrangler.jsonc", "utf8").replace(/^\s*\/\/.*$/gm, ""));
-          if (cfg.vars?.CONTENT_PUBLISH !== "off") { console.error(`::error::CONTENT_PUBLISH is "${cfg.vars?.CONTENT_PUBLISH}", not "off": refused`); process.exit(1); }
-          console.log("CONTENT_PUBLISH: off");
+          // Off, or on (an owner PR) for an explicit list of known channels: never on for every channel by default.
+          const known = ["threads", "instagram", "x", "telegram", "youtube", "tiktok"];
+          const pub = cfg.vars?.CONTENT_PUBLISH, list = String(cfg.vars?.PUBLISH_CHANNELS ?? "").split(",").map((c) => c.trim()).filter(Boolean);
+          if (pub === "off") console.log("CONTENT_PUBLISH: off");
+          else if (pub === "on" && list.length && list.every((c) => known.includes(c))) console.log(`CONTENT_PUBLISH: on for ${list.join(", ")}`);
+          else { console.error(`::error::CONTENT_PUBLISH is "${pub}" with PUBLISH_CHANNELS "${list.join(",")}": refused (off, or on with a named list)`); process.exit(1); }
           NODE
 
       - name: Install (the lockfile; @cloudflare/puppeteer is bundled into the Worker)

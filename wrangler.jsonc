@@ -36,8 +36,12 @@
   },
   "vars": {
     // Nothing is published while this is "off": an approved draft waits. Turning it on is an owner PR, after the
-    // lawyer's check of POJK 6/2026 and once the accounts' secrets are in.
-    "CONTENT_PUBLISH": "off",
+    // lawyer's check of POJK 6/2026 and once the accounts' secrets are in. Owner 2026-11-17 (the check done): "on",
+    // for the channels in PUBLISH_CHANNELS only; "kita sambungkan dulu ke Telegram setelah sukses baru ke channel lain".
+    "CONTENT_PUBLISH": "on",
+    // The channels that publish while CONTENT_PUBLISH is "on". Unset or empty: none. One channel at a time, each in
+    // an owner PR. Every post still waits for a person's approval in the studio.
+    "PUBLISH_CHANNELS": "telegram",
     "CONTENT_CHANNELS": "threads,instagram,x,telegram,youtube,tiktok",
     "PUBLIC_DELAY_HOURS": "24",
     "ACCESS_TEAM_DOMAIN": "cryptophys.cloudflareaccess.com",

@@ -96,6 +96,7 @@
     ],
     "vars": [
       "CONTENT_PUBLISH",
+      "PUBLISH_CHANNELS",
       "CONTENT_CHANNELS",
       "PUBLIC_DELAY_HOURS",
       "ACCESS_TEAM_DOMAIN",
