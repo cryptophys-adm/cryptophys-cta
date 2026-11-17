@@ -29,6 +29,21 @@ async function call(fetcher, method, url, params) {
   return body;
 }
 
+/**
+ * The account's id as Meta returns it from /me (a string). A stored id can be wrong: Meta's token exchange sends
+ * user_id as a number above 2^53, which JSON.parse rounds (2026-11-17: "Object with ID '...150' does not exist").
+ * Falls back to the stored id when /me cannot be read.
+ */
+export async function liveUserId(channel, account, fetcher) {
+  const stored = String(account?.user_id ?? "");
+  try {
+    const url = channel === "threads" ? `${THREADS_BASE}/me` : "https://graph.instagram.com/me";
+    const b = await call(fetcher, "GET", url, { fields: channel === "threads" ? "id" : "user_id", access_token: account?.access_token });
+    const id = String((channel === "threads" ? b?.id : b?.user_id ?? b?.id) ?? "");
+    return /^\d+$/.test(id) ? id : stored;
+  } catch { return stored; }
+}
+
 /** Waits until a container is ready (Threads: status FINISHED; Instagram: status_code FINISHED). */
 async function waitReady(fetcher, url, token, field, { sleep, polls = STATUS_POLLS }) {
   for (let i = 0; i < polls; i++) {
@@ -54,9 +69,10 @@ export async function publishThreads({ account, text, imageUrl = null, fetcher =
   if (dryRun) return { dry_run: true, requests: [create, publish].map((r) => ({ method: "POST", url: r.url, params: redact(r.params) })) };
   if (!uid || !account?.access_token) throw new Error("threads account not configured");
   if (imageUrl && !/^https:\/\//.test(String(imageUrl))) throw new Error("threads needs a public https image URL");
-  const container = await call(fetcher, "POST", create.url, create.params);
+  const id = await liveUserId("threads", account, fetcher);
+  const container = await call(fetcher, "POST", `${THREADS_BASE}/${id}/threads`, create.params);
   await waitReady(fetcher, `${THREADS_BASE}/${container.id}`, account.access_token, "status", { sleep });
-  const post = await call(fetcher, "POST", publish.url, { ...publish.params, creation_id: container.id });
+  const post = await call(fetcher, "POST", `${THREADS_BASE}/${id}/threads_publish`, { ...publish.params, creation_id: container.id });
   return { remote_id: String(post.id), container_id: String(container.id) };
 }
 
@@ -71,9 +87,10 @@ export async function publishInstagram({ account, caption, imageUrl, fetcher = (
   if (dryRun) return { dry_run: true, requests: [create, publish].map((r) => ({ method: "POST", url: r.url, params: redact(r.params) })) };
   if (!uid || !account?.access_token) throw new Error("instagram account not configured");
   if (!/^https:\/\//.test(String(imageUrl ?? ""))) throw new Error("instagram needs a public https image URL");
-  const container = await call(fetcher, "POST", create.url, create.params);
+  const id = await liveUserId("instagram", account, fetcher);
+  const container = await call(fetcher, "POST", `${INSTAGRAM_BASE}/${id}/media`, create.params);
   await waitReady(fetcher, `${INSTAGRAM_BASE}/${container.id}`, account.access_token, "status_code", { sleep });
-  const post = await call(fetcher, "POST", publish.url, { ...publish.params, creation_id: container.id });
+  const post = await call(fetcher, "POST", `${INSTAGRAM_BASE}/${id}/media_publish`, { ...publish.params, creation_id: container.id });
   return { remote_id: String(post.id), container_id: String(container.id) };
 }
 
@@ -81,8 +98,9 @@ export async function publishInstagram({ account, caption, imageUrl, fetcher = (
 export async function publishingQuota({ channel, account, fetcher = (...a) => fetch(...a) }) {
   const uid = String(account?.user_id ?? "");
   if (!uid || !account?.access_token) return null;
-  const url = channel === "threads" ? `${THREADS_BASE}/${uid}/threads_publishing_limit` : `${INSTAGRAM_BASE}/${uid}/content_publishing_limit`;
   try {
+    const id = await liveUserId(channel, account, fetcher);
+    const url = channel === "threads" ? `${THREADS_BASE}/${id}/threads_publishing_limit` : `${INSTAGRAM_BASE}/${id}/content_publishing_limit`;
     const body = await call(fetcher, "GET", url, { fields: "quota_usage,config", access_token: account.access_token });
     const row = Array.isArray(body?.data) ? body.data[0] : body;
     const used = Number(row?.quota_usage), total = Number(row?.config?.quota_total);

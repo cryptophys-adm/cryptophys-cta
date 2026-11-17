@@ -57,6 +57,15 @@ test("the code exchange per provider: server-side, the long-lived token for Meta
   assert.deepEqual([t.access_token, t.account_id, t.account_name, t.expires_in], ["long", "42", "@xauusd-ai-cta", 5184000]);
   assert.match(calls[0].init.body, /grant_type=authorization_code/);
   assert.equal(calls[0].init.method, "POST");
+  // 2026-11-17: Meta's user_id is a number above 2^53; JSON.parse rounds it. The raw digits (or /me's string) win.
+  const big = async (url) => {
+    const u = String(url);
+    if (u.startsWith("https://graph.threads.net/oauth/access_token")) return new Response('{"access_token":"short","user_id":30379158928338151}', { status: 200, headers: { "content-type": "application/json" } });
+    if (u.startsWith("https://graph.threads.net/access_token")) return json({ access_token: "long", expires_in: 5184000 });
+    return json({ error: "me unavailable" }, 500);
+  };
+  assert.equal(JSON.parse('{"n":30379158928338151}').n.toString(), "30379158928338150", "the rounding this guards against");
+  assert.equal((await exchangeCode("threads", { code: "c", app: { id: "a", secret: "s" }, redirect: REDIRECT, fetcher: big })).account_id, "30379158928338151");
   const xcalls = [];
   const xf = async (url, init) => { xcalls.push({ url: String(url), init }); return String(url).includes("/users/me") ? json({ data: { id: "7", username: "cta" } }) : json({ access_token: "xa", refresh_token: "xr", expires_in: 7200, scope: "tweet.write" }); };
   const x = await exchangeCode("x", { code: "c", verifier: "v".repeat(64), app: { id: "cid", secret: "cs" }, redirect: REDIRECT, fetcher: xf });

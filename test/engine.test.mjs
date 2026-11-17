@@ -73,13 +73,15 @@ test("the queue: a draft once, a person approves or rejects with a reason, the g
 });
 
 /** A fake Meta API: records each call (URL and body), answers containers, statuses and publishes. */
-function fakeMeta({ status = "FINISHED", fail = null } = {}) {
+function fakeMeta({ status = "FINISHED", fail = null, meFails = false } = {}) {
   const calls = [];
   const fetcher = async (url, init = {}) => {
     const body = init.body ? Object.fromEntries(new URLSearchParams(String(init.body))) : null;
     calls.push({ method: init.method, url: String(url), body });
     const u = new URL(url);
     if (fail && u.pathname.endsWith(fail)) return new Response(JSON.stringify({ error: { message: "Application request limit reached", code: 4 } }), { status: 400 });
+    // /me gives the account's id as a string (the stored id can be a rounded number, 2026-11-17).
+    if (u.pathname.endsWith("/me")) return meFails ? new Response("{}", { status: 500 }) : Response.json({ id: "30379158928338151", user_id: "17841400000000001" });
     if (init.method === "POST" && /\/(threads|media)$/.test(u.pathname)) return Response.json({ id: "c1" });
     if (init.method === "POST" && /_publish$/.test(u.pathname)) return Response.json({ id: "p1" });
     if (/\/c1$/.test(u.pathname)) return Response.json({ id: "c1", status, status_code: status });
@@ -96,8 +98,12 @@ test("Threads: container, ready, publish; the token only in POST bodies; a dry r
   const { calls, fetcher } = fakeMeta();
   const r = await publishThreads({ account, text: "Education only. Not financial advice.", fetcher, sleep: noSleep });
   assert.deepEqual(r, { remote_id: "p1", container_id: "c1" });
-  assert.deepEqual(calls.map((c) => [c.method, c.url.split("?")[0]]), [["POST", `${THREADS_BASE}/42/threads`], ["GET", `${THREADS_BASE}/c1`], ["POST", `${THREADS_BASE}/42/threads_publish`]]);
-  assert.deepEqual([calls[0].body.media_type, calls[2].body.creation_id], ["TEXT", "c1"]);
+  assert.deepEqual(calls.map((c) => [c.method, c.url.split("?")[0]]), [["GET", `${THREADS_BASE}/me`], ["POST", `${THREADS_BASE}/30379158928338151/threads`], ["GET", `${THREADS_BASE}/c1`], ["POST", `${THREADS_BASE}/30379158928338151/threads_publish`]], "the id from /me, not the stored one");
+  assert.deepEqual([calls[1].body.media_type, calls[3].body.creation_id], ["TEXT", "c1"]);
+  // /me unreadable: the stored id.
+  const m = fakeMeta({ meFails: true });
+  await publishThreads({ account, text: "x", fetcher: m.fetcher, sleep: noSleep });
+  assert.equal(m.calls[1].url.split("?")[0], `${THREADS_BASE}/42/threads`);
   assert.ok(calls.filter((c) => c.method === "POST").every((c) => !c.url.includes("SECRET") && c.body.access_token === "SECRET-TOKEN"));
   const dry = await publishThreads({ account, text: "x", dryRun: true, fetcher: () => { throw new Error("no call in a dry run"); } });
   assert.equal(dry.dry_run, true);
@@ -110,8 +116,8 @@ test("Instagram: needs a public image; container, ready, publish; a container er
   await assert.rejects(publishInstagram({ account, caption: "c", imageUrl: null, fetcher, sleep: noSleep }), /public https image/);
   const r = await publishInstagram({ account, caption: "c", imageUrl: "https://img.example/card.jpg", fetcher, sleep: noSleep });
   assert.equal(r.remote_id, "p1");
-  assert.deepEqual(calls.map((c) => c.url.split("?")[0]), [`${INSTAGRAM_BASE}/42/media`, `${INSTAGRAM_BASE}/c1`, `${INSTAGRAM_BASE}/42/media_publish`]);
-  assert.equal(calls[1].url.includes("fields=status_code"), true);
+  assert.deepEqual(calls.map((c) => c.url.split("?")[0]), ["https://graph.instagram.com/me", `${INSTAGRAM_BASE}/17841400000000001/media`, `${INSTAGRAM_BASE}/c1`, `${INSTAGRAM_BASE}/17841400000000001/media_publish`]);
+  assert.equal(calls[2].url.includes("fields=status_code"), true);
   await assert.rejects(publishInstagram({ account, caption: "c", imageUrl: "https://img.example/a.jpg", fetcher: fakeMeta({ status: "ERROR" }).fetcher, sleep: noSleep }), /container error/);
   await assert.rejects(publishInstagram({ account, caption: "c", imageUrl: "https://img.example/a.jpg", fetcher: fakeMeta({ fail: "/media_publish" }).fetcher, sleep: noSleep }), /request limit/);
 });

@@ -88,7 +88,12 @@ export async function exchangeCode(channel, { code, verifier = null, app, redire
   if (!p) throw new Error("unknown channel");
   if (channel === "threads" || channel === "instagram") {
     const res = await fetcher(p.token, { method: "POST", headers: FORM, body: form({ client_id: app.id, client_secret: app.secret, grant_type: "authorization_code", redirect_uri: redirect, code }) });
-    const raw = await jsonOf(res);
+    // Meta sends user_id as a JSON number larger than 2^53 (2026-11-17: 3037915892833815x read as ...150): JSON.parse
+    // rounds it, so the digits are read from the raw text and the string id from /me wins.
+    const text = await res.text().catch(() => "");
+    let raw = null;
+    try { raw = JSON.parse(text); } catch { raw = null; }
+    const rawUserId = (/"user_id"\s*:\s*"?(\d+)/.exec(text) || [])[1] ?? null;
     const body = Array.isArray(raw?.data) ? raw.data[0] : raw;
     if (!res.ok || !body?.access_token) throw fail("token", res, raw);
     // The short-lived token (an hour) for the long-lived one (60 days), refreshed by the daily run.
@@ -99,7 +104,7 @@ export async function exchangeCode(channel, { code, verifier = null, app, redire
     if (!res2.ok || !long?.access_token) throw fail("long-lived token", res2, long);
     const who = await identify(channel, { access_token: long.access_token }, { fetcher }).catch(() => null);
     return { access_token: String(long.access_token), refresh_token: null, expires_in: Number(long.expires_in) || null,
-      account_id: String(body.user_id ?? who?.id ?? ""), account_name: who?.name ?? null, scopes: String(body.permissions ?? p.scopes.join(",")) };
+      account_id: String(who?.id || rawUserId || body.user_id || ""), account_name: who?.name ?? null, scopes: String(body.permissions ?? p.scopes.join(",")) };
   }
   if (channel === "x") {
     const res = await fetcher(p.token, { method: "POST", headers: { ...FORM, authorization: `Basic ${btoa(`${app.id}:${app.secret}`)}` },
