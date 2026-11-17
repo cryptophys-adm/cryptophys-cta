@@ -231,7 +231,7 @@
       if (x.paste_fields?.length) {
         btn("Paste token", "outline", () => {
           const inputs = [{ name: "access_token", label: "Access token", secret: true }];
-          if (x.paste_fields.includes("user_id")) inputs.push({ name: "user_id", label: "Account id (optional: read from the token)", optional: true });
+          if (x.paste_fields.includes("user_id")) inputs.push({ name: "user_id", label: "Account id (optional: read from the token; for an Instagram EAA... token, the Instagram account id)", optional: true });
           openForm(`Paste a ${x.provider} access token (checked with ${x.provider}, then stored encrypted; never shown again)`, inputs,
             async (b) => { const r = await call("/api/studio/connect/token", "POST", { channel: c, ...b }); return `Token works${r.check?.name ? ` for ${r.check.name}` : ""} and is stored (${r.hint}).`; });
         });

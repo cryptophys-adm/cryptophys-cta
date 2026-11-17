@@ -4,7 +4,7 @@
 // a channel whose publisher is not built yet can be drafted and approved, never published.
 export const CHANNEL_SPECS = Object.freeze({
   threads: Object.freeze({ name: "Threads", text_limit: 500, media: "none", publisher: "built", note: "Meta Threads API, two steps (container, publish); TEXT, or IMAGE from the card's public URL when the format is Image." }),
-  instagram: Object.freeze({ name: "Instagram", text_limit: 2200, media: "image", publisher: "built", note: "Instagram Graph API, image post; needs a public JPEG URL." }),
+  instagram: Object.freeze({ name: "Instagram", text_limit: 2200, media: "image", publisher: "built", note: "Instagram Graph API, image post; needs a public JPEG URL. An Instagram-login token (IGAA...) or a Meta business token (EAA..., with the Instagram account id)." }),
   x: Object.freeze({ name: "X", text_limit: 280, media: "none", publisher: "built", note: "X API v2 POST /2/tweets with a user token, the card first through POST /2/media/upload when the format is Image (scope media.write); billed per post." }),
   telegram: Object.freeze({ name: "Telegram channel", text_limit: 4096, media: "none", publisher: "built", note: "Bot API sendMessage, or sendPhoto with the card when the channel's format is Image; the bot must be able to post." }),
   youtube: Object.freeze({ name: "YouTube Shorts", text_limit: 5000, media: "video", publisher: "built", note: "YouTube Data API resumable upload of the 9:16 card video (WebM); private until the API project is verified by Google." }),
