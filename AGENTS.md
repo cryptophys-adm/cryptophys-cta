@@ -22,7 +22,9 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
    runs the guardian again. A service token can read the studio, never decide.
 3. **Content policy (owner 2026-11-14):**
    - all public content in English (owner 2026-11-15: "Semua content in english"): posts, captions, cards, the
-     public page; the studio is the owner's tool and may stay Indonesian;
+     public page; the studio UI is English too (owner 2026-11-17: "all in english, hanya percakapan owner dengan
+     sesi claude yang bahasa indonesia"; confirmed in the session: published posts English). Text the owner types
+     may be any language; only the owner's chats with Claude sessions are Indonesian;
    - education and analysis only, with the capacity ("Education") and the disclaimer in every post;
    - analytics and key levels are allowed; buy and sell zones as information only;
    - never buy/sell advice: no entry, stop loss, take profit, BUY/SELL/LONG/SHORT as a signal, lot or rating

@@ -10,7 +10,7 @@
 //     the channels' status. Behind Cloudflare Access, and this Worker verifies the Access JWT itself (fail
 //     closed): without a valid JWT the studio answers 403.
 // The engine: drafts from the xauusd AI Worker's PublicProjection only (recaps after 24 hours, real-time analysis
-// with key levels and patterns, never a decision, plan or account), in fixed Indonesian templates, each checked
+// with key levels and patterns, never a decision, plan or account), in fixed English templates, each checked
 // by the guardian; every draft waits for a person; publishing only while CONTENT_PUBLISH is "on".
 // Kernel: the OrganismDna and CtaHealth entrypoints serve the platform's census and drift checks.
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
