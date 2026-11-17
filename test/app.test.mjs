@@ -342,7 +342,7 @@ test("the bridge deploy workflow: main or by hand, no Worker secret, no delete, 
   const cfg = JSON.parse(readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8").replace(/^\s*\/\/.*$/gm, ""));
   // Owner 2026-11-17: publishing on for Telegram only, other channels after it works ("setelah sukses baru ke channel lain").
   // Then Threads (owner 2026-11-17 "ya lanjutkan", after Telegram's first post and the Threads account connected).
-  assert.deepEqual([cfg.vars.CONTENT_PUBLISH, cfg.vars.PUBLISH_CHANNELS], ["on", "telegram,threads"]);
+  assert.deepEqual([cfg.vars.CONTENT_PUBLISH, cfg.vars.PUBLISH_CHANNELS], ["on", "telegram,threads,instagram"]);
   assert.match(code, /PUBLISH_CHANNELS/, "the deploy refuses publishing on without a named channel list");
   assert.doesNotMatch(code, /health\.publish !== "off"/, "the post-deploy check compares the live Worker with the config, not with off");
   assert.match(code, /health\.publish !== want\.CONTENT_PUBLISH/);
