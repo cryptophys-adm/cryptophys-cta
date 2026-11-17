@@ -5,10 +5,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { handle, accountOf, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule } from "../src/app.mjs";
+import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule } from "../src/app.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
-import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection } from "../src/desk.mjs";
+import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
@@ -54,7 +54,8 @@ function deskStub() {
     studioSetting: async (k) => studioSetting(sql, k), saveStudioSetting: async (i, now) => saveStudioSetting(sql, i, { now }), kindMix: async (f, t) => kindMixSince(sql, f, t),
     addAbTest: async (i, now) => { addAbTest(sql, i, { now }); return true; }, abTests: async () => listAbTests(sql), measuredPosts: async () => measuredPosts(sql), copiedSince: async (s) => copiedSince(sql, s),
     putOAuthState: async (i, now) => putOAuthState(sql, i, { now }), takeOAuthState: async (i, now) => takeOAuthState(sql, i, { now }),
-    saveConnection: async (i, now) => saveConnection(sql, i, { now }), connections: async () => connectionsOf(sql), removeConnection: async (i, now) => removeConnection(sql, i, { now })
+    saveConnection: async (i, now) => saveConnection(sql, i, { now }), connections: async () => connectionsOf(sql), removeConnection: async (i, now) => removeConnection(sql, i, { now }),
+    saveCreds: async (i, now) => saveCreds(sql, i, { now }), creds: async (i) => credsOf(sql, i), credsStatus: async () => credsStatus(sql)
   };
   return { sql, api, ns: { idFromName: () => "desk", get: () => api } };
 }
@@ -609,4 +610,60 @@ test("connecting an account through the studio: approver only, the state round t
   assert.deepEqual(check.check, { id: "42", name: "@xauusd-ai-cta" });
   assert.equal((await post("/api/studio/connect/disconnect", { channel: "threads" }, owner)).status, 200);
   assert.equal(storedToken(d.sql, "threads"), null);
+});
+
+
+test("entered in the studio (owner 2026-11-17): Set up app, Paste token, Set bot; sealed, checked first, approver only, never echoed", async () => {
+  resetKeyCacheForTests();
+  const KEY = Buffer.alloc(32, 7).toString("base64");
+  const owner = await jwt({ email: "owner@example.com" });
+  const writer = await jwt({ email: "writer@example.com" });
+  const provider = async (url, init) => {
+    const u = String(url);
+    if (u.includes("cloudflareaccess.com")) return certsFetch(url, init);
+    if (u.startsWith("https://graph.threads.net/v1.0/me")) return new URL(u).searchParams.get("access_token") === "PASTED-TOKEN-123456" ? Response.json({ id: "77", username: "cta" }) : Response.json({ error: { message: "Invalid OAuth access token" } }, { status: 400 });
+    if (u.startsWith("https://api.telegram.org/botBOT:TOKEN-abcdef/getMe")) return Response.json({ ok: true, result: { id: 5, username: "cta_bot" } });
+    if (u.startsWith("https://api.telegram.org/botBOT:TOKEN-abcdef/getChat?")) return Response.json({ ok: true, result: { title: "CTA" } });
+    if (u.startsWith("https://api.telegram.org/botBOT:TOKEN-abcdef/getChatMember")) return Response.json({ ok: true, result: { status: "administrator", can_post_messages: true } });
+    return Response.json({ error: "unexpected " + u }, { status: 500 });
+  };
+  const o = { fetchImpl: provider, now: NOW };
+
+  // Without the token key nothing is stored (never in the clear).
+  const bare = env({ CONTENT_CHANNELS: "threads,x,telegram", STUDIO_APPROVERS: "owner@example.com" });
+  const postBare = (p, body, token) => handle(req(p, { token, method: "POST", body }), bare.env, o);
+  assert.equal((await postBare("/api/studio/connect/app", { channel: "x", app_id: "client-id-1", app_secret: "client-secret-xyz" }, owner)).status, 409);
+
+  const { env: e, d } = env({ CONTENT_CHANNELS: "threads,x,telegram", TOKEN_ENC_KEY: KEY, STUDIO_APPROVERS: "owner@example.com" });
+  const post = (p, body, token) => handle(req(p, { token, method: "POST", body }), e, o);
+  assert.equal((await post("/api/studio/connect/app", { channel: "x", app_id: "client-id-1", app_secret: "client-secret-xyz" }, writer)).status, 403, "an editor never sets an app");
+  assert.equal((await handle(req("/api/studio/connect/app", { token: owner }), e, o)).status, 405, "POST only");
+  // Set up app → Connect works with the app entered in the studio.
+  const app = await (await post("/api/studio/connect/app", { channel: "x", app_id: "client-id-1", app_secret: "client-secret-xyz" }, owner)).json();
+  assert.deepEqual([app.ok, app.hint], [true, "…id-1"]);
+  assert.match(credsOf(d.sql, { channel: "x", kind: "app" }), /^enc1:/, "sealed at rest");
+  const start = await (await post("/api/studio/connect/start", { channel: "x" }, owner)).json();
+  assert.equal(new URL(start.url).searchParams.get("client_id"), "client-id-1");
+  // Paste token: checked with the provider first; a bad one is never stored.
+  assert.equal((await post("/api/studio/connect/token", { channel: "threads", access_token: "WRONG-TOKEN-0000" }, owner)).status, 400);
+  assert.equal(credsOf(d.sql, { channel: "threads", kind: "manual" }), null);
+  const pasted = await (await post("/api/studio/connect/token", { channel: "threads", access_token: "PASTED-TOKEN-123456" }, owner)).json();
+  assert.deepEqual([pasted.ok, pasted.hint, pasted.check.name], [true, "…3456", "@cta"]);
+  const acct = await accountFor(e, "threads");
+  assert.deepEqual([acct.access_token, acct.user_id], ["PASTED-TOKEN-123456", "77"], "the account id comes from the provider");
+  // Set bot (Telegram): the bot must be able to post.
+  const bot = await (await post("/api/studio/connect/token", { channel: "telegram", bot_token: "BOT:TOKEN-abcdef", chat_id: "@cta" }, owner)).json();
+  assert.deepEqual([bot.ok, bot.check.can_post], [true, true]);
+  // The page sees what is set, never a secret.
+  const conns = await (await handle(req("/api/studio/connections", { token: owner }), e, o)).json();
+  assert.deepEqual([conns.channels.x.app_configured, conns.channels.x.app_source, conns.channels.x.app_hint], [true, "studio", "…id-1"]);
+  assert.deepEqual([conns.channels.threads.connected, conns.channels.threads.via, conns.channels.telegram.connected], [true, "studio", true]);
+  const text = JSON.stringify(conns) + JSON.stringify(app) + JSON.stringify(pasted) + JSON.stringify(bot);
+  for (const secret of ["client-secret-xyz", "PASTED-TOKEN-123456", "BOT:TOKEN-abcdef", KEY, "enc1:"]) assert.ok(!text.includes(secret), `never ${secret}`);
+  // Disconnect deletes the pasted token; Remove app deletes the app.
+  assert.equal((await post("/api/studio/connect/disconnect", { channel: "threads" }, owner)).status, 200);
+  assert.equal(credsOf(d.sql, { channel: "threads", kind: "manual" }), null);
+  assert.equal(await accountFor(e, "threads"), null);
+  assert.equal((await post("/api/studio/connect/app", { channel: "x", clear: true }, owner)).status, 200);
+  assert.equal(credsOf(d.sql, { channel: "x", kind: "app" }), null);
 });

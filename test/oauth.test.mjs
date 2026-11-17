@@ -97,8 +97,11 @@ test("the desk: a state is taken once, by the person who started it, within ten 
   assert.deepEqual([connectionsOf(sql), storedToken(sql, "threads")], [{}, null]);
 });
 
-test("the Channels page: Connect, Disconnect and Check through the studio API; no token field anywhere", () => {
+test("the Channels page: Connect, Set up app, Paste token, Set bot, Disconnect and Check through the studio API; secrets only in password inputs, posted and cleared", () => {
   const js = readFileSync(new URL("../public/studio/studio.js", import.meta.url), "utf8");
-  for (const p of ["/api/studio/connections", "/api/studio/connect/start", "/api/studio/connect/disconnect", "/api/studio/connect/check"]) assert.ok(js.includes(p), p);
-  assert.doesNotMatch(js, /type = "password"|access_token|innerHTML/);
+  for (const p of ["/api/studio/connections", "/api/studio/connect/start", "/api/studio/connect/disconnect", "/api/studio/connect/check", "/api/studio/connect/app", "/api/studio/connect/token"]) assert.ok(js.includes(p), p);
+  for (const label of ["Set up app", "Paste token", "Set bot", "Connect"]) assert.ok(js.includes(`"${label}"`), label);
+  assert.match(js, /el\.type = i\.secret \? "password" : "text"; el\.autocomplete = "off"/, "secret inputs are password fields without autocomplete");
+  assert.match(js, /els\.forEach\(\(el\) => \{ el\.value = ""; \}\)/, "inputs are cleared after saving");
+  assert.doesNotMatch(js, /innerHTML|localStorage|sessionStorage/, "nothing stored in the browser");
 });

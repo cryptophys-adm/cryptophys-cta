@@ -310,3 +310,10 @@ textarea.editor:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 3px
 .acct .ok{color:var(--green);font-weight:600}
 .acct .no{color:var(--amber);font-weight:600}
 .hint.warnline{color:var(--amber)}
+/* Channels: the forms that take an app or a token (POST only; inputs cleared after saving) */
+.acctforms:empty{display:none}
+.acctform{margin-top:8px;padding:10px 12px;border:1px solid var(--line2);border-radius:8px;background:var(--subtle);display:grid;gap:8px;max-width:560px}
+.acctform .fld{display:grid;gap:4px;font-size:13px}
+.acctform .fld input{height:32px;padding:0 10px;border:1px solid var(--line2);border-radius:6px;font:inherit;background:var(--bg,#fff);color:var(--text)}
+.acctform code{font-size:12px;word-break:break-all;padding:1px 4px;border-radius:4px;background:var(--bg,#fff);border:1px solid var(--line2);margin:0 4px}
+.btn.xs{height:24px;padding:0 8px;font-size:12px}

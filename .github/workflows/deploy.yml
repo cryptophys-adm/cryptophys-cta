@@ -7,8 +7,9 @@ name: Deploy cryptophys-cta
 #
 # - Without the repository secret CLOUDFLARE_API_TOKEN, the deploy job is skipped with a warning (main stays green
 #   until the owner adds it, then runs this workflow by hand once).
-# - It sets no Worker secret: the channels' account tokens are set later through the platform; `wrangler deploy`
-#   keeps the secrets a Worker already has.
+# - It sets one Worker secret, TOKEN_ENC_KEY, and only when it is missing (2026-11-17): the key that encrypts the
+#   channel tokens an approver connects in the studio. It never overwrites it and never prints it. Every other
+#   secret stays the platform's; `wrangler deploy` keeps the secrets a Worker already has.
 # - Publishing stays off: CONTENT_PUBLISH is "off" in wrangler.jsonc, and this workflow refuses to deploy otherwise
 #   (turning it on is its own owner PR, which removes that guard in the same change).
 # - The health and smoke checks are read from organism.json `deploy` (the same checks the Forge will run).
@@ -74,6 +75,25 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: npx --yes wrangler@4.45.0 deploy
+
+      # The key that encrypts channel tokens at rest (src/oauth.mjs, AES-GCM, 32 random bytes, base64). Owner
+      # 2026-11-17: Connect must work from the studio. Set once when missing, never overwritten (a new key would make
+      # every stored token unreadable), never printed: the value is generated in the runner and piped to wrangler.
+      - name: Token key (TOKEN_ENC_KEY), set once if missing
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if ! list="$(npx --yes wrangler@4.45.0 secret list 2>/dev/null)"; then
+            echo "::warning::could not list the Worker's secrets; TOKEN_ENC_KEY left as it is"
+            exit 0
+          fi
+          if printf '%s' "$list" | grep -q '"TOKEN_ENC_KEY"'; then
+            echo "TOKEN_ENC_KEY is set (kept)"
+          else
+            openssl rand -base64 32 | tr -d '\n' | npx --yes wrangler@4.45.0 secret put TOKEN_ENC_KEY >/dev/null
+            echo "TOKEN_ENC_KEY was missing: set once (32 random bytes)"
+          fi
 
       - name: Health and smoke checks (organism.json deploy)
         run: |

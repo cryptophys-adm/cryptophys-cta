@@ -64,6 +64,8 @@ Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (dr
 | `GET /api/studio/performance` | Access JWT | the last 14 days: posts and summed views, likes, comments, shares per channel, the best post, each post's latest metrics |
 | `POST /api/studio/insights-now` | a person, same origin, JSON | reads the recent posts' metrics now |
 | `GET /api/studio/connections` | Access JWT | each channel's connection: OAuth or bot, whether the provider app's secrets and `TOKEN_ENC_KEY` are set, the connected account's name, scopes and token expiry, the redirect URI to register; never a token or a secret |
+| `POST /api/studio/connect/app` | an approver (a person, same origin, JSON) | `{ channel, app_id, app_secret }` or `{ channel, clear: true }`: the provider app entered in the studio, sealed; answers a masked hint; 409 without `TOKEN_ENC_KEY` |
+| `POST /api/studio/connect/token` | an approver (a person, same origin, JSON) | `{ channel, access_token[, user_id] }` (Threads, Instagram, X) or `{ channel: "telegram", bot_token, chat_id }`, or `{ channel, clear: true }`: checked with the provider, then sealed; answers a masked hint and the account name |
 | `POST /api/studio/connect/start` | an approver (a person, same origin, JSON) | `{ channel }`: a one-time state (PKCE for X) and the provider's sign-in URL; refused without the app's secrets or `TOKEN_ENC_KEY`; not for Telegram |
 | `GET /studio/oauth/callback` | Access JWT, an approver | the provider's redirect: the state is taken once (same person, 10 minutes), the code is exchanged server-side, the tokens are stored encrypted (AES-GCM) with the account's name; back to the Channels page with a short result |
 | `POST /api/studio/connect/disconnect`, `/connect/check` | an approver | delete a channel's stored tokens and connection; or check the account works (Telegram: the bot can post in the channel) |
@@ -170,6 +172,18 @@ may post in the channel. Set once through the platform: each provider app's id a
 `THREADS_APP_SECRET`, `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `X_CLIENT_ID`, `X_CLIENT_SECRET`; YouTube's and
 TikTok's client secrets above) and `TOKEN_ENC_KEY` (32 random bytes, base64); each app registers the redirect URI
 `https://cta.cryptophys.work/studio/oauth/callback`. Connecting posts nothing: publishing stays behind `CONTENT_PUBLISH`.
+
+Entered in the studio (owner 2026-11-17: "klik connect muncul ... untuk input token API ataupun OAuth"). Without the
+platform's secrets an approver sets them on the Channels page: **Set up app** (the provider app's id and secret; the
+form shows the redirect URI to register), then **Connect**; or **Paste token** (Threads, Instagram, X: a long-lived
+access token; the account id is read from the token) and **Set bot** (Telegram: bot token and chat id). Each goes
+POST-only to `/api/studio/connect/app` or `/api/studio/connect/token` (an approver, a person, same origin, JSON), is
+checked with the provider first (a token or bot that does not work is never kept), sealed with `TOKEN_ENC_KEY` in the
+Desk table `connect_creds`, and never echoed: answers and the page carry a masked hint (last 4 characters) at most. The
+platform's secrets win over the app entered in the studio; a pasted token or bot wins over the platform's account
+secrets; an OAuth connection and a pasted token replace each other; Disconnect deletes both. `TOKEN_ENC_KEY` is set
+once by the deploy workflow when it is missing (generated in the runner, never printed, never overwritten); until it
+exists nothing is stored and the forms wait.
 
 Meta's endpoint shapes follow the published guides (Meta's own pages were unreachable from the build session).
 YouTube's resumable upload and TikTok's Direct Post and media transfer follow their guides, read on 2026-11-15; the

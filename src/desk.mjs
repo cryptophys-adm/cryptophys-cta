@@ -52,6 +52,11 @@ export const DESK_SCHEMA = [
     channel TEXT PRIMARY KEY, account_id TEXT, account_name TEXT, scopes TEXT, connected_at TEXT NOT NULL, connected_by TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS oauth_states (
     state TEXT PRIMARY KEY, channel TEXT NOT NULL, verifier TEXT, actor TEXT NOT NULL, created_at TEXT NOT NULL)`,
+  // Credentials an approver entered in the studio (2026-11-17, owner: "klik connect muncul ... untuk input token API
+  // ataupun OAuth"): a channel's OAuth app (kind "app": id and secret) or its pasted token or bot (kind "manual").
+  // `data` is sealed with TOKEN_ENC_KEY before it reaches here (src/app.mjs); `hint` is a masked id for the page.
+  `CREATE TABLE IF NOT EXISTS connect_creds (
+    channel TEXT NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL, hint TEXT, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL, PRIMARY KEY (channel, kind))`,
   `CREATE TABLE IF NOT EXISTS ab_tests (
     draft_id TEXT PRIMARY KEY, grp TEXT NOT NULL, variant TEXT NOT NULL, channel TEXT NOT NULL, created_at TEXT NOT NULL)`
 ];
@@ -544,4 +549,34 @@ export function removeConnection(sql, { channel, actor }, { now = Date.now() } =
   sql.exec("DELETE FROM connections WHERE channel = ?", channel);
   event(sql, { at: iso(now), id: `connection:${channel}`, action: "disconnected", actor: clip(actor, 200) || "unknown", detail: null });
   return { ok: true, channel };
+}
+
+// ---- Credentials entered in the studio (sealed by the caller; never returned by credsStatus) ----
+const CRED_KINDS = new Set(["app", "manual"]);
+/** Stores (or with data null, deletes) one sealed credential of a channel, with an event naming who. */
+export function saveCreds(sql, { channel, kind, data, hint = null, actor }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  if (!CRED_KINDS.has(kind)) return { ok: false, error: "unknown kind" };
+  const who = clip(actor, 200) || "unknown";
+  if (data == null) {
+    sql.exec("DELETE FROM connect_creds WHERE channel = ? AND kind = ?", channel, kind);
+    event(sql, { at: iso(now), id: `connection:${channel}`, action: `${kind}_removed`, actor: who, detail: null });
+    return { ok: true, channel, kind, removed: true };
+  }
+  sql.exec("INSERT INTO connect_creds (channel, kind, data, hint, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(channel, kind) DO UPDATE SET data = excluded.data, hint = excluded.hint, updated_at = excluded.updated_at, updated_by = excluded.updated_by",
+    channel, kind, String(data), hint ? clip(String(hint), 40) : null, iso(now), who);
+  event(sql, { at: iso(now), id: `connection:${channel}`, action: `${kind}_set`, actor: who, detail: hint ? clip(String(hint), 40) : null });
+  return { ok: true, channel, kind };
+}
+/** One sealed credential (for the Worker only), or null. */
+export function credsOf(sql, { channel, kind }) {
+  ensureDesk(sql);
+  return rows(sql, "SELECT data FROM connect_creds WHERE channel = ? AND kind = ?", channel, kind)[0]?.data ?? null;
+}
+/** What is entered per channel, without the data: { channel: { app: {hint, updated_at, updated_by}, manual: {...} } }. */
+export function credsStatus(sql) {
+  ensureDesk(sql);
+  const out = {};
+  for (const r of rows(sql, "SELECT channel, kind, hint, updated_at, updated_by FROM connect_creds")) (out[r.channel] ||= {})[r.kind] = { hint: r.hint, updated_at: r.updated_at, updated_by: r.updated_by };
+  return out;
 }
