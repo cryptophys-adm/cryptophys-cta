@@ -345,7 +345,9 @@ test("the bridge deploy workflow: main or by hand, no Worker secret, no delete, 
   assert.deepEqual([cfg.vars.CONTENT_PUBLISH, cfg.vars.PUBLISH_CHANNELS], ["on", "telegram,threads,instagram"]);
   assert.match(code, /PUBLISH_CHANNELS/, "the deploy refuses publishing on without a named channel list");
   assert.doesNotMatch(code, /health\.publish !== "off"/, "the post-deploy check compares the live Worker with the config, not with off");
-  assert.match(code, /health\.publish !== want\.CONTENT_PUBLISH/);
+  assert.match(code, /j\?\.publish === want\.CONTENT_PUBLISH/, "health must match the configured publish mode and channels");
+  assert.match(code, /mismatches < 12/, "a publish mismatch is retried for a bounded time, then fails the run");
+  assert.match(code, /if \(!health && last\)[^\n]*process\.exit\(1\)/);
 });
 
 test("the pages: no inline script or style (CSP 'self'), the studio's four views, and no other company's name", () => {
