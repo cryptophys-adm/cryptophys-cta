@@ -1170,8 +1170,14 @@
       ev.currentTarget.disabled = true; const b = ev.currentTarget;
       try { await fn(); } catch (e) { showErr(e); } finally { b.disabled = false; }
     });
-    busy("draftnow", async () => { await call("/api/studio/draft-now", "POST", {}); await refresh(); });
-    busy("rendernow", async () => { const r = await call("/api/studio/render-now", "POST", {}); if (r.status === "no_browser") showErr("Browser Run is not connected"); else await refresh(); });
+    // A card that could not be made says why (2026-11-17: the page only refreshed, and the draft stayed in "Needs image").
+    const renderProblem = (r) => {
+      if (r?.status === "no_browser") return "Browser Run is not connected: cards cannot be made";
+      const failed = (r?.rendered ?? []).filter((x) => x.status !== "pending" && x.status !== "blocked");
+      return failed.length ? `Card not made for ${failed.length} draft(s): ${failed.map((x) => x.error || x.status).join("; ")}` : "";
+    };
+    busy("draftnow", async () => { const r = await call("/api/studio/draft-now", "POST", {}); await refresh(); const p = renderProblem(r?.cards); if (p) showErr(p); });
+    busy("rendernow", async () => { const r = await call("/api/studio/render-now", "POST", {}); await refresh(); const p = renderProblem(r); if (p) showErr(p); });
     busy("insightsnow", async () => { await call("/api/studio/insights-now", "POST", {}); await loadPerformance(); });
     window.addEventListener("hashchange", show);
     await refresh();
