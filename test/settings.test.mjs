@@ -84,11 +84,14 @@ test("the desk stores one row per channel, with who changed it; counts every kin
   assert.equal(recheck(draft("x", "pattern")).pass, true);
 });
 
-test("the Channels page: editable settings, saved through the studio API; no token field, no inline script", () => {
+test("the Channels page: editable settings, saved through the studio API; no token in the markup, no inline script", () => {
   const html = readFileSync(new URL("../public/studio/index.html", import.meta.url), "utf8");
   const js = readFileSync(new URL("../public/studio/studio.js", import.meta.url), "utf8");
   assert.match(js, /\/api\/studio\/settings/);
   assert.match(js, /"POST", \{ channel/);
-  assert.doesNotMatch(js + html, /type="password"|access_token|bot_token|innerHTML/);
+  // Since 2026-11-17 the Account forms take tokens (test/oauth.test.mjs): only as password inputs built by the
+  // script, never in the markup and never through innerHTML.
+  assert.doesNotMatch(html, /type="password"|access_token|bot_token/);
+  assert.doesNotMatch(js + html, /innerHTML/);
   assert.doesNotMatch(html, /<script>|style="/);
 });

@@ -63,11 +63,19 @@ const approverOnly = (role) => (role === "approver" ? null : json({ error: "appr
 export const desk = (env) => env.CONTENT_DESK.get(env.CONTENT_DESK.idFromName("desk"));
 
 /** A channel's account from its secrets (a refreshed token from the desk wins). Never returned to a caller. */
-export async function accountOf(env, channel, { stored = null, connection = null } = {}) {
+export async function accountOf(env, channel, { stored = null, connection = null, manual = null, app = null } = {}) {
   const names = SECRETS[channel] ?? {};
   const keys = Object.keys(names);
   if (!keys.length) return null;
   const account = Object.fromEntries(keys.map((k) => [k, env?.[names[k]] || null]));
+  // Entered in the studio (2026-11-17): a pasted token or bot wins over the platform's secrets; an OAuth app entered
+  // there gives YouTube and TikTok their client id and secret when the platform set none.
+  for (const k of ["access_token", "user_id", "bot_token", "chat_id"]) if (manual?.[k] && k in account) account[k] = String(manual[k]);
+  if (app) {
+    if ("client_id" in account && !account.client_id) account.client_id = app.id;
+    if ("client_key" in account && !account.client_key) account.client_key = app.id;
+    if ("client_secret" in account && !account.client_secret) account.client_secret = app.secret;
+  }
   // An account connected by OAuth (src/oauth.mjs) names its own user (Threads, Instagram).
   if (connection?.account_id && "user_id" in account) account.user_id = connection.account_id;
   if (stored?.access_token && "access_token" in account) account.access_token = stored.access_token;
@@ -87,14 +95,39 @@ export async function saveTokenSealed(env, channel, token, now = Date.now()) {
   return desk(env).saveToken(channel, { ...token, access_token: await sealToken(env, token.access_token), refresh_token: token.refresh_token ? await sealToken(env, token.refresh_token) : null }, now);
 }
 /**
+ * Credentials an approver entered in the studio (2026-11-17), sealed with TOKEN_ENC_KEY in the desk. Never returned
+ * to a caller: the page sees only a masked hint (hintOf).
+ */
+async function openCreds(env, channel, kind) {
+  const sealed = await desk(env).creds({ channel, kind }).catch(() => null);
+  if (!sealed) return null;
+  try { const text = await openToken(env, sealed); return text ? JSON.parse(text) : null; } catch { return null; }
+}
+async function saveCredsSealed(env, { channel, kind, value, hint, actor }, now) {
+  return desk(env).saveCreds({ channel, kind, data: value == null ? null : await sealToken(env, JSON.stringify(value)), hint, actor }, now);
+}
+/** A channel's OAuth app: the platform's secrets first, else the one entered in the studio; with its source. */
+export async function appFor(env, channel) {
+  const own = appOf(env, channel);
+  if (own) return { ...own, source: "platform" };
+  const s = await openCreds(env, channel, "app");
+  return s?.id && s?.secret ? { id: String(s.id), secret: String(s.secret), source: "studio" } : null;
+}
+/** A masked hint of an id or token: its last 4 characters. Never more. */
+export const hintOf = (v) => { const t = String(v ?? ""); return t.length > 8 ? `…${t.slice(-4)}` : "…"; };
+/** The channels whose token or bot can be pasted in the studio (others connect by OAuth only). */
+export const PASTE_FIELDS = Object.freeze({ threads: ["access_token", "user_id"], instagram: ["access_token", "user_id"], x: ["access_token"], telegram: ["bot_token", "chat_id"] });
+
+/**
  * A channel's account for a call: its secrets, its stored tokens and its OAuth connection. X's two-hour token is
  * renewed from its refresh token first when it is within five minutes of expiry. Never returned to a caller.
  */
 export async function accountFor(env, channel, { now = Date.now(), fetcher } = {}) {
   let stored = await storedTokenOf(env, channel);
   const connection = (await desk(env).connections().catch(() => ({})))?.[channel] ?? null;
+  const manual = PASTE_FIELDS[channel] ? await openCreds(env, channel, "manual") : null;
+  const app = PROVIDERS[channel] ? await appFor(env, channel) : null;
   if (channel === "x" && stored?.refresh_token && (!stored.expires_at || Date.parse(stored.expires_at) - now < 5 * 60_000)) {
-    const app = appOf(env, "x");
     if (app) {
       try {
         const t = await refreshX({ app, refresh_token: stored.refresh_token, ...(fetcher ? { fetcher } : {}) });
@@ -103,7 +136,7 @@ export async function accountFor(env, channel, { now = Date.now(), fetcher } = {
       } catch (e) { console.error("x_refresh_failed", String(e?.message ?? e).slice(0, 160)); }
     }
   }
-  return accountOf(env, channel, { stored, connection });
+  return accountOf(env, channel, { stored, connection, manual, app });
 }
 
 /** Publishes one approved draft now, when publishing is on. Never throws. */
@@ -283,21 +316,30 @@ export async function studioPerformance(env, { now = Date.now() } = {}) {
  */
 export async function studioConnections(env) {
   const conns = await desk(env).connections().catch(() => ({}));
+  const entered = await desk(env).credsStatus().catch(() => ({}));
   const keyReady = await encryptionReady(env);
   const out = {};
   for (const c of CHANNELS) {
     const p = PROVIDERS[c];
     const conn = conns[c] ?? null;
     const account = await accountFor(env, c).catch(() => null);
+    const app = p ? await appFor(env, c).catch(() => null) : null;
+    const manual = entered[c]?.manual ?? null;
     out[c] = {
       name: CHANNEL_SPECS[c].name,
       method: BOT_CHANNELS.includes(c) ? "bot" : "oauth",
       provider: p?.name ?? "Telegram Bot API",
-      app_configured: p ? Boolean(appOf(env, c)) : Boolean(env?.TELEGRAM_BOT_TOKEN && env?.TELEGRAM_CHAT_ID),
+      app_configured: p ? Boolean(app) : Boolean((env?.TELEGRAM_BOT_TOKEN && env?.TELEGRAM_CHAT_ID) || manual),
+      // Where the app comes from (platform secrets or entered in the studio) and its masked id; never the secret.
+      app_source: p ? (app?.source ?? null) : (env?.TELEGRAM_BOT_TOKEN && env?.TELEGRAM_CHAT_ID ? "platform" : manual ? "studio" : null),
+      app_hint: app?.source === "studio" ? (entered[c]?.app?.hint ?? null) : null,
       app_secrets: p ? [p.app.id, p.app.secret] : ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"],
+      app_labels: p ? (p.pkce || c === "youtube" ? ["Client ID", "Client secret"] : c === "tiktok" ? ["Client key", "Client secret"] : ["App ID", "App secret"]) : null,
+      paste_fields: PASTE_FIELDS[c] ?? [],
+      manual: manual ? { hint: manual.hint, updated_at: manual.updated_at, updated_by: manual.updated_by } : null,
       scopes_asked: p?.scopes ?? [],
       connected: Boolean(account),
-      via: conn ? "oauth" : account ? "secrets" : null,
+      via: conn ? "oauth" : manual && account ? "studio" : account ? "secrets" : null,
       account_name: conn?.account_name ?? null,
       scopes: conn?.scopes ?? null,
       connected_at: conn?.connected_at ?? null,
@@ -357,7 +399,7 @@ async function rpc(fn, failure) {
 }
 
 const isStudio = (path) => path === "/studio" || path.startsWith("/studio/") || path.startsWith("/api/studio/");
-const STUDIO_ROUTES = ["/api/studio/connections", "/api/studio/connect/start", "/api/studio/connect/disconnect", "/api/studio/connect/check", "/api/studio/growth", "/api/studio/links", "/api/studio/hashtag-sets", "/api/studio/mix", "/api/studio/schedule", "/api/studio/library", "/api/studio/edit", "/api/studio/duplicate", "/api/studio/calendar", "/api/studio/media-library", "/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
+const STUDIO_ROUTES = ["/api/studio/connections", "/api/studio/connect/app", "/api/studio/connect/token", "/api/studio/connect/start", "/api/studio/connect/disconnect", "/api/studio/connect/check", "/api/studio/growth", "/api/studio/links", "/api/studio/hashtag-sets", "/api/studio/mix", "/api/studio/schedule", "/api/studio/library", "/api/studio/edit", "/api/studio/duplicate", "/api/studio/calendar", "/api/studio/media-library", "/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
 /** The public origin of the cards Instagram fetches (GET /media/<id>.jpg). */
 export const originOf = (env) => String(env?.PUBLIC_ORIGIN || "https://cta.cryptophys.work").replace(/\/+$/, "");
 const MEDIA_PATH = /^\/media\/([0-9a-f]{32})\.(jpg|webm)$/;
@@ -476,6 +518,52 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
       }
       // Channel accounts (src/oauth.mjs): Connect, Disconnect and Check by an approver; the status for anyone signed in.
       if (route === "GET /api/studio/connections") return rpc(async () => ({ ...(await studioConnections(env)), can_connect: role === "approver" }), "connections_failed");
+      // Entered in the studio (2026-11-17, owner: "klik connect muncul ... untuk input token API ataupun OAuth"): an
+      // approver sets a channel's OAuth app (id and secret) or pastes its token or bot. Sealed with TOKEN_ENC_KEY in
+      // the desk, POST only, never echoed back: the answer and the page carry a masked hint at most.
+      if (route === "POST /api/studio/connect/app" || route === "POST /api/studio/connect/token") {
+        const r = await personJson(request, url, identity, 4096);
+        if (r.response) return r.response;
+        const denied = approverOnly(role);
+        if (denied) return denied;
+        const b = r.body || {};
+        const channel = typeof b.channel === "string" ? b.channel : "";
+        if (!CHANNELS.includes(channel)) return json({ error: "unknown channel" }, 400);
+        const at = now ? now * 1000 : Date.now();
+        if (!(await encryptionReady(env))) return json({ error: "TOKEN_ENC_KEY is not set yet: the platform sets it once (32 random bytes, base64); nothing is stored unencrypted" }, 409);
+        const str = (v, max) => (typeof v === "string" ? v.trim() : "").slice(0, max);
+        if (route === "POST /api/studio/connect/app") {
+          if (!PROVIDERS[channel]) return json({ error: `${CHANNEL_SPECS[channel].name} has no OAuth app: use Set bot` }, 400);
+          if (b.clear === true) return rpc(() => saveCredsSealed(env, { channel, kind: "app", value: null, actor: identity.subject }, at), "app_failed");
+          const id = str(b.app_id, 300), secret = str(b.app_secret, 500);
+          if (!/^[A-Za-z0-9._:-]{4,300}$/.test(id)) return json({ error: "the app/client id looks wrong (letters, digits, . _ : -)" }, 400);
+          if (secret.length < 8 || /\s/.test(secret)) return json({ error: "the app/client secret looks wrong" }, 400);
+          return rpc(async () => ({ ...(await saveCredsSealed(env, { channel, kind: "app", value: { id, secret }, hint: hintOf(id), actor: identity.subject }, at)), hint: hintOf(id) }), "app_failed");
+        }
+        const fields = PASTE_FIELDS[channel];
+        if (!fields) return json({ error: `${CHANNEL_SPECS[channel].name} connects by OAuth only (Set up app, then Connect)` }, 400);
+        if (b.clear === true) return rpc(() => saveCredsSealed(env, { channel, kind: "manual", value: null, actor: identity.subject }, at), "token_failed");
+        const value = Object.fromEntries(fields.map((f) => [f, str(b[f], 4000)]));
+        // The account id of Threads and Instagram is optional: the provider's answer gives it.
+        const missing = fields.filter((f) => (f === "user_id" ? value[f] && /\s/.test(value[f]) : !value[f] || /\s/.test(value[f])));
+        if (missing.length) return json({ error: `missing or malformed: ${missing.join(", ")}` }, 400);
+        // Checked with the provider before it is kept: a token that does not work is never stored.
+        let check;
+        try {
+          check = channel === "telegram"
+            ? await checkTelegram({ bot_token: value.bot_token, chat_id: value.chat_id }, { fetcher: fetchImpl })
+            : await identify(channel, { access_token: value.access_token }, { fetcher: fetchImpl });
+        } catch (e) { return json({ error: `the provider refused it: ${String(e?.message ?? e).slice(0, 160)}` }, 400); }
+        if (channel === "telegram" && check?.can_post === false) return json({ error: `the bot cannot post to that chat (${check.status ?? "not an administrator"})` }, 400);
+        if ("user_id" in value && !value.user_id) value.user_id = check?.id || "";
+        if ("user_id" in value && !value.user_id) return json({ error: "the provider gave no account id: enter it" }, 400);
+        const hint = hintOf(value.access_token ?? value.bot_token);
+        return rpc(async () => {
+          await desk(env).removeConnection({ channel, actor: identity.subject }, at).catch(() => null); // one way per channel
+          await saveCredsSealed(env, { channel, kind: "manual", value, hint, actor: identity.subject }, at);
+          return { ok: true, channel, hint, check: channel === "telegram" ? { bot: check?.bot ?? null, chat: check?.chat ?? null, can_post: check?.can_post ?? null } : { name: check?.name ?? null, id: check?.id ?? null } };
+        }, "token_failed");
+      }
       if (route === "POST /api/studio/connect/start" || route === "POST /api/studio/connect/disconnect" || route === "POST /api/studio/connect/check") {
         const r = await personJson(request, url, identity, 512);
         if (r.response) return r.response;
@@ -484,13 +572,20 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
         const channel = typeof r.body.channel === "string" ? r.body.channel : "";
         if (!CHANNELS.includes(channel)) return json({ error: "unknown channel" }, 400);
         const at = now ? now * 1000 : Date.now();
-        if (route === "POST /api/studio/connect/disconnect") return rpc(() => desk(env).removeConnection({ channel, actor: identity.subject }, at), "disconnect_failed");
+        if (route === "POST /api/studio/connect/disconnect") {
+          return rpc(async () => {
+            const r = await desk(env).removeConnection({ channel, actor: identity.subject }, at);
+            if (PASTE_FIELDS[channel]) await saveCredsSealed(env, { channel, kind: "manual", value: null, actor: identity.subject }, at).catch(() => null);
+            return r;
+          }, "disconnect_failed");
+        }
         if (route === "POST /api/studio/connect/check") {
           return rpc(async () => {
             try {
               if (channel === "telegram") {
-                if (!env?.TELEGRAM_BOT_TOKEN || !env?.TELEGRAM_CHAT_ID) return { ok: false, error: "TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are not set (the platform sets them)" };
-                return { ok: true, check: await checkTelegram({ bot_token: env.TELEGRAM_BOT_TOKEN, chat_id: env.TELEGRAM_CHAT_ID }, { fetcher: fetchImpl }) };
+                const bot = await accountFor(env, "telegram", { now: at });
+                if (!bot) return { ok: false, error: "no bot yet: Set bot (its token and the channel's chat id)" };
+                return { ok: true, check: await checkTelegram({ bot_token: bot.bot_token, chat_id: bot.chat_id }, { fetcher: fetchImpl }) };
               }
               const account = await accountFor(env, channel, { now: at });
               if (!account) return { ok: false, error: "not connected" };
@@ -502,10 +597,10 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
           }, "check_failed");
         }
         // Start: the provider's sign-in URL for a one-time state (PKCE for X). The tokens never reach this page.
-        if (BOT_CHANNELS.includes(channel)) return json({ error: "Telegram connects with a bot token the platform sets, not OAuth" }, 400);
-        const app = appOf(env, channel);
-        if (!app) return json({ error: `the ${PROVIDERS[channel].name} app is not set up: the platform sets ${PROVIDERS[channel].app.id} and ${PROVIDERS[channel].app.secret}` }, 400);
-        if (!(await encryptionReady(env))) return json({ error: "TOKEN_ENC_KEY is not set: the platform sets it (32 random bytes, base64) before any account is connected" }, 400);
+        if (BOT_CHANNELS.includes(channel)) return json({ error: "Telegram connects with a bot token (Set bot), not OAuth" }, 400);
+        const app = await appFor(env, channel);
+        if (!app) return json({ error: `the ${PROVIDERS[channel].name} app is not set up: enter its ${PROVIDERS[channel].app.id} and ${PROVIDERS[channel].app.secret} with "Set up app"` }, 400);
+        if (!(await encryptionReady(env))) return json({ error: "TOKEN_ENC_KEY is not set yet: the platform sets it once (32 random bytes, base64) before any account is connected" }, 400);
         return rpc(async () => {
           const attempt = await newAttempt(channel);
           await desk(env).putOAuthState({ state: attempt.state, channel, verifier: attempt.verifier, actor: identity.subject }, at);
@@ -695,12 +790,14 @@ async function oauthCallback(env, url, identity, role, { fetchImpl, now }) {
   if (url.searchParams.get("error")) return back({ oauth: "error", channel, reason: String(url.searchParams.get("error_description") || url.searchParams.get("error")).slice(0, 160) });
   const code = url.searchParams.get("code") || "";
   if (!code || code.length > 2048) return back({ oauth: "error", channel, reason: "no code from the provider" });
-  const app = appOf(env, channel);
-  if (!app || !(await encryptionReady(env))) return back({ oauth: "error", channel, reason: "the app secrets or TOKEN_ENC_KEY are not set" });
+  const app = await appFor(env, channel);
+  if (!app || !(await encryptionReady(env))) return back({ oauth: "error", channel, reason: "the app or TOKEN_ENC_KEY is not set" });
   try {
     const t = await exchangeCode(channel, { code, verifier: taken.verifier, app, redirect: redirectUri(originOf(env)), fetcher: fetchImpl });
     await desk(env).saveConnection({ channel, account_id: t.account_id, account_name: t.account_name, scopes: t.scopes, actor: identity.subject,
       token: { access_token: await sealToken(env, t.access_token), refresh_token: t.refresh_token ? await sealToken(env, t.refresh_token) : null, expires_in: t.expires_in } }, now);
+    // An OAuth connection replaces a token pasted before (one way per channel at a time).
+    if (PASTE_FIELDS[channel]) await desk(env).saveCreds({ channel, kind: "manual", data: null, actor: identity.subject }, now).catch(() => null);
     return back({ oauth: "ok", channel });
   } catch (e) {
     console.error("oauth_exchange_failed", channel, String(e?.message ?? e).slice(0, 160));

@@ -122,56 +122,125 @@
     if (!x) { f.appendChild(make("div", "hint", "Connection status not available.")); return f; }
     const line = make("div", "acct");
     if (x.connected && x.via === "oauth") line.appendChild(make("span", "ok", `Connected${x.account_name ? ` as ${x.account_name}` : ""} by OAuth`));
+    else if (x.connected && x.via === "studio") line.appendChild(make("span", "ok", `${x.method === "bot" ? "Bot set" : "Token pasted"} in the studio${x.manual?.hint ? ` (${x.manual.hint})` : ""}`));
     else if (x.connected) line.appendChild(make("span", "ok", x.method === "bot" ? "Bot set by the platform" : "Connected by the platform's secrets"));
     else line.appendChild(make("span", "no", "Not connected"));
     f.appendChild(line);
     const meta = [];
     if (x.connected_by) meta.push(`by ${x.connected_by} · ${when(x.connected_at)}`);
+    if (x.manual?.updated_by && x.via === "studio") meta.push(`by ${x.manual.updated_by} · ${when(x.manual.updated_at)}`);
     if (x.expires_at) meta.push(`token renews before ${shortDate(x.expires_at)}`);
     if (x.scopes) meta.push(`scopes: ${x.scopes}`);
+    if (x.method === "oauth" && x.app_source) meta.push(x.app_source === "studio" ? `app entered in the studio${x.app_hint ? ` (${x.app_hint})` : ""}` : "app set by the platform");
     if (meta.length) f.appendChild(make("div", "hint", meta.join(" · ")));
-    if (x.method === "oauth" && !x.app_configured) f.appendChild(make("div", "hint warnline", `${x.provider} app not set up: the platform sets ${x.app_secrets.join(" and ")}, and the app registers this redirect URI: ${conns.redirect_uri}`));
-    if (x.method === "oauth" && !conns.token_key_set) f.appendChild(make("div", "hint warnline", `The token key is not set: the platform sets ${conns.key_secret} (32 random bytes, base64) before any account is connected.`));
-    if (x.method === "bot" && !x.app_configured) f.appendChild(make("div", "hint warnline", `The platform sets ${x.app_secrets.join(" and ")} (Telegram has no OAuth; the bot must be an administrator of the channel).`));
+    if (!conns.token_key_set) f.appendChild(make("div", "hint warnline", `The token key (${conns.key_secret}) is not set yet: the platform sets it once (32 random bytes, base64). Until then nothing can be stored, so Connect and the forms wait.`));
     const out = make("div", "hint"); const err = make("div", "err");
     const acts = make("div", "toolbar");
-    if (conns.can_connect) {
-      if (x.method === "oauth") {
-        const go = make("button", "btn sm primary", x.via === "oauth" ? "Reconnect" : "Connect"); go.type = "button";
-        go.disabled = !x.app_configured || !conns.token_key_set;
-        go.title = go.disabled ? "Needs the app secrets and the token key first" : `Sign in at ${x.provider}; the tokens go straight to this Worker`;
-        go.addEventListener("click", async () => {
+    const forms = make("div", "acctforms");
+    if (!conns.can_connect) { f.append(acts, out, err); if (!x.connected) f.appendChild(make("div", "hint", "An approver connects this account.")); return f; }
+    const locked = !conns.token_key_set;
+    const after = async (msg) => { out.textContent = msg; await refresh(); await loadChannels(); };
+    // One small form at a time: secrets go POST-only to this Worker, are stored encrypted and never shown again.
+    const openForm = (title, inputs, onSave, note) => {
+      forms.textContent = "";
+      const box = make("div", "acctform");
+      box.appendChild(make("div", "hint", title));
+      if (note) box.appendChild(note);
+      const els = inputs.map((i) => {
+        const wrap = make("label", "fld");
+        wrap.appendChild(make("span", null, i.label));
+        const el = document.createElement("input");
+        el.type = i.secret ? "password" : "text"; el.autocomplete = "off"; el.spellcheck = false; el.name = i.name; el.placeholder = i.placeholder || "";
+        if (i.optional) el.dataset.optional = "1";
+        wrap.appendChild(el); box.appendChild(wrap);
+        return el;
+      });
+      const row = make("div", "toolbar");
+      const save = make("button", "btn sm primary", "Save"); save.type = "button"; save.disabled = locked;
+      const cancel = make("button", "btn sm outline", "Cancel"); cancel.type = "button";
+      cancel.addEventListener("click", () => { forms.textContent = ""; });
+      save.addEventListener("click", async () => {
+        err.textContent = "";
+        const body = Object.fromEntries(els.map((el) => [el.name, el.value.trim()]));
+        if (els.some((el) => !el.dataset.optional && !el.value.trim())) { err.textContent = "Fill in every field."; return; }
+        save.disabled = true;
+        try { const msg = await onSave(body); els.forEach((el) => { el.value = ""; }); forms.textContent = ""; await after(msg); }
+        catch (e) { err.textContent = e.message; save.disabled = false; }
+      });
+      row.append(save, cancel); box.appendChild(row);
+      forms.appendChild(box);
+      els[0]?.focus();
+    };
+    const btn = (text, cls, onClick, disabled = false) => { const b = make("button", `btn sm ${cls}`, text); b.type = "button"; b.disabled = disabled; b.addEventListener("click", onClick); acts.appendChild(b); return b; };
+
+    if (x.method === "oauth") {
+      // Connect: the provider's sign-in, then back here (the tokens go straight to this Worker).
+      if (x.app_configured) {
+        const go = btn(x.via === "oauth" ? "Reconnect" : "Connect", "primary", async () => {
           go.disabled = true; err.textContent = "";
           try { const r = await call("/api/studio/connect/start", "POST", { channel: c }); window.location.assign(r.url); }
           catch (e) { err.textContent = e.message; go.disabled = false; }
-        });
-        acts.appendChild(go);
-        if (x.via === "oauth") {
-          const off = make("button", "btn sm outline", "Disconnect"); off.type = "button";
-          off.addEventListener("click", async () => {
-            if (!window.confirm(`Disconnect ${x.name}? Its stored tokens are deleted.`)) return;
-            off.disabled = true;
-            try { await call("/api/studio/connect/disconnect", "POST", { channel: c }); await refresh(); await loadChannels(); }
-            catch (e) { err.textContent = e.message; off.disabled = false; }
-          });
-          acts.appendChild(off);
-        }
+        }, locked);
+        go.title = `Sign in at ${x.provider}; the tokens go straight to this Worker`;
       }
-      if (x.connected || x.method === "bot") {
-        const chk = make("button", "btn sm outline", "Check"); chk.type = "button";
-        chk.addEventListener("click", async () => {
-          chk.disabled = true; err.textContent = ""; out.textContent = "";
-          try {
-            const r = await call("/api/studio/connect/check", "POST", { channel: c });
-            const k = r.check || {};
-            out.textContent = c === "telegram" ? `Bot ${k.bot ?? "?"} in ${k.chat ?? "?"}: ${k.can_post ? "can post" : `cannot post (${k.status ?? "?"})`}` : `Works: ${k.name ?? k.id ?? "account found"}`;
-          } catch (e) { err.textContent = e.message; }
-          finally { chk.disabled = false; }
+      // Set up app: the OAuth app's id and secret, for the provider's sign-in (or the platform's secrets).
+      if (x.app_source !== "platform") {
+        btn(x.app_configured ? "Change app" : "Set up app", x.app_configured ? "outline" : "primary", () => {
+          const note = make("div", "hint");
+          note.appendChild(document.createTextNode(`In the ${x.provider} developer dashboard, create an app and register this redirect URI: `));
+          const uri = make("code", null, conns.redirect_uri); note.appendChild(uri);
+          const copy = make("button", "btn xs outline", "Copy"); copy.type = "button";
+          copy.addEventListener("click", () => navigator.clipboard?.writeText(conns.redirect_uri).then(() => { copy.textContent = "Copied"; }).catch(() => {}));
+          note.appendChild(copy);
+          if (x.scopes_asked?.length) note.appendChild(make("div", null, `Permissions asked: ${x.scopes_asked.join(", ")}`));
+          const [idLabel, secretLabel] = x.app_labels || ["App ID", "App secret"];
+          openForm(`${x.provider} app`, [{ name: "app_id", label: idLabel }, { name: "app_secret", label: secretLabel, secret: true }],
+            async (b) => { const r = await call("/api/studio/connect/app", "POST", { channel: c, ...b }); return `App saved (${r.hint}). Now press Connect.`; }, note);
+        }, locked);
+        if (x.app_source === "studio") btn("Remove app", "outline", async () => {
+          if (!window.confirm(`Remove the ${x.provider} app entered in the studio?`)) return;
+          try { await call("/api/studio/connect/app", "POST", { channel: c, clear: true }); await after("App removed."); } catch (e) { err.textContent = e.message; }
         });
-        acts.appendChild(chk);
+      }
+      // Paste token: a long-lived token from the provider's dashboard, checked with the provider before it is kept.
+      if (x.paste_fields?.length) {
+        btn("Paste token", "outline", () => {
+          const inputs = [{ name: "access_token", label: "Access token", secret: true }];
+          if (x.paste_fields.includes("user_id")) inputs.push({ name: "user_id", label: "Account id (optional: read from the token)", optional: true });
+          openForm(`Paste a ${x.provider} access token (checked with ${x.provider}, then stored encrypted; never shown again)`, inputs,
+            async (b) => { const r = await call("/api/studio/connect/token", "POST", { channel: c, ...b }); return `Token works${r.check?.name ? ` for ${r.check.name}` : ""} and is stored (${r.hint}).`; });
+        }, locked);
+      }
+    } else {
+      // Telegram: a bot token and the channel's chat id; the bot must be an administrator that can post.
+      if (x.app_source !== "platform") {
+        btn(x.connected ? "Change bot" : "Set bot", x.connected ? "outline" : "primary", () => {
+          openForm("Telegram bot (create it with @BotFather, add it to the channel as an administrator that can post)", [
+            { name: "bot_token", label: "Bot token", secret: true },
+            { name: "chat_id", label: "Chat id (e.g. @yourchannel or -100…)" }
+          ], async (b) => { const r = await call("/api/studio/connect/token", "POST", { channel: c, ...b }); return `Bot ${r.check?.bot ?? ""} can post in ${r.check?.chat ?? "the chat"}; stored (${r.hint}).`; });
+        }, locked);
       }
     }
-    f.append(acts, out, err);
+    if (x.connected && (x.via === "oauth" || x.via === "studio")) {
+      btn("Disconnect", "outline", async () => {
+        if (!window.confirm(`Disconnect ${x.name}? Its stored tokens are deleted.`)) return;
+        try { await call("/api/studio/connect/disconnect", "POST", { channel: c }); await after("Disconnected."); } catch (e) { err.textContent = e.message; }
+      });
+    }
+    if (x.connected || (x.method === "bot" && x.app_configured)) {
+      const chk = btn("Check", "outline", async () => {
+        chk.disabled = true; err.textContent = ""; out.textContent = "";
+        try {
+          const r = await call("/api/studio/connect/check", "POST", { channel: c });
+          if (r.ok === false) throw new Error(r.error || "check failed");
+          const k = r.check || {};
+          out.textContent = c === "telegram" ? `Bot ${k.bot ?? "?"} in ${k.chat ?? "?"}: ${k.can_post ? "can post" : `cannot post (${k.status ?? "?"})`}` : `Works: ${k.name ?? k.id ?? "account found"}`;
+        } catch (e) { err.textContent = e.message; }
+        finally { chk.disabled = false; }
+      });
+    }
+    f.append(acts, forms, out, err);
     return f;
   }
   /** After the provider's redirect: say whether the account was connected, then clean the address bar. */
