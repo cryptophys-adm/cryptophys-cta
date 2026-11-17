@@ -133,11 +133,19 @@
     if (x.scopes) meta.push(`scopes: ${x.scopes}`);
     if (x.method === "oauth" && x.app_source) meta.push(x.app_source === "studio" ? `app entered in the studio${x.app_hint ? ` (${x.app_hint})` : ""}` : "app set by the platform");
     if (meta.length) f.appendChild(make("div", "hint", meta.join(" · ")));
-    if (!conns.token_key_set) f.appendChild(make("div", "hint warnline", `The token key (${conns.key_secret}) is not set yet: the platform sets it once (32 random bytes, base64). Until then nothing can be stored, so Connect and the forms wait.`));
+    const keyMissing = `Encryption key not set — store disabled. The platform sets the Worker secret ${conns.key_secret} once (32 random bytes, base64); then Save and Connect work here.`;
+    if (!conns.token_key_set) f.appendChild(make("div", "hint warnline", keyMissing));
     const out = make("div", "hint"); const err = make("div", "err");
     const acts = make("div", "toolbar");
     const forms = make("div", "acctforms");
-    if (!conns.can_connect) { f.append(acts, out, err); if (!x.connected) f.appendChild(make("div", "hint", "An approver connects this account.")); return f; }
+    // Not an approver: say who is signed in and why, rather than showing nothing to press.
+    if (!conns.can_connect) {
+      f.append(acts, out, err);
+      f.appendChild(make("div", "hint warnline", `Signed in as ${conns.who ?? "?"} (${conns.role ?? "no role"}): only an approver (STUDIO_APPROVERS) connects accounts.`));
+      return f;
+    }
+    // The buttons stay clickable while the key is missing (owner 2026-11-17): each opens its form, which says what is
+    // missing; only Save (and the provider sign-in) wait, because nothing is ever stored unencrypted.
     const locked = !conns.token_key_set;
     const after = async (msg) => { out.textContent = msg; await refresh(); await loadChannels(); };
     // One small form at a time: secrets go POST-only to this Worker, are stored encrypted and never shown again.
@@ -145,6 +153,7 @@
       forms.textContent = "";
       const box = make("div", "acctform");
       box.appendChild(make("div", "hint", title));
+      if (locked) box.appendChild(make("div", "hint warnline", keyMissing));
       if (note) box.appendChild(note);
       const els = inputs.map((i) => {
         const wrap = make("label", "fld");
@@ -171,16 +180,17 @@
       forms.appendChild(box);
       els[0]?.focus();
     };
-    const btn = (text, cls, onClick, disabled = false) => { const b = make("button", `btn sm ${cls}`, text); b.type = "button"; b.disabled = disabled; b.addEventListener("click", onClick); acts.appendChild(b); return b; };
+    const btn = (text, cls, onClick) => { const b = make("button", `btn sm ${cls}`, text); b.type = "button"; b.addEventListener("click", onClick); acts.appendChild(b); return b; };
 
     if (x.method === "oauth") {
       // Connect: the provider's sign-in, then back here (the tokens go straight to this Worker).
       if (x.app_configured) {
         const go = btn(x.via === "oauth" ? "Reconnect" : "Connect", "primary", async () => {
+          if (locked) { err.textContent = keyMissing; return; }
           go.disabled = true; err.textContent = "";
           try { const r = await call("/api/studio/connect/start", "POST", { channel: c }); window.location.assign(r.url); }
           catch (e) { err.textContent = e.message; go.disabled = false; }
-        }, locked);
+        });
         go.title = `Sign in at ${x.provider}; the tokens go straight to this Worker`;
       }
       // Set up app: the OAuth app's id and secret, for the provider's sign-in (or the platform's secrets).
@@ -196,7 +206,7 @@
           const [idLabel, secretLabel] = x.app_labels || ["App ID", "App secret"];
           openForm(`${x.provider} app`, [{ name: "app_id", label: idLabel }, { name: "app_secret", label: secretLabel, secret: true }],
             async (b) => { const r = await call("/api/studio/connect/app", "POST", { channel: c, ...b }); return `App saved (${r.hint}). Now press Connect.`; }, note);
-        }, locked);
+        });
         if (x.app_source === "studio") btn("Remove app", "outline", async () => {
           if (!window.confirm(`Remove the ${x.provider} app entered in the studio?`)) return;
           try { await call("/api/studio/connect/app", "POST", { channel: c, clear: true }); await after("App removed."); } catch (e) { err.textContent = e.message; }
@@ -209,7 +219,7 @@
           if (x.paste_fields.includes("user_id")) inputs.push({ name: "user_id", label: "Account id (optional: read from the token)", optional: true });
           openForm(`Paste a ${x.provider} access token (checked with ${x.provider}, then stored encrypted; never shown again)`, inputs,
             async (b) => { const r = await call("/api/studio/connect/token", "POST", { channel: c, ...b }); return `Token works${r.check?.name ? ` for ${r.check.name}` : ""} and is stored (${r.hint}).`; });
-        }, locked);
+        });
       }
     } else {
       // Telegram: a bot token and the channel's chat id; the bot must be an administrator that can post.
@@ -219,7 +229,7 @@
             { name: "bot_token", label: "Bot token", secret: true },
             { name: "chat_id", label: "Chat id (e.g. @yourchannel or -100…)" }
           ], async (b) => { const r = await call("/api/studio/connect/token", "POST", { channel: c, ...b }); return `Bot ${r.check?.bot ?? ""} can post in ${r.check?.chat ?? "the chat"}; stored (${r.hint}).`; });
-        }, locked);
+        });
       }
     }
     if (x.connected && (x.via === "oauth" || x.via === "studio")) {

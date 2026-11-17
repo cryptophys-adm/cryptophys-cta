@@ -603,6 +603,8 @@ test("connecting an account through the studio: approver only, the state round t
   assert.deepEqual([acct.access_token, acct.user_id], ["LONG-TOKEN", "42"]);
   const conns = await (await handle(req("/api/studio/connections", { token: owner }), e, o)).json();
   assert.deepEqual([conns.channels.threads.connected, conns.channels.threads.via, conns.channels.threads.account_name, conns.can_connect], [true, "oauth", "@xauusd-ai-cta", true]);
+  assert.equal(conns.role, "approver", "the page can say who is signed in and as what");
+  assert.equal(typeof conns.who, "string");
   assert.equal(conns.channels.x.app_configured, false);
   const text = JSON.stringify(conns);
   for (const secret of ["LONG-TOKEN", "SHORT-TOKEN", "APPSECRET", KEY, "enc1:"]) assert.ok(!text.includes(secret), `never ${secret}`);

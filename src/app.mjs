@@ -517,7 +517,7 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
         }, "decide_failed");
       }
       // Channel accounts (src/oauth.mjs): Connect, Disconnect and Check by an approver; the status for anyone signed in.
-      if (route === "GET /api/studio/connections") return rpc(async () => ({ ...(await studioConnections(env)), can_connect: role === "approver" }), "connections_failed");
+      if (route === "GET /api/studio/connections") return rpc(async () => ({ ...(await studioConnections(env)), can_connect: role === "approver", role, who: identity.subject ?? null }), "connections_failed");
       // Entered in the studio (2026-11-17, owner: "klik connect muncul ... untuk input token API ataupun OAuth"): an
       // approver sets a channel's OAuth app (id and secret) or pastes its token or bot. Sealed with TOKEN_ENC_KEY in
       // the desk, POST only, never echoed back: the answer and the page carry a masked hint at most.
