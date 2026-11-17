@@ -90,22 +90,28 @@ jobs:
           // A new custom domain can take a few minutes to answer, and a runner's resolver can hold a "no such host"
           // answer from before the domain existed for up to 30 minutes (the zone's negative-cache time): the first
           // deploy of a new hostname waits up to 35 minutes here. Later deploys answer at once.
-          let health = null;
-          for (let i = 0; i < 70 && !health; i++) {
-            try {
-              const r = await get(deploy.health.path);
-              const j = await r.json().catch(() => null);
-              if (r.ok && Object.entries(deploy.health.expect).every(([k, v]) => j?.[k] === v)) health = j;
-              else console.log(`health not ready: HTTP ${r.status}`);
-            } catch (e) { console.log(`health: ${e?.cause?.code || e?.cause?.message || e?.name}`); }
-            if (!health) await wait(10000);
-          }
-          if (!health) { console.error(`::error::${origin}${deploy.health.path} did not answer as expected`); process.exit(1); }
-          console.log(`health: ${JSON.stringify(health)}`);
           // The live Worker publishes exactly what wrangler.jsonc says: off, or on for the named channels only.
           const want = JSON.parse(readFileSync("wrangler.jsonc", "utf8").replace(/^\s*\/\/.*$/gm, "")).vars ?? {};
           const wantList = want.CONTENT_PUBLISH === "on" ? String(want.PUBLISH_CHANNELS ?? "").split(",").map((c) => c.trim()).filter(Boolean) : [];
-          if (health.publish !== want.CONTENT_PUBLISH || JSON.stringify(health.publish_channels ?? []) !== JSON.stringify(wantList)) { console.error(`::error::the deployed Worker reports publish ${health.publish} for [${health.publish_channels}], config says ${want.CONTENT_PUBLISH} for [${wantList}]`); process.exit(1); }
+          const matches = (j) => j?.publish === want.CONTENT_PUBLISH && JSON.stringify(j?.publish_channels ?? []) === JSON.stringify(wantList);
+          // Right after a deploy the edge can still answer from the old version for a short while, so a publish
+          // mismatch is retried for up to 2 minutes before it fails the run (2026-11-17: #37 failed on the first read).
+          let health = null, last = null, mismatches = 0;
+          for (let i = 0; i < 70 && !health && mismatches < 12; i++) {
+            try {
+              const r = await get(`${deploy.health.path}?deploy=${Date.now()}`);
+              const j = await r.json().catch(() => null);
+              if (r.ok && Object.entries(deploy.health.expect).every(([k, v]) => j?.[k] === v)) {
+                last = j;
+                if (matches(j)) health = j;
+                else { mismatches++; console.log(`health answers with publish ${j.publish} for [${j.publish_channels}]; waiting for [${wantList}]`); }
+              } else console.log(`health not ready: HTTP ${r.status}`);
+            } catch (e) { console.log(`health: ${e?.cause?.code || e?.cause?.message || e?.name}`); }
+            if (!health) await wait(10000);
+          }
+          if (!health && last) { console.error(`::error::the deployed Worker reports publish ${last.publish} for [${last.publish_channels}], config says ${want.CONTENT_PUBLISH} for [${wantList}]`); process.exit(1); }
+          if (!health) { console.error(`::error::${origin}${deploy.health.path} did not answer as expected`); process.exit(1); }
+          console.log(`health: ${JSON.stringify(health)}`);
           let failed = 0;
           for (const s of deploy.smoke) {
             const r = await get(s.path);
