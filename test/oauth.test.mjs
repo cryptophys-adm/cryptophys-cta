@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { PROVIDERS, authorizeUrl, newAttempt, exchangeCode, refreshX, checkTelegram, telegramCanPost, sealToken, openToken, encryptionReady, appOf, STATE_RE, redirectUri } from "../src/oauth.mjs";
+import { PROVIDERS, authorizeUrl, newAttempt, exchangeCode, refreshX, checkTelegram, telegramCanPost, telegramChatIdProblem, sealToken, openToken, encryptionReady, appOf, STATE_RE, redirectUri } from "../src/oauth.mjs";
 import { putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, storedToken } from "../src/desk.mjs";
 
 const KEY = Buffer.alloc(32, 7).toString("base64");
@@ -131,4 +131,11 @@ test("Telegram by chat type (2026-11-17): a group's member posts, a channel's me
   assert.match(telegramCanPost(grp, { status: "left" }).advice, /not in that chat/);
   assert.equal(telegramCanPost({ type: "private" }, { status: "member" }).can_post, false);
   for (const [c, m] of [[ch, { status: "member" }], [grp, { status: "kicked" }]]) assert.doesNotMatch(telegramCanPost(c, m).advice, /^\(?member\)?$/, "never a raw status");
+});
+
+test("Telegram chat id checked before Telegram is asked (2026-11-17: \"@ctx-channel\" came back \"chat not found\")", () => {
+  for (const ok of ["@xauusd_ai", "@CryptophysCTA", "-1001234567890", "123456789"]) assert.equal(telegramChatIdProblem(ok), null, ok);
+  assert.match(telegramChatIdProblem("@ctx-channel"), /not a Telegram username.*no hyphen.*-100/s);
+  assert.match(telegramChatIdProblem("ctx channel"), /@username.*-100/);
+  assert.match(telegramChatIdProblem("@abc"), /not a Telegram username/, "too short for a username");
 });

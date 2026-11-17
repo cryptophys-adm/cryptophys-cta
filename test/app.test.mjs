@@ -654,7 +654,7 @@ test("entered in the studio (owner 2026-11-17): Set up app, Paste token, Set bot
   const acct = await accountFor(e, "threads");
   assert.deepEqual([acct.access_token, acct.user_id], ["PASTED-TOKEN-123456", "77"], "the account id comes from the provider");
   // Set bot (Telegram): the bot must be able to post.
-  const bot = await (await post("/api/studio/connect/token", { channel: "telegram", bot_token: "BOT:TOKEN-abcdef", chat_id: "@cta" }, owner)).json();
+  const bot = await (await post("/api/studio/connect/token", { channel: "telegram", bot_token: "BOT:TOKEN-abcdef", chat_id: "@cta_channel" }, owner)).json();
   assert.deepEqual([bot.ok, bot.check.can_post], [true, true]);
   // The page sees what is set, never a secret.
   const conns = await (await handle(req("/api/studio/connections", { token: owner }), e, o)).json();

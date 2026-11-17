@@ -173,6 +173,22 @@ export async function checkTelegram({ bot_token, chat_id }, { fetcher = (...a) =
 }
 
 /**
+ * Pure: what is wrong with a Telegram chat id before asking Telegram (2026-11-17: "@ctx-channel", a display name with
+ * a hyphen, came back "chat not found"). A public chat's @username has 5-32 letters, digits or underscores; a private
+ * one has a number (channels and supergroups -100…). Null when it looks right.
+ */
+export function telegramChatIdProblem(chat_id) {
+  const v = String(chat_id ?? "").trim();
+  if (/^-?\d{5,20}$/.test(v)) return null;
+  if (/^@[A-Za-z][A-Za-z0-9_]{4,31}$/.test(v)) return null;
+  if (v.startsWith("@")) return `"${v.slice(0, 40)}" is not a Telegram username: a username has only letters, digits and underscores (no hyphen or space). That looks like the chat's display name. A private chat has no username: use its number id, which starts with -100 (Telegram Web shows it in the address bar: web.telegram.org/a/#-100…).`;
+  return "The chat id is the chat's @username (public chats) or its number id starting with -100 (private chats; Telegram Web shows it in the address bar: web.telegram.org/a/#-100…).";
+}
+
+/** Pure: Telegram's "chat not found" said as what to do. */
+export const TELEGRAM_CHAT_NOT_FOUND = "Telegram cannot find that chat for this bot: check the chat id (a private chat uses its -100… number, not its name), and that the bot has been added to the chat.";
+
+/**
  * Pure: whether the bot can post, by chat type (2026-11-17: a group's plain member was refused). A channel takes an
  * administrator with "Post Messages" (or the creator). A group or supergroup takes any member the group lets send
  * messages: creator, administrator, member (unless the group's default permissions forbid sending), or restricted

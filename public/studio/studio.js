@@ -227,7 +227,7 @@
         btn(x.connected ? "Change bot" : "Set bot", x.connected ? "outline" : "primary", () => {
           openForm("Telegram bot (create it with @BotFather, add it to the channel as an administrator that can post)", [
             { name: "bot_token", label: "Bot token", secret: true },
-            { name: "chat_id", label: "Chat id (e.g. @yourchannel or -100…)" }
+            { name: "chat_id", label: "Chat id: the chat's @username (letters, digits, _), or for a private chat its -100… number (Telegram Web shows it in the address bar)" }
           ], async (b) => { const r = await call("/api/studio/connect/token", "POST", { channel: c, ...b }); return `Bot ${r.check?.bot ?? ""} can post in ${r.check?.chat ?? "the chat"}; stored (${r.hint}).`; });
         });
       }
