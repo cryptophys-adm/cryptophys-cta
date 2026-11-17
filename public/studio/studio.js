@@ -23,6 +23,10 @@
     return data;
   }
   const showErr = (e) => { $("err").textContent = e ? String(e.message || e) : ""; };
+  /** Why an approved post did not go out (publishDraft's held codes), in words; null when it went out. */
+  const HELD = { publishing_off: "publishing is off", channel_not_publishing: "this channel does not publish yet", waiting_for_slot: "it waits for the channel's next posting slot",
+    publisher_not_built: "this channel's publisher is not built yet", account_not_configured: "the channel's account is not connected", not_approved: "the draft is not approved" };
+  const publishNote = (p) => (!p ? null : p.status === "published" ? "Published." : p.status === "failed" ? `Publishing failed: ${p.error ?? "see the draft"}` : p.held ? `Approved, not sent: ${HELD[p.held] ?? p.held}${p.next?.wib ? ` (${p.next.wib} WIB)` : ""}.` : null);
   const badge = (tone, value) => make("span", `badge${tone ? ` ${tone}` : ""}`, value);
   const posts = (n) => `${n} post${n === 1 ? "" : "s"}`;
   const fmt = (n) => (n == null ? "–" : n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(n));
@@ -490,12 +494,27 @@
       const decide = async (decision) => {
         if (decision === "reject" && !reason.value.trim()) { err.textContent = "a reason is required to reject"; return; }
         ok.disabled = no.disabled = true;
-        try { await call("/api/studio/decide", "POST", { id: d.id, decision, reason: reason.value.trim() }); await refresh(); }
+        try { const r = await call("/api/studio/decide", "POST", { id: d.id, decision, reason: reason.value.trim() }); await refresh(); const m = publishNote(r?.publish); if (m) showErr(m); }
         catch (e) { err.textContent = e.message; ok.disabled = no.disabled = false; }
       };
       ok.addEventListener("click", () => decide("approve"));
       no.addEventListener("click", () => decide("reject"));
       actions.append(reason, no, ok);
+    }
+    // Publish now: an approved post that waits (approved while publishing was off, or between slots), or a failed one
+    // tried again. An approver, on a channel that publishes.
+    if ((d.status === "approved" || d.status === "failed") && canDecide && pubTo(d.channel)) {
+      const now = make("button", "btn primary", d.status === "failed" ? "Try again now" : "Publish now"); now.type = "button";
+      now.addEventListener("click", async () => {
+        if (!window.confirm(`Send this post to ${status?.channels?.[d.channel]?.name ?? d.channel} now?`)) return;
+        now.disabled = true; err.textContent = "";
+        try {
+          const r = await call("/api/studio/publish-now", "POST", { id: d.id });
+          if (r.ok === false && r.error) throw new Error(r.error);
+          await refresh(); showErr(publishNote(r));
+        } catch (e) { err.textContent = e.message; now.disabled = false; }
+      });
+      actions.append(now);
     }
     const note = make("div", "note");
     if (canWrite && EDITABLE.includes(d.status)) {

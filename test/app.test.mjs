@@ -8,7 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule } from "../src/app.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
-import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus } from "../src/desk.mjs";
+import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
@@ -37,7 +37,7 @@ function deskStub() {
   const api = {
     add: async (d, now, actor) => addDrafts(sql, d, { now, ...(actor ? { actor } : {}) }), list: async (i) => listDrafts(sql, i ?? {}),
     get: async (id) => { const d = getDraft(sql, id); return d ? { ...d, events: draftEvents(sql, id) } : null; },
-    decide: async (i, now) => decideDraft(sql, i, { now }), published: async (i, now) => recordPublish(sql, i, { now }),
+    decide: async (i, now) => decideDraft(sql, i, { now }), published: async (i, now) => recordPublish(sql, i, { now }), requeue: async (i, now) => requeueFailed(sql, i, { now }),
     counts: async () => deskCounts(sql), token: async (c) => storedToken(sql, c), saveToken: async (c, t, now) => { storeToken(sql, c, t, { now }); return true; },
     idsWithPrefix: async (p) => draftIdsWithPrefix(sql, p), kindCounts: async (k, s) => kindCountsSince(sql, k, s), archive: async (n) => publishedPosts(sql, { limit: n }),
     needingImage: async (n, retry) => draftsNeedingImage(sql, { limit: n, retry }), attachImage: async (i, now) => attachImage(sql, i, { now }),
@@ -687,4 +687,35 @@ test("publishing per channel (owner 2026-11-17: Telegram first, the others after
   const r = await publishDraft(e, getDraft(d.sql, "x1"), { fetcher: async (url) => { calls.push(url); return Response.json({}); } });
   assert.deepEqual([r.status, r.held, calls.length], ["approved", "channel_not_publishing", 0], "an approved X draft waits: X is not named yet");
   assert.deepEqual((await (await handle(req("/health"), e, opts)).json()).publish_channels, ["telegram"]);
+});
+
+test("Publish now (owner 2026-11-17: approved while publishing was off, then no way out): an approver sends an approved or failed post on a publishing channel", async () => {
+  resetKeyCacheForTests();
+  const owner = await jwt({ email: "owner@example.com" });
+  const writer = await jwt({ email: "writer@example.com" });
+  const sent = [];
+  let fail = true;
+  const fetchImpl = async (url, init) => {
+    const u = String(url);
+    if (u.includes("cloudflareaccess.com")) return certsFetch(url, init);
+    if (u.includes("api.telegram.org/bot123:SECRET/sendMessage")) { sent.push(JSON.parse(init.body)); return fail ? Response.json({ ok: false, description: "Bad Request: chat not found" }, { status: 400 }) : Response.json({ ok: true, result: { message_id: 9 } }); }
+    return Response.json({ error: "unexpected " + u }, { status: 500 });
+  };
+  const o = { fetchImpl, now: NOW };
+  const { env: e, d } = env({ CONTENT_PUBLISH: "on", PUBLISH_CHANNELS: "telegram", CONTENT_CHANNELS: "telegram,x", STUDIO_APPROVERS: "owner@example.com", TELEGRAM_BOT_TOKEN: "123:SECRET", TELEGRAM_CHAT_ID: "-1001234567890" });
+  const text = "Education only. Not financial advice.";
+  addDrafts(d.sql, [{ id: "t1", channel: "telegram", kind: "custom", text, status: "pending" }, { id: "x1", channel: "x", kind: "custom", text, status: "pending" }, { id: "t2", channel: "telegram", kind: "custom", text, status: "pending" }]);
+  for (const id of ["t1", "x1"]) decideDraft(d.sql, { id, decision: "approve", actor: "owner" }); // approved while publishing was off: waiting
+  const post = (body, token) => handle(req("/api/studio/publish-now", { token, method: "POST", body }), e, o);
+  assert.equal((await post({ id: "t1" }, writer)).status, 403, "an editor never publishes");
+  assert.match((await (await post({ id: "x1" }, owner)).json()).error, /does not publish yet/);
+  assert.match((await (await post({ id: "t2" }, owner)).json()).error, /only an approved or failed draft/, "a pending draft is approved first");
+  const first = await (await post({ id: "t1" }, owner)).json();
+  assert.deepEqual([first.ok, first.status, getDraft(d.sql, "t1").status], [false, "failed", "failed"], "Telegram refused: recorded as failed");
+  fail = false;
+  const again = await (await post({ id: "t1" }, owner)).json();
+  assert.deepEqual([again.ok, again.status, getDraft(d.sql, "t1").status, getDraft(d.sql, "t1").remote_id], [true, "published", "published", "9"], "tried again: requeued, then sent");
+  assert.ok(draftEvents(d.sql, "t1").some((ev) => ev.action === "requeued"), "the retry is in the draft's history");
+  assert.equal(sent.length, 2);
+  assert.match((await (await post({ id: "t1" }, owner)).json()).error, /only an approved or failed draft/, "never twice");
 });
