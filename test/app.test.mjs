@@ -343,7 +343,7 @@ test("the bridge deploy workflow: main or by hand, no Worker secret, no delete, 
   const cfg = JSON.parse(readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8").replace(/^\s*\/\/.*$/gm, ""));
   // Owner 2026-11-17: publishing on for Telegram only, other channels after it works ("setelah sukses baru ke channel lain").
   // Then Threads (owner 2026-11-17 "ya lanjutkan", after Telegram's first post and the Threads account connected).
-  assert.deepEqual([cfg.vars.CONTENT_PUBLISH, cfg.vars.PUBLISH_CHANNELS], ["on", "telegram,threads,instagram"]);
+  assert.deepEqual([cfg.vars.CONTENT_PUBLISH, cfg.vars.PUBLISH_CHANNELS], ["on", "telegram,threads,instagram,tiktok"]);
   assert.match(code, /PUBLISH_CHANNELS/, "the deploy refuses publishing on without a named channel list");
   assert.doesNotMatch(code, /health\.publish !== "off"/, "the post-deploy check compares the live Worker with the config, not with off");
   assert.match(code, /j\?\.publish === want\.CONTENT_PUBLISH/, "health must match the configured publish mode and channels");
@@ -353,17 +353,17 @@ test("the bridge deploy workflow: main or by hand, no Worker secret, no delete, 
 
 test("the pages: no inline script or style (CSP 'self'), the studio's four views, and no other company's name", () => {
   const read = (p) => readFileSync(new URL(`../public/${p}`, import.meta.url), "utf8");
-  for (const page of ["index.html", "archive.html", "about.html", "disclaimer.html", "signin.html", "studio/index.html"]) {
+  for (const page of ["index.html", "archive.html", "about.html", "disclaimer.html", "privacy.html", "terms.html", "signin.html", "studio/index.html"]) {
     const html = read(page);
     assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)[^>]*>|<style\b|\sstyle=|\son[a-z]+=/i, `${page}: inline script, style or handler`);
   }
   const studio = read("studio/index.html");
   for (const v of ["dashboard", "queue", "performance", "channels"]) assert.match(studio, new RegExp(`id="view-${v}"`));
   for (const id of ["publish", "who", "tabs", "queue", "channels", "perf", "draftnow", "rendernow", "insightsnow", "err"]) assert.match(studio, new RegExp(`id="${id}"`), id);
-  const publicPages = ["index.html", "archive.html", "about.html", "disclaimer.html"];
+  const publicPages = ["index.html", "archive.html", "about.html", "disclaimer.html", "privacy.html", "terms.html"];
   for (const page of publicPages) {
     const html = read(page);
-    for (const href of ["/", "/archive", "/about", "/disclaimer", "/studio"]) assert.match(html, new RegExp(`href="${href}"`), `${page} links ${href}`);
+    for (const href of ["/", "/archive", "/about", "/disclaimer", "/privacy", "/terms", "/studio"]) assert.match(html, new RegExp(`href="${href}"`), `${page} links ${href}`);
     assert.match(html, /not financial advice/i, `${page} carries the disclaimer`);
     assert.doesNotMatch(html, /\b(nexus|omega)\b/i, `${page}: never Nexus or Omega publicly`);
     assert.doesNotMatch(html, /\b(buy now|sell now|entry at|take profit at|stop loss at|guaranteed)\b/i, `${page}: no advice`);

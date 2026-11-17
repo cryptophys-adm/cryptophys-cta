@@ -45,7 +45,7 @@
     // was connected by OAuth ("ya lanjutkan"). Instagram after Threads' first post went out (owner 2026-11-17: "lanjutkan
     // penerbitan instagram", confirmed in the session): an image post (the card), so it needs the card rendered and an
     // Instagram Business or Creator account connected in the studio; until then an approved post waits ("account not connected").
-    "PUBLISH_CHANNELS": "telegram,threads,instagram",
+    "PUBLISH_CHANNELS": "telegram,threads,instagram,tiktok",
     "CONTENT_CHANNELS": "threads,instagram,x,telegram,youtube,tiktok",
     "PUBLIC_DELAY_HOURS": "24",
     "ACCESS_TEAM_DOMAIN": "cryptophys.cloudflareaccess.com",
