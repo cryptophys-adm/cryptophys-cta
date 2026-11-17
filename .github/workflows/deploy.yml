@@ -102,7 +102,10 @@ jobs:
           }
           if (!health) { console.error(`::error::${origin}${deploy.health.path} did not answer as expected`); process.exit(1); }
           console.log(`health: ${JSON.stringify(health)}`);
-          if (health.publish !== "off") { console.error(`::error::the deployed Worker reports publish ${health.publish}`); process.exit(1); }
+          // The live Worker publishes exactly what wrangler.jsonc says: off, or on for the named channels only.
+          const want = JSON.parse(readFileSync("wrangler.jsonc", "utf8").replace(/^\s*\/\/.*$/gm, "")).vars ?? {};
+          const wantList = want.CONTENT_PUBLISH === "on" ? String(want.PUBLISH_CHANNELS ?? "").split(",").map((c) => c.trim()).filter(Boolean) : [];
+          if (health.publish !== want.CONTENT_PUBLISH || JSON.stringify(health.publish_channels ?? []) !== JSON.stringify(wantList)) { console.error(`::error::the deployed Worker reports publish ${health.publish} for [${health.publish_channels}], config says ${want.CONTENT_PUBLISH} for [${wantList}]`); process.exit(1); }
           let failed = 0;
           for (const s of deploy.smoke) {
             const r = await get(s.path);
