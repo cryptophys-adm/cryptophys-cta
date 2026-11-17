@@ -188,7 +188,7 @@ const AT = Date.parse("2026-11-16T06:09:00Z");
 test("the key-level map and the pattern posts pass the guardian with levels allowed, and carry no signal word", () => {
   const a = publicAnalysis(KEY_LEVELS, { structure: STRUCTURE, now: AT });
   const map = keyLevelsText(a, { channel: "threads" });
-  assert.match(map, /^Education · XAUUSD key-level map · Monday, 16 November 2026 06:09 UTC/);
+  assert.match(map, /^Education · XAUUSD key-level map · Monday, 16 November 2026 6:09 AM UTC/);
   assert.match(map, /Supply zones \(sell area\):\n• 3918\.33–3923\.09 \(strong: 4H Camarilla H4\)\n• 3898\.09–3901\.12 \(moderate: 1H swing high\)/);
   assert.doesNotMatch(map, /sources|Bulkowski|catalogue/);
   assert.match(keyLevelsText(a, { channel: "instagram" }), /3918\.33–3923\.09 \(strong: 4H Camarilla H4, weekly pivot, 4H Flag: upper breakout line\)/);
@@ -222,4 +222,9 @@ test("pattern posts: once per pattern and status, at most four a day per channel
   assert.equal(draftIdsWithPrefix(sql, "pattern:").length, 4);
   assert.deepEqual(kindCountsSince(sql, "pattern", "2026-11-16"), { threads: 4 });
   assert.deepEqual(kindCountsSince(sql, "pattern", "2026-11-17"), {});
+});
+
+test("UTC clock times read in 12-hour form (owner 2026-11-17: AM/PM)", async () => {
+  const { clock12 } = await import("../src/drafts.mjs");
+  assert.deepEqual(["2026-11-17T00:05:00Z", "2026-11-17T06:09:00Z", "2026-11-17T12:00:00Z", "2026-11-17T17:27:00Z", "bad"].map(clock12), ["12:05 AM", "6:09 AM", "12:00 PM", "5:27 PM", "?"]);
 });

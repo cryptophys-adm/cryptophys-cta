@@ -10,7 +10,7 @@
 // signal_words rule refuses them. Price levels are allowed here (allowLevels): they are the analysis itself.
 // Each draft also carries its `overlay`: the numbers the Instagram card draws on TradingView's chart (src/card.mjs).
 import { checkContentDraft } from "./guardian.mjs";
-import { dateId, SHORT_DISCLAIMER, CHART_CREDIT } from "./drafts.mjs";
+import { dateId, clock12, SHORT_DISCLAIMER, CHART_CREDIT } from "./drafts.mjs";
 import { CHANNELS, TEXT_LIMITS, initialStatus } from "./channels.mjs";
 
 export const ANALYSIS_DISCLAIMER = "Educational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.";
@@ -21,7 +21,6 @@ export const MAX_PATTERN_DRAFTS_PER_DAY = 4;
 const TREND_ID = { up: "up", down: "down", range: "sideways" };
 const STRENGTH_ID = { strong: "strong", moderate: "moderate", weak: "weak" };
 const f2 = (x) => (Number.isFinite(Number(x)) ? Number(x).toFixed(2) : "?");
-const hhmm = (iso) => String(iso).slice(11, 16);
 /** "an H4", "a D1". */
 const an = (chart) => `${/^[HM]/.test(String(chart)) ? "an" : "a"} ${chart}`;
 
@@ -59,7 +58,7 @@ export function keyLevelsText(analysis, { channel = "threads" } = {}) {
   const supply = zones.filter((z) => z.role === "supply").slice(-3);
   const demand = zones.filter((z) => z.role === "demand").slice(0, 3);
   if (!supply.length && !demand.length) return null;
-  const lines = [`Education · XAUUSD key-level map · ${dateId(analysis.at)} ${hhmm(analysis.at)} UTC`];
+  const lines = [`Education · XAUUSD key-level map · ${dateId(analysis.at)} ${clock12(analysis.at)} UTC`];
   if (analysis.price != null) lines.push(`Price when read: ${f2(analysis.price)}`);
   const line = (z) => zoneLine(z, { channel });
   if (supply.length) lines.push("", "Supply zones (sell area):", ...supply.map(line));
@@ -86,7 +85,7 @@ export function patternText(p, analysis, { channel = "threads" } = {}) {
       `The pattern fails if ${an(p.chart)} candle closes back ${up ? "below" : "above"} ${f2(undo)}.`);
     if (p.projection != null) lines.push(`Measured projection: ${f2(p.projection)} (analysis, not a trade objective).`);
   }
-  if (analysis?.price != null) lines.push(`Price when read: ${f2(analysis.price)} · ${hhmm(analysis.at)} UTC`);
+  if (analysis?.price != null) lines.push(`Price when read: ${f2(analysis.price)} · ${clock12(analysis.at)} UTC`);
   return finish(lines, channel);
 }
 

@@ -17,6 +17,14 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 const BIAS_ID = { BULLISH: "leaning up", BEARISH: "leaning down", NEUTRAL: "neutral" };
 const SESSION_ID = { asia: "Asian", london: "London", new_york: "New York", late: "closing" };
 
+/** "6:09 AM", "5:27 PM": a UTC clock time in 12-hour form (owner 2026-11-17: "jam UTC seharusnya pakai AM/PM"). */
+export function clock12(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "?";
+  const h = d.getUTCHours(), m = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${h % 12 || 12}:${m} ${h < 12 ? "AM" : "PM"}`;
+}
+
 /** "Monday, 16 November 2026" (UTC). */
 export function dateId(iso) {
   const d = new Date(iso);
