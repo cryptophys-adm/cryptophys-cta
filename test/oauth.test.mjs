@@ -105,3 +105,14 @@ test("the Channels page: Connect, Set up app, Paste token, Set bot, Disconnect a
   assert.match(js, /els\.forEach\(\(el\) => \{ el\.value = ""; \}\)/, "inputs are cleared after saving");
   assert.doesNotMatch(js, /innerHTML|localStorage|sessionStorage/, "nothing stored in the browser");
 });
+
+test("without the token key the account buttons stay clickable: each opens its form, which says the key is missing (owner 2026-11-17: \"tombol setup cta masih belum bisa diklik\")", () => {
+  const js = readFileSync(new URL("../public/studio/studio.js", import.meta.url), "utf8");
+  assert.doesNotMatch(js, /\}, locked\)/, "no account button is created disabled");
+  assert.match(js, /const btn = \(text, cls, onClick\) =>/, "the account button helper takes no disabled flag");
+  assert.match(js, /Encryption key not set — store disabled/);
+  assert.match(js, /if \(locked\) box\.appendChild\(make\("div", "hint warnline", keyMissing\)\)/, "the open form says what is missing");
+  assert.match(js, /save\.disabled = locked/, "only Save waits: nothing is stored unencrypted");
+  assert.match(js, /if \(locked\) \{ err\.textContent = keyMissing; return; \}/, "Connect explains instead of starting a sign-in that cannot be stored");
+  assert.match(js, /only an approver \(STUDIO_APPROVERS\) connects accounts/, "a non-approver is told who is signed in and why");
+});
