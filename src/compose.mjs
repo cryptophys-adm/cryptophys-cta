@@ -108,7 +108,7 @@ export function composeDrafts({ kind, posts, allowed = CHANNELS, decisionTimes =
   const day = new Date(now).toISOString().slice(0, 10);
   const drafts = [], ab = [];
   const draftOf = (channel, r, suffix) => ({ id: `manual:${day}:${id}${suffix}:${channel}`, kind, channel, text: r.text, image_url: null, window: null, decision_times: decisionTimes,
-    guardian: r.guardian, overlay: hasImage(channel) ? overlay(channel) : null, status: initialStatus(channel) });
+    guardian: r.guardian, overlay: overlay(channel), status: initialStatus(channel) });
   for (const p of posts) {
     const a = draftOf(p.channel, results[p.channel], "");
     drafts.push(a);

@@ -136,6 +136,7 @@ button{font:inherit}
 .tile .meta{margin-top:2px}
 .tile a{font-size:13px;font-weight:600}
 .tabs{display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid var(--line2);padding:0 12px}
+.tabs.chtabs{background:var(--bg2,transparent);font-weight:600}
 .tab{appearance:none;background:none;border:0;border-bottom:3px solid transparent;padding:12px 10px 9px;color:var(--muted);font-weight:600;cursor:pointer;white-space:nowrap}
 .tab:hover{color:var(--text)}
 .tab.on{color:var(--blue);border-bottom-color:var(--blue)}

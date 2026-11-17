@@ -10,7 +10,7 @@ import { renderCard, renderVideo, toBase64, fromBase64 } from "./render.mjs";
 import { DISCLAIMER } from "./drafts.mjs";
 import { postInsights, performanceReport, insightChannelsOf, INSIGHTS_DAYS } from "./insights.mjs";
 import { ANALYSIS_DISCLAIMER } from "./analysis-drafts.mjs";
-import { effectiveSettings, normalizeSettings, draftingChannels, applySettings, wibDayStart, FORMATS, PLANNED_FORMATS, KINDS, KIND_NAMES, DAYS, TIMEZONE, MAX_PER_DAY, MAX_SLOTS } from "./settings.mjs";
+import { effectiveSettings, normalizeSettings, draftingChannels, applySettings, withFormat, wibDayStart, FORMATS, PLANNED_FORMATS, KINDS, KIND_NAMES, DAYS, TIMEZONE, MAX_PER_DAY, MAX_SLOTS } from "./settings.mjs";
 import { recheck } from "./desk.mjs";
 import { dueSlots, nextSlots } from "./scheduler.mjs";
 import { PROVIDERS, BOT_CHANNELS, CONNECT_SECRETS, appOf, newAttempt, authorizeUrl, exchangeCode, refreshX, identify, checkTelegram, telegramChatIdProblem, TELEGRAM_CHAT_NOT_FOUND, redirectUri, sealToken, openToken, encryptionReady, STATE_RE, CALLBACK_PATH } from "./oauth.mjs";
@@ -361,11 +361,14 @@ export async function studioConnections(env) {
 /** The studio's status: publishing, channels (configured or not, never a token), counts. */
 export async function studioStatus(env) {
   const channels = {};
+  const { settings } = await channelSettings(env);
   for (const c of CHANNELS) {
     const spec = CHANNEL_SPECS[c];
     const account = await accountFor(env, c);
     channels[c] = {
       name: spec.name, enabled: channelsOf(env).includes(c), media: spec.media, publisher: spec.publisher, note: spec.note,
+      // The formats a person may choose for this channel, and the one its settings use (the Create page's default).
+      formats: FORMATS[c], format: settings[c]?.format ?? FORMATS[c][0],
       configured: Boolean(account),
       quota: account && publishOn(env) && (c === "threads" || c === "instagram") ? await publishingQuota({ channel: c, account }) : null
     };
@@ -494,7 +497,8 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
       if (route === "GET /api/studio/status") return rpc(() => studioStatus(env), "status_failed");
       if (route === "GET /api/studio/drafts") {
         const status = url.searchParams.get("status") || null;
-        return rpc(async () => ({ drafts: await desk(env).list({ status, limit: 50 }), counts: await desk(env).counts(), can_decide: role === "approver", can_write: role !== "service" }), "drafts_failed");
+        const channel = CHANNELS.includes(url.searchParams.get("channel")) ? url.searchParams.get("channel") : null;
+        return rpc(async () => ({ drafts: await desk(env).list({ status, channel, limit: 50 }), counts: await desk(env).counts(), by_channel: await desk(env).channelCountsByStatus(), can_decide: role === "approver", can_write: role !== "service" }), "drafts_failed");
       }
       if (route === "GET /api/studio/draft") return rpc(async () => (await desk(env).get(String(url.searchParams.get("id") || "").slice(0, 160))) ?? { ok: false, error: "no such draft" }, "draft_failed");
       if (route === "GET /api/studio/preview") {
@@ -750,13 +754,18 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
         if (r.response) return r.response;
         const kind = String(r.body.kind ?? "");
         const ref = typeof r.body.ref === "string" ? r.body.ref.slice(0, 160) : null;
-        const posts = Array.isArray(r.body.posts) ? r.body.posts.map((p) => ({ channel: String(p?.channel ?? ""), text: textOf(p?.text), ...(typeof p?.text_b === "string" ? { text_b: textOf(p.text_b) } : {}) })) : null;
+        const posts = Array.isArray(r.body.posts) ? r.body.posts.map((p) => ({ channel: String(p?.channel ?? ""), text: textOf(p?.text), ...(typeof p?.text_b === "string" ? { text_b: textOf(p.text_b) } : {}), ...(typeof p?.format === "string" ? { format: p.format } : {}) })) : null;
+        // The format a person chose for each channel's post (text, image, video), before it is made; else the channel's setting.
+        for (const p of posts ?? []) if (p.format != null && !FORMATS[p.channel]?.includes(p.format)) return json({ error: `${CHANNEL_SPECS[p.channel]?.name ?? p.channel} cannot post ${p.format} yet` }, 400);
         return rpc(async () => {
           const at = now ? now * 1000 : Date.now();
           const ctx = COMPOSE_KINDS.includes(kind) ? await composeContext(env, kind, { now: at, analysis: true }) : { decisionTimes: [] };
           const made = composeDrafts({ kind, posts, allowed: channelsOf(env), decisionTimes: ctx.decisionTimes, delayHours: delayOf(env), now: at,
             overlay: () => overlayFor(kind, ctx.analysis, ref), id: randomHex(4) });
           if (!made.ok) return made;
+          const { settings } = await channelSettings(env);
+          const chosen = Object.fromEntries((posts ?? []).map((p) => [p.channel, p.format ?? settings[p.channel]?.format]));
+          made.drafts = made.drafts.map((d) => withFormat(d, chosen[d.channel], { recheck: (x) => recheck(x, { delayHours: delayOf(env), now: at }) }));
           const added = await desk(env).add(made.drafts, at, identity.subject);
           for (const t of made.ab) await desk(env).addAbTest(t, at);
           return { ok: true, added, drafts: made.drafts.map((d) => ({ id: d.id, channel: d.channel, status: d.status })), ab: made.ab };

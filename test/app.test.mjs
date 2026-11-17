@@ -8,7 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule } from "../src/app.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
-import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus } from "../src/desk.mjs";
+import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
@@ -38,7 +38,7 @@ function deskStub() {
     add: async (d, now, actor) => addDrafts(sql, d, { now, ...(actor ? { actor } : {}) }), list: async (i) => listDrafts(sql, i ?? {}),
     get: async (id) => { const d = getDraft(sql, id); return d ? { ...d, events: draftEvents(sql, id) } : null; },
     decide: async (i, now) => decideDraft(sql, i, { now }), published: async (i, now) => recordPublish(sql, i, { now }), requeue: async (i, now) => requeueFailed(sql, i, { now }),
-    counts: async () => deskCounts(sql), token: async (c) => storedToken(sql, c), saveToken: async (c, t, now) => { storeToken(sql, c, t, { now }); return true; },
+    counts: async () => deskCounts(sql), channelCountsByStatus: async () => channelStatusCounts(sql), token: async (c) => storedToken(sql, c), saveToken: async (c, t, now) => { storeToken(sql, c, t, { now }); return true; },
     idsWithPrefix: async (p) => draftIdsWithPrefix(sql, p), kindCounts: async (k, s) => kindCountsSince(sql, k, s), archive: async (n) => publishedPosts(sql, { limit: n }),
     needingImage: async (n, retry) => draftsNeedingImage(sql, { limit: n, retry }), attachImage: async (i, now) => attachImage(sql, i, { now }),
     media: async (id) => mediaOf(sql, id), note: async (i, now) => noteDraft(sql, i, { now }),
@@ -718,4 +718,54 @@ test("Publish now (owner 2026-11-17: approved while publishing was off, then no 
   assert.ok(draftEvents(d.sql, "t1").some((ev) => ev.action === "requeued"), "the retry is in the draft's history");
   assert.equal(sent.length, 2);
   assert.match((await (await post({ id: "t1" }, owner)).json()).error, /only an approved or failed draft/, "never twice");
+});
+
+test("Telegram with the card: sendPhoto (multipart) with the caption when it fits, else the photo then the text", async () => {
+  const calls = [];
+  const fetcher = async (url, init) => { calls.push({ url: String(url), form: init.body instanceof FormData ? init.body : null, json: typeof init.body === "string" ? JSON.parse(init.body) : null }); return Response.json({ ok: true, result: { message_id: calls.length } }); };
+  const image = async () => ({ bytes: new Uint8Array([255, 216, 255]), mime: "image/jpeg" });
+  const account = { bot_token: "123:SECRET", chat_id: "-1001234567890" };
+  const short = await publishTelegram({ account, text: "Education · XAUUSD\nChart by TradingView.", image, fetcher });
+  assert.deepEqual([calls.length, /sendPhoto$/.test(calls[0].url), calls[0].form.get("caption"), calls[0].form.get("photo").type, short.remote_id], [1, true, "Education · XAUUSD\nChart by TradingView.", "image/jpeg", "1"]);
+  calls.length = 0;
+  const long = await publishTelegram({ account, text: "x".repeat(1500), image, fetcher });
+  assert.deepEqual([calls.length, /sendPhoto$/.test(calls[0].url), calls[0].form.get("caption"), /sendMessage$/.test(calls[1].url), long.remote_id], [2, true, null, true, "2"], "over 1024: the photo, then the text");
+  const dry = await publishTo("telegram", { account, draft: { text: "t", image_url: "https://cta.cryptophys.work/media/0123456789abcdef0123456789abcdef.jpg" }, dryRun: true, media: image });
+  assert.match(dry.requests[0].url, /sendPhoto/);
+  assert.ok(!JSON.stringify(dry).includes("SECRET"));
+  const text = await publishTo("telegram", { account, draft: { text: "t", image_url: null }, dryRun: true });
+  assert.match(text.requests[0].url, /sendMessage/, "a text post stays a message");
+});
+
+test("Create: the format chosen per channel before the post is made; an edit keeps the post's media", async () => {
+  resetKeyCacheForTests();
+  const { env: e, d } = env({ CONTENT_CHANNELS: "telegram,x" });
+  const person = await jwt({ email: "owner@example.com" });
+  const post = (body) => handle(req("/api/studio/compose", { token: person, method: "POST", body }), e, opts);
+  const text = "Education · XAUUSD\n\nGold held its range through London.\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD";
+  assert.equal((await post({ kind: "custom", posts: [{ channel: "x", text, format: "image" }] })).status, 400, "X cannot post an image yet");
+  const r = await (await post({ kind: "custom", posts: [{ channel: "telegram", text, format: "image" }] })).json();
+  assert.equal(r.ok, true, JSON.stringify(r));
+  const made = getDraft(d.sql, r.added[0]);
+  assert.deepEqual([made.status, /Chart by TradingView/.test(made.text)], ["needs_image", true]);
+  const edited = editDraft(d.sql, { id: made.id, text: made.text.replace("London", "Asia"), actor: "owner@example.com", check: (x) => editCheck(x) });
+  assert.equal(edited.status, "needs_image", "an edit keeps the card it was made with");
+  const st = await (await handle(req("/api/studio/status", { token: person }), e, opts)).json();
+  assert.deepEqual([st.channels.telegram.formats, st.channels.telegram.format], [["text", "image"], "text"], "the Create page's choices and default");
+});
+
+test("the queue by channel (owner 2026-11-17): one tab per channel, the status tabs within it", async () => {
+  resetKeyCacheForTests();
+  const { env: e, d } = env({ CONTENT_CHANNELS: "telegram,x" });
+  const text = "Education only. Not financial advice.";
+  addDrafts(d.sql, [{ id: "t1", channel: "telegram", kind: "custom", text, status: "pending" }, { id: "t2", channel: "telegram", kind: "custom", text, status: "needs_image" }, { id: "x1", channel: "x", kind: "custom", text, status: "pending" }]);
+  assert.deepEqual(listDrafts(d.sql, { channel: "telegram" }).map((x) => x.id).sort(), ["t1", "t2"]);
+  assert.deepEqual(listDrafts(d.sql, { channel: "telegram", status: "pending" }).map((x) => x.id), ["t1"]);
+  assert.deepEqual(channelStatusCounts(d.sql), { telegram: { pending: 1, needs_image: 1 }, x: { pending: 1 } });
+  const person = await jwt({ email: "owner@example.com" });
+  const q = await (await handle(req("/api/studio/drafts?channel=x&status=pending", { token: person }), e, opts)).json();
+  assert.deepEqual([q.drafts.map((x) => x.id), q.by_channel.telegram.needs_image], [["x1"], 1]);
+  const js = readFileSync(new URL("../public/studio/studio.js", import.meta.url), "utf8");
+  assert.match(js, /function renderChannelTabs/);
+  assert.match(js, /"All channels"/);
 });
