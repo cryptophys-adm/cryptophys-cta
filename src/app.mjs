@@ -3,7 +3,7 @@
 import { dailyDrafts } from "./drafts.mjs";
 import { analysisDrafts } from "./analysis-drafts.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "./channels.mjs";
-import { publishTo, publishingQuota, refreshToken, tiktokAccessToken, googleAccessToken, REFRESH_AFTER_DAYS } from "./publishers.mjs";
+import { publishTo, publishingQuota, refreshToken, tiktokAccessToken, googleAccessToken, REFRESH_AFTER_DAYS, isBusinessToken } from "./publishers.mjs";
 import { verifyAccessJwt } from "./access.mjs";
 import { brandOf, profileLinks, DEFAULT_BRAND } from "./brands.mjs";
 import { renderCard, renderVideo, toBase64, fromBase64 } from "./render.mjs";
@@ -272,6 +272,7 @@ export async function refreshTokens(env, { now = Date.now() } = {}) {
   for (const channel of channelsOf(env).filter((c) => c === "threads" || c === "instagram")) {
     const account = await accountFor(env, channel, { now });
     if (!account) { out[channel] = "not_configured"; continue; }
+    if (channel === "instagram" && isBusinessToken(account.access_token)) { out[channel] = "does_not_expire"; continue; }
     const age = account.refreshed_at ? now - Date.parse(account.refreshed_at) : Infinity;
     if (age < REFRESH_AFTER_DAYS * 86_400_000) { out[channel] = "fresh"; continue; }
     try { await saveTokenSealed(env, channel, await refreshToken({ channel, token: account.access_token }), now); out[channel] = "refreshed"; }
@@ -591,7 +592,7 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
         try {
           check = channel === "telegram"
             ? await checkTelegram({ bot_token: value.bot_token, chat_id: value.chat_id }, { fetcher: fetchImpl })
-            : await identify(channel, { access_token: value.access_token }, { fetcher: fetchImpl });
+            : await identify(channel, { access_token: value.access_token, user_id: value.user_id }, { fetcher: fetchImpl });
         } catch (e) {
           const msg = String(e?.message ?? e).slice(0, 160);
           if (channel === "telegram" && /chat not found/i.test(msg)) return json({ error: TELEGRAM_CHAT_NOT_FOUND }, 400);

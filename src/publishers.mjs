@@ -10,6 +10,14 @@
 // limit endpoint at run time, never assumed.
 export const THREADS_BASE = "https://graph.threads.net/v1.0";
 export const INSTAGRAM_BASE = "https://graph.instagram.com";
+// Instagram takes two kinds of token (owner 2026-11-17: Meta's "API setup with Unified login" gives a system-user
+// token). An Instagram-login token (IGAA...) talks to graph.instagram.com, renews every 60 days, and /me names the
+// account. A Meta business token (EAA..., a system-user token from Unified or Facebook login) talks to
+// graph.facebook.com, does not expire, and /me is the system user: the Instagram account id is entered with it.
+// The calls themselves (media, media_publish, status_code, content_publishing_limit, insights) are the same.
+export const FACEBOOK_GRAPH_BASE = "https://graph.facebook.com";
+export const isBusinessToken = (token) => /^EAA/.test(String(token ?? ""));
+export const instagramBase = (token) => (isBusinessToken(token) ? FACEBOOK_GRAPH_BASE : INSTAGRAM_BASE);
 const STATUS_POLLS = 5;
 
 const form = (o) => new URLSearchParams(Object.entries(o).filter(([, v]) => v != null && v !== "").map(([k, v]) => [k, String(v)]));
@@ -36,6 +44,7 @@ async function call(fetcher, method, url, params) {
  */
 export async function liveUserId(channel, account, fetcher) {
   const stored = String(account?.user_id ?? "");
+  if (channel === "instagram" && isBusinessToken(account?.access_token)) return stored;
   try {
     const url = channel === "threads" ? `${THREADS_BASE}/me` : "https://graph.instagram.com/me";
     const b = await call(fetcher, "GET", url, { fields: channel === "threads" ? "id" : "user_id", access_token: account?.access_token });
@@ -82,15 +91,16 @@ export async function publishThreads({ account, text, imageUrl = null, fetcher =
  */
 export async function publishInstagram({ account, caption, imageUrl, fetcher = (...a) => fetch(...a), dryRun = false, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const uid = String(account?.user_id ?? "");
-  const create = { url: `${INSTAGRAM_BASE}/${uid}/media`, params: { image_url: imageUrl, caption, access_token: account?.access_token } };
-  const publish = { url: `${INSTAGRAM_BASE}/${uid}/media_publish`, params: { creation_id: "<container>", access_token: account?.access_token } };
+  const base = instagramBase(account?.access_token);
+  const create = { url: `${base}/${uid}/media`, params: { image_url: imageUrl, caption, access_token: account?.access_token } };
+  const publish = { url: `${base}/${uid}/media_publish`, params: { creation_id: "<container>", access_token: account?.access_token } };
   if (dryRun) return { dry_run: true, requests: [create, publish].map((r) => ({ method: "POST", url: r.url, params: redact(r.params) })) };
   if (!uid || !account?.access_token) throw new Error("instagram account not configured");
   if (!/^https:\/\//.test(String(imageUrl ?? ""))) throw new Error("instagram needs a public https image URL");
   const id = await liveUserId("instagram", account, fetcher);
-  const container = await call(fetcher, "POST", `${INSTAGRAM_BASE}/${id}/media`, create.params);
-  await waitReady(fetcher, `${INSTAGRAM_BASE}/${container.id}`, account.access_token, "status_code", { sleep });
-  const post = await call(fetcher, "POST", `${INSTAGRAM_BASE}/${id}/media_publish`, { ...publish.params, creation_id: container.id });
+  const container = await call(fetcher, "POST", `${base}/${id}/media`, create.params);
+  await waitReady(fetcher, `${base}/${container.id}`, account.access_token, "status_code", { sleep });
+  const post = await call(fetcher, "POST", `${base}/${id}/media_publish`, { ...publish.params, creation_id: container.id });
   return { remote_id: String(post.id), container_id: String(container.id) };
 }
 
@@ -100,7 +110,7 @@ export async function publishingQuota({ channel, account, fetcher = (...a) => fe
   if (!uid || !account?.access_token) return null;
   try {
     const id = await liveUserId(channel, account, fetcher);
-    const url = channel === "threads" ? `${THREADS_BASE}/${id}/threads_publishing_limit` : `${INSTAGRAM_BASE}/${id}/content_publishing_limit`;
+    const url = channel === "threads" ? `${THREADS_BASE}/${id}/threads_publishing_limit` : `${instagramBase(account.access_token)}/${id}/content_publishing_limit`;
     const body = await call(fetcher, "GET", url, { fields: "quota_usage,config", access_token: account.access_token });
     const row = Array.isArray(body?.data) ? body.data[0] : body;
     const used = Number(row?.quota_usage), total = Number(row?.config?.quota_total);

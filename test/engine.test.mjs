@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { dailyDrafts, dailyRecapText, summarizeDay, dateId, TEXT_LIMITS } from "../src/drafts.mjs";
 import { addDrafts, listDrafts, decideDraft, recordPublish, deskCounts, getDraft, draftEvents, storeToken, storedToken } from "../src/desk.mjs";
-import { publishThreads, publishInstagram, publishingQuota, refreshToken, THREADS_BASE, INSTAGRAM_BASE } from "../src/publishers.mjs";
+import { publishThreads, publishInstagram, publishingQuota, refreshToken, THREADS_BASE, INSTAGRAM_BASE, FACEBOOK_GRAPH_BASE } from "../src/publishers.mjs";
+import { identify } from "../src/oauth.mjs";
 import { PRICE_LIKE } from "../src/guardian.mjs";
 
 const NOW = Date.parse("2026-11-17T22:17:00Z"); // Tuesday's run: the trading day that ended 24 hours earlier
@@ -120,6 +121,24 @@ test("Instagram: needs a public image; container, ready, publish; a container er
   assert.equal(calls[2].url.includes("fields=status_code"), true);
   await assert.rejects(publishInstagram({ account, caption: "c", imageUrl: "https://img.example/a.jpg", fetcher: fakeMeta({ status: "ERROR" }).fetcher, sleep: noSleep }), /container error/);
   await assert.rejects(publishInstagram({ account, caption: "c", imageUrl: "https://img.example/a.jpg", fetcher: fakeMeta({ fail: "/media_publish" }).fetcher, sleep: noSleep }), /request limit/);
+});
+
+test("Instagram with a Meta business token (EAA...): graph.facebook.com, the entered account id, no /me", async () => {
+  const biz = { user_id: "17841466030747958", access_token: "EAA-SECRET-TOKEN" };
+  const { calls, fetcher } = fakeMeta();
+  const r = await publishInstagram({ account: biz, caption: "c", imageUrl: "https://img.example/card.jpg", fetcher, sleep: noSleep });
+  assert.equal(r.remote_id, "p1");
+  assert.deepEqual(calls.map((c) => c.url.split("?")[0]), [`${FACEBOOK_GRAPH_BASE}/17841466030747958/media`, `${FACEBOOK_GRAPH_BASE}/c1`, `${FACEBOOK_GRAPH_BASE}/17841466030747958/media_publish`], "the system user's /me is never asked");
+  const dry = await publishInstagram({ account: biz, caption: "c", imageUrl: "https://img.example/card.jpg", dryRun: true, fetcher: () => { throw new Error("no call in a dry run"); } });
+  assert.ok(dry.requests.every((q) => q.url.startsWith(FACEBOOK_GRAPH_BASE)) && !JSON.stringify(dry).includes("SECRET"));
+  const q = fakeMeta();
+  await publishingQuota({ channel: "instagram", account: biz, fetcher: q.fetcher });
+  assert.equal(q.calls[0].url.split("?")[0], `${FACEBOOK_GRAPH_BASE}/17841466030747958/content_publishing_limit`);
+  // The paste check: the account id is required with such a token, and read from graph.facebook.com.
+  await assert.rejects(identify("instagram", { access_token: "EAA-SECRET-TOKEN" }, { fetcher }), /needs the Instagram account id/);
+  const seen = [];
+  const who = await identify("instagram", biz, { fetcher: async (url) => { seen.push(url.split("?")[0]); return new Response(JSON.stringify({ id: "17841466030747958", username: "cryptophys.adm" }), { status: 200 }); } });
+  assert.deepEqual([seen, who], [[`${FACEBOOK_GRAPH_BASE}/17841466030747958`], { id: "17841466030747958", name: "@cryptophys.adm" }]);
 });
 
 test("the quota is read from Meta, never assumed; a token is refreshed through its own endpoint", async () => {

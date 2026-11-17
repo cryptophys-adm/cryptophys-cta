@@ -152,6 +152,13 @@ export async function identify(channel, account, { fetcher = (...a) => fetch(...
     return body;
   };
   if (channel === "threads") { const b = await get(`https://graph.threads.net/v1.0/me?${new URLSearchParams({ fields: "id,username", access_token: account.access_token })}`); return { id: String(b.id ?? ""), name: b.username ? `@${b.username}` : null }; }
+  if (channel === "instagram" && /^EAA/.test(String(account.access_token ?? ""))) {
+    // A Meta business token (EAA...): /me is the system user, so the Instagram account id comes with the token.
+    const id = String(account.user_id ?? "").trim();
+    if (!/^\d+$/.test(id)) throw new Error("an EAA... token needs the Instagram account id: enter it (Meta shows it under the account in Generate access tokens)");
+    const b = await get(`https://graph.facebook.com/${id}?${new URLSearchParams({ fields: "id,username", access_token: account.access_token })}`);
+    return { id: String(b.id ?? id), name: b.username ? `@${b.username}` : null };
+  }
   if (channel === "instagram") { const b = await get(`https://graph.instagram.com/me?${new URLSearchParams({ fields: "user_id,username", access_token: account.access_token })}`); return { id: String(b.user_id ?? b.id ?? ""), name: b.username ? `@${b.username}` : null }; }
   if (channel === "x") { const b = await get("https://api.x.com/2/users/me", { authorization: `Bearer ${account.access_token}` }); return { id: String(b?.data?.id ?? ""), name: b?.data?.username ? `@${b.data.username}` : null }; }
   if (channel === "youtube") { const b = await get("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", { authorization: `Bearer ${account.access_token}` }); const c = b?.items?.[0]; return { id: String(c?.id ?? ""), name: c?.snippet?.title ?? null }; }

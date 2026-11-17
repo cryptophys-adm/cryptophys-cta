@@ -8,7 +8,7 @@
 //     not read, shown as "not available".
 // Shapes from the platforms' reference pages read on 2026-11-15. Every metric is normalised to one shape:
 // { views, reach, likes, comments, shares, saves, reposts }, a missing one null. Never a token in a result.
-import { THREADS_BASE, INSTAGRAM_BASE, X_BASE, googleAccessToken } from "./publishers.mjs";
+import { THREADS_BASE, instagramBase, X_BASE, googleAccessToken } from "./publishers.mjs";
 
 export const INSIGHTS_DAYS = 14;
 export const INSIGHT_CHANNELS = Object.freeze(["threads", "instagram", "youtube", "x"]);
@@ -55,7 +55,7 @@ export async function postInsights(channel, { account, remoteId, token = null, f
       return { ...m, views: v.views ?? null, likes: v.likes ?? null, comments: v.replies ?? null, shares: v.shares ?? null, reposts: sum(v.reposts, v.quotes) };
     }
     case "instagram": {
-      const v = metaValues(await getJson(fetcher, `${INSTAGRAM_BASE}/${id}/insights?${new URLSearchParams({ metric: "views,reach,likes,comments,saved,shares", access_token: account.access_token })}`));
+      const v = metaValues(await getJson(fetcher, `${instagramBase(account.access_token)}/${id}/insights?${new URLSearchParams({ metric: "views,reach,likes,comments,saved,shares", access_token: account.access_token })}`));
       return { ...m, views: v.views ?? null, reach: v.reach ?? null, likes: v.likes ?? null, comments: v.comments ?? null, shares: v.shares ?? null, saves: v.saved ?? null };
     }
     case "youtube": {
