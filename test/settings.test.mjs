@@ -15,9 +15,11 @@ function sqlite() {
 }
 
 test("formats: only what each channel's publisher posts today; the rest is planned and refused", () => {
-  assert.deepEqual(FORMATS, { threads: ["text"], instagram: ["image"], x: ["text"], telegram: ["text"], youtube: ["video"], tiktok: ["video"] });
+  assert.deepEqual(FORMATS, { threads: ["text"], instagram: ["image"], x: ["text"], telegram: ["text", "image"], youtube: ["video"], tiktok: ["video"] });
   assert.deepEqual(normalizeSettings("instagram", { format: "image" }).settings.format, "image");
-  assert.match(normalizeSettings("telegram", { format: "image" }).error, /planned, not built yet/);
+  assert.equal(normalizeSettings("telegram", { format: "image" }).settings.format, "image", "owner 2026-11-17: Telegram with the card");
+  assert.equal(defaultSettings("telegram").format, "text", "the default stays text: a person chooses Image");
+  assert.match(normalizeSettings("telegram", { format: "video" }).error, /planned, not built yet/);
   assert.match(normalizeSettings("youtube", { format: "text" }).error, /format must be video/);
   for (const c of CHANNELS) assert.ok(PLANNED_FORMATS[c].every((f) => !FORMATS[c].includes(f)), c);
 });
@@ -94,4 +96,20 @@ test("the Channels page: editable settings, saved through the studio API; no tok
   assert.doesNotMatch(html, /type="password"|access_token|bot_token/);
   assert.doesNotMatch(js + html, /innerHTML/);
   assert.doesNotMatch(html, /<script>|style="/);
+});
+
+test("the format a person chose drives the draft (owner 2026-11-17: Telegram with the image, chosen before it is made)", async () => {
+  const { withFormat } = await import("../src/settings.mjs");
+  const text = "Education · XAUUSD\n\nGold held its range.\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD #gold";
+  const d = { id: "t1", channel: "telegram", kind: "key_levels", text, status: "pending", guardian: { pass: true } };
+  const img = withFormat(d, "image", { recheck: () => ({ pass: true }) });
+  assert.equal(img.status, "needs_image", "waits for its card");
+  assert.match(img.text, /Chart by TradingView\.\nEducational analysis/, "TradingView's credit before the disclaimer");
+  assert.equal(withFormat(d, "text"), d, "text stays as it is");
+  assert.equal(withFormat({ ...d, status: "blocked" }, "image").status, "blocked", "a held draft is not touched");
+  assert.equal(withFormat({ ...d, channel: "x" }, "image").status, "pending", "X cannot post an image yet");
+  assert.equal(withFormat(d, "image", { recheck: () => ({ pass: false }) }).status, "pending", "a guardian refusal keeps the text draft");
+  const settings = effectiveSettings({ telegram: { format: "image" } });
+  const out = applySettings([d, { ...d, id: "th1", channel: "threads" }], settings);
+  assert.deepEqual(out.map((x) => [x.channel, x.status]), [["telegram", "needs_image"], ["threads", "pending"]], "scheduled drafts follow the channel's format");
 });

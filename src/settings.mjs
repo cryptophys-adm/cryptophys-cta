@@ -12,19 +12,24 @@
 //                (src/scheduler.mjs) publishes the channel's oldest approved post at each slot; no slots: at approval
 //   hashtags     the hashtag line of the channel's drafts (only #words; the guardian checks the draft again)
 // Never a token or account id: accounts are Worker secrets set through the platform, shown only as connected or not.
-import { CHANNELS, CHANNEL_SPECS, HASHTAGS } from "./channels.mjs";
+import { CHANNELS, CHANNEL_SPECS, HASHTAGS, initialStatus } from "./channels.mjs";
+import { CHART_CREDIT } from "./drafts.mjs";
 
 export const KINDS = Object.freeze(["key_levels", "pattern", "daily_recap"]);
 export const KIND_NAMES = Object.freeze({ key_levels: "Key-level map", pattern: "Chart pattern", daily_recap: "Daily recap" });
 export const DAYS = Object.freeze(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
 export const TIMEZONE = "Asia/Jakarta";
 const MEDIA_FORMAT = { none: "text", image: "image", video: "video" };
-/** What each channel's publisher can post today. */
-export const FORMATS = Object.freeze(Object.fromEntries(CHANNELS.map((c) => [c, Object.freeze([MEDIA_FORMAT[CHANNEL_SPECS[c].media]])])));
+/**
+ * What each channel's publisher can post today: its own media first (the default), then what a person may choose
+ * instead (owner 2026-11-17: Telegram with the card image, "user/owner/admin yang menentukan" the format).
+ */
+const EXTRA_FORMATS = { telegram: ["image"] };
+export const FORMATS = Object.freeze(Object.fromEntries(CHANNELS.map((c) => [c, Object.freeze([MEDIA_FORMAT[CHANNEL_SPECS[c].media], ...(EXTRA_FORMATS[c] ?? [])])])));
 /** Formats the channel's API allows but our publisher does not post yet (shown as planned, refused when saved). */
 export const PLANNED_FORMATS = Object.freeze({
   threads: Object.freeze(["image", "video"]), instagram: Object.freeze(["video"]), x: Object.freeze(["image", "video"]),
-  telegram: Object.freeze(["image", "video"]), youtube: Object.freeze([]), tiktok: Object.freeze([])
+  telegram: Object.freeze(["video"]), youtube: Object.freeze([]), tiktok: Object.freeze([])
 });
 export const MAX_SLOTS = 12;
 export const MAX_PER_DAY = 24;
@@ -129,10 +134,34 @@ export function applySettings(drafts, settings, { today = {}, recheck = null } =
         if (!guardian || guardian.pass !== false) draft = { ...changed, guardian };
       }
     }
+    // The channel's format, chosen by a person before anything is drafted, scheduled or not.
+    draft = withFormat(draft, s.format, { recheck });
     count[d.channel] = (count[d.channel] ?? 0) + 1;
     out.push(draft);
   }
   return out;
+}
+
+/**
+ * Pure: a draft in the format a person chose for it (the channel's setting, or the Create page's choice). Only a
+ * text channel switched to a media format changes: the draft waits for its card (needs_image) or video, and its text
+ * names TradingView (the chart's attribution, the guardian's rule) before the disclaimer. A held draft, a format the
+ * channel cannot post, a text over the channel's limit, or a guardian refusal leave the draft as it was.
+ */
+export function withFormat(d, format, { recheck = null } = {}) {
+  const media = format === "image" ? "needs_image" : format === "video" ? "needs_video" : null;
+  if (!media || !d || d.status === "blocked" || initialStatus(d.channel) !== "pending" || !FORMATS[d.channel]?.includes(format)) return d;
+  let text = d.text;
+  if (!/tradingview/i.test(text)) {
+    const lines = text.split("\n");
+    lines.splice(Math.max(1, lines.length - 2), 0, CHART_CREDIT);
+    text = lines.join("\n");
+  }
+  if (text.length > CHANNEL_SPECS[d.channel].text_limit) return d;
+  const changed = { ...d, text, status: media };
+  const guardian = recheck ? recheck(changed) : d.guardian;
+  if (guardian && guardian.pass === false) return d;
+  return { ...changed, guardian, format };
 }
 
 /** "mon 13:09 WIB" → the same slot in UTC ("mon 06:09"), for the scheduler. */

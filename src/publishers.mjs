@@ -121,8 +121,28 @@ export async function publishX({ account, text, fetcher = (...a) => fetch(...a),
  * design; this Worker never logs a request URL. Returns { remote_id } or a dry run.
  */
 export const TELEGRAM_BASE = "https://api.telegram.org";
-export async function publishTelegram({ account, text, fetcher = (...a) => fetch(...a), dryRun = false }) {
+/** Telegram's caption limit for a photo; a longer text follows the photo as its own message. */
+export const TELEGRAM_CAPTION_MAX = 1024;
+export async function publishTelegram({ account, text, image = null, fetcher = (...a) => fetch(...a), dryRun = false }) {
   const body = { chat_id: account?.chat_id, text, disable_web_page_preview: true };
+  // A post with a card (owner 2026-11-17: "akan lebih menarik kalau posting Telegram dengan gambar"): sendPhoto with
+  // the JPEG uploaded as multipart (no public URL needed), the text as its caption when it fits, else right after it.
+  if (image) {
+    const fits = String(text).length <= TELEGRAM_CAPTION_MAX;
+    if (dryRun) return { dry_run: true, requests: [{ method: "POST", url: `${TELEGRAM_BASE}/bot[token]/sendPhoto`, body: { chat_id: account?.chat_id, photo: "[card.jpg]", ...(fits ? { caption: text } : {}) } },
+      ...(fits ? [] : [{ method: "POST", url: `${TELEGRAM_BASE}/bot[token]/sendMessage`, body }])] };
+    if (!account?.bot_token || !account?.chat_id) throw new Error("telegram channel not configured");
+    const { bytes, mime } = await image();
+    const form = new FormData();
+    form.append("chat_id", String(account.chat_id));
+    if (fits) form.append("caption", String(text));
+    form.append("photo", new Blob([bytes], { type: mime || "image/jpeg" }), "card.jpg");
+    const res = await fetcher(`${TELEGRAM_BASE}/bot${account.bot_token}/sendPhoto`, { method: "POST", body: form });
+    let out = null;
+    try { out = await res.json(); } catch { out = null; }
+    if (!res.ok || out?.ok !== true) throw new Error(`${res.status} ${String(out?.description ?? "request failed").slice(0, 200)}`);
+    if (fits) return { remote_id: String(out.result?.message_id ?? "") };
+  }
   if (dryRun) return { dry_run: true, requests: [{ method: "POST", url: `${TELEGRAM_BASE}/bot[token]/sendMessage`, body }] };
   if (!account?.bot_token || !account?.chat_id) throw new Error("telegram channel not configured");
   const res = await fetcher(`${TELEGRAM_BASE}/bot${account.bot_token}/sendMessage`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -245,7 +265,7 @@ export async function publishTo(channel, { account, draft, fetcher, dryRun = fal
     case "threads": return publishThreads({ account, text: draft.text, fetcher, dryRun, ...(sleep ? { sleep } : {}) });
     case "instagram": return publishInstagram({ account, caption: draft.text, imageUrl: draft.image_url, fetcher, dryRun, ...(sleep ? { sleep } : {}) });
     case "x": return publishX({ account, text: draft.text, fetcher, dryRun });
-    case "telegram": return publishTelegram({ account, text: draft.text, fetcher, dryRun });
+    case "telegram": return publishTelegram({ account, text: draft.text, image: /\/media\/[0-9a-f]{32}\.jpg$/.test(String(draft.image_url ?? "")) ? media : null, fetcher, dryRun });
     case "youtube": return publishYouTube({ account, text: draft.text, video: dryRun ? await media().catch(() => null) : await media(), fetcher, dryRun });
     case "tiktok": return publishTikTok({ account, text: draft.text, video: dryRun ? await media().catch(() => null) : await media(), fetcher, dryRun, onToken: saveToken });
     default: throw new Error(`${channel}: publisher not built yet`);

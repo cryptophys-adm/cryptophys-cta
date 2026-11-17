@@ -14,7 +14,8 @@
   const FILTERS = ["pending", "needs_image", "needs_video", "blocked", "approved", "published", "rejected", "failed", ""];
   const VIEWS = ["dashboard", "queue", "create", "library", "calendar", "media", "marketing", "performance", "channels"];
   const EDITABLE = ["pending", "blocked", "needs_image", "needs_video"];
-  let filter = "pending", status = null, canDecide = false, canWrite = false, role = null, perf = null, sched = null;
+  let chFilter = "",
+    filter = "pending", status = null, canDecide = false, canWrite = false, role = null, perf = null, sched = null;
 
   async function call(path, method = "GET", body) {
     const res = await fetch(path, { method, credentials: "same-origin", headers: { accept: "application/json", ...(body !== undefined ? { "content-type": "application/json" } : {}) }, body: body !== undefined ? JSON.stringify(body) : undefined });
@@ -444,6 +445,20 @@
   }
 
   // ---- content queue ----
+  /** The queue by channel (owner 2026-11-17): one tab per channel, then the status tabs within it. */
+  function renderChannelTabs(byChannel) {
+    const tabs = $("chtabs"); tabs.textContent = "";
+    const total = (c) => Object.values(byChannel?.[c] ?? {}).reduce((a, n) => a + n, 0);
+    const waiting = (c) => (byChannel?.[c]?.pending ?? 0);
+    const chans = Object.keys(status?.channels ?? {}).filter((c) => status.channels[c].enabled || total(c));
+    for (const c of ["", ...chans]) {
+      const b = make("button", `tab${c === chFilter ? " on" : ""}`, c ? (status.channels[c]?.name ?? c) : "All channels");
+      b.type = "button"; b.setAttribute("role", "tab"); b.setAttribute("aria-selected", String(c === chFilter));
+      if (c) { b.appendChild(make("span", "c", String(waiting(c)))); b.title = `${waiting(c)} waiting for you · ${total(c)} in all`; }
+      b.addEventListener("click", () => { chFilter = c; load(); });
+      tabs.appendChild(b);
+    }
+  }
   function renderTabs(counts) {
     const tabs = $("tabs"); tabs.textContent = "";
     for (const f of FILTERS) {
@@ -565,12 +580,17 @@
 
   async function load() {
     try {
-      const q = await call(`/api/studio/drafts${filter ? `?status=${filter}` : ""}`);
+      const qs = new URLSearchParams();
+      if (filter) qs.set("status", filter);
+      if (chFilter) qs.set("channel", chFilter);
+      const q = await call(`/api/studio/drafts${qs.toString() ? `?${qs}` : ""}`);
       canDecide = Boolean(q.can_decide);
-      renderTabs(q.counts);
+      renderChannelTabs(q.by_channel);
+      renderTabs(chFilter ? (q.by_channel?.[chFilter] ?? {}) : q.counts);
       const box = $("queue"); box.textContent = "";
       const drafts = q.drafts || [];
-      if (!drafts.length) { box.appendChild(make("div", "empty", filter ? `No drafts are “${LABEL[filter].toLowerCase()}”.` : "No drafts yet.")); return; }
+      const where = chFilter ? ` for ${status?.channels?.[chFilter]?.name ?? chFilter}` : "";
+      if (!drafts.length) { box.appendChild(make("div", "empty", filter ? `No drafts${where} are “${LABEL[filter].toLowerCase()}”.` : `No drafts${where} yet.`)); return; }
       let day = "";
       for (const d of drafts) {
         const dd = String(d.created_at).slice(0, 10);
@@ -896,8 +916,10 @@
   // ---- create: a person's post, per channel, checked as it is typed (GET templates, POST check, POST compose) ----
   const CREATE_KINDS = [["custom", "Custom post"], ["key_levels", "Key-level map"], ["pattern", "Chart pattern"], ["daily_recap", "Daily recap"]];
   const MEDIA_NOTE = { image: "The chart card (TradingView's chart with our levels, and the Cryptophys panel) is made after saving.", video: "The 9:16 video made from the chart card is made after saving." };
-  const FORMAT_BADGE = { none: "Text only", image: "Image card", video: "Video" };
-  const cs = { kind: "custom", ref: null, chosen: null, texts: {}, textsB: {}, results: {}, timers: {}, started: false, dirty: false };
+  const FORMAT_BADGE = { none: "Text only", text: "Text only", image: "Image card", video: "Video" };
+  const cs = { kind: "custom", ref: null, chosen: null, texts: {}, textsB: {}, results: {}, timers: {}, formats: {}, started: false, dirty: false };
+  /** The format of this channel's post: a person's choice here, else the channel's setting (owner 2026-11-17). */
+  const formatOf = (c) => cs.formats[c] ?? status?.channels?.[c]?.format ?? "text";
 
   function createChannels() { return Object.entries(status?.channels ?? {}).filter(([, c]) => c.enabled).map(([id]) => id); }
 
@@ -966,7 +988,7 @@
       const title = make("div", "grow");
       title.appendChild(make("h2", null, info.name));
       const row = make("div", "row");
-      row.appendChild(badge("purple", FORMAT_BADGE[info.media] ?? info.media));
+      row.appendChild(badge("purple", FORMAT_BADGE[formatOf(c)] ?? formatOf(c)));
       row.appendChild(badge(info.configured ? "green" : "amber", info.configured ? "Account connected" : "No account yet"));
       title.appendChild(row);
       hd.appendChild(title);
@@ -984,7 +1006,18 @@
       ph.appendChild(make("span", "meta", `· ${info.name} preview`));
       const pt = make("div", "pt");
       pv.append(ph, pt);
-      if (info.media === "image" || info.media === "video") pv.appendChild(make("div", `pm ${info.media}`, MEDIA_NOTE[info.media]));
+      // The format, chosen before the post is made (only where the channel can post more than one).
+      if ((info.formats ?? []).length > 1) {
+        const seg = make("div", "seg"); seg.setAttribute("role", "radiogroup"); seg.setAttribute("aria-label", `${info.name} format`);
+        for (const f of info.formats) {
+          const b = make("button", f === formatOf(c) ? "on" : null, FORMAT_BADGE[f] ?? f); b.type = "button"; b.setAttribute("role", "radio"); b.setAttribute("aria-checked", String(f === formatOf(c)));
+          b.disabled = !canWrite;
+          b.addEventListener("click", () => { cs.formats[c] = f; renderEditors(); });
+          seg.appendChild(b);
+        }
+        bd.appendChild(seg);
+      }
+      if (formatOf(c) === "image" || formatOf(c) === "video") pv.appendChild(make("div", `pm ${formatOf(c)}`, MEDIA_NOTE[formatOf(c)] + (info.media === "none" ? " TradingView's credit is added to the text." : "")));
       const paint = () => {
         const limit = { threads: 500, instagram: 2200, x: 280, telegram: 4096, youtube: 5000, tiktok: 2200 }[c];
         count.textContent = `${ta.value.length}/${limit}`;
@@ -1055,7 +1088,7 @@
   async function sendCompose() {
     const b = $("composesend");
     $("cerr").textContent = ""; $("cdone").textContent = "";
-    const posts = [...cs.chosen].map((c) => ({ channel: c, text: cs.texts[c] ?? "", ...(cs.textsB[c] != null ? { text_b: cs.textsB[c] } : {}) }));
+    const posts = [...cs.chosen].map((c) => ({ channel: c, text: cs.texts[c] ?? "", format: formatOf(c), ...(cs.textsB[c] != null ? { text_b: cs.textsB[c] } : {}) }));
     if (!posts.length) { $("cerr").textContent = "Choose at least one channel."; return; }
     b.disabled = true;
     try {

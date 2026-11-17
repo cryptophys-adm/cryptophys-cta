@@ -6,7 +6,7 @@
 // (the guardian failed), approved (waits for publishing, or publishing is off), rejected, published, failed.
 // Each change is an event with who and why. An approval runs the guardian again on the stored text.
 import { checkContentDraft } from "./guardian.mjs";
-import { initialStatus } from "./channels.mjs";
+import { initialStatus, mediaStatusOf } from "./channels.mjs";
 
 export const DESK_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS drafts (
@@ -101,13 +101,23 @@ export function addDrafts(sql, drafts, { now = Date.now(), actor = "content-engi
 const shape = (r) => ({ ...r, decision_times: JSON.parse(r.decision_times || "[]"), guardian: JSON.parse(r.guardian || "{}"), overlay: r.overlay ? JSON.parse(r.overlay) : null, metrics: r.metrics ? JSON.parse(r.metrics) : null });
 
 /** The newest drafts, optionally of one status. */
-export function listDrafts(sql, { status = null, limit = 50 } = {}) {
+export function listDrafts(sql, { status = null, channel = null, limit = 50 } = {}) {
   ensureDesk(sql);
   const n = Math.min(200, Math.max(1, Number(limit) || 50));
-  const list = status && STATUSES.includes(status)
-    ? rows(sql, "SELECT d.*, m.data AS metrics, m.fetched_at AS metrics_at FROM drafts d LEFT JOIN post_metrics m ON m.draft_id = d.id WHERE d.status = ? ORDER BY d.created_at DESC LIMIT ?", status, n)
-    : rows(sql, "SELECT d.*, m.data AS metrics, m.fetched_at AS metrics_at FROM drafts d LEFT JOIN post_metrics m ON m.draft_id = d.id ORDER BY d.created_at DESC LIMIT ?", n);
+  // The queue by channel (owner 2026-11-17: "dikelompokan sesuai channel dengan tab masing masing") and by status.
+  const where = [], args = [];
+  if (status && STATUSES.includes(status)) { where.push("d.status = ?"); args.push(status); }
+  if (channel && /^[a-z]{1,20}$/.test(String(channel))) { where.push("d.channel = ?"); args.push(String(channel)); }
+  const list = rows(sql, `SELECT d.*, m.data AS metrics, m.fetched_at AS metrics_at FROM drafts d LEFT JOIN post_metrics m ON m.draft_id = d.id${where.length ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY d.created_at DESC LIMIT ?`, ...args, n);
   return list.map(shape);
+}
+
+/** Per channel, how many drafts each status holds ({ channel: { status: n } }): the queue's channel tabs. */
+export function channelStatusCounts(sql) {
+  ensureDesk(sql);
+  const out = {};
+  for (const r of rows(sql, "SELECT channel, status, COUNT(*) AS n FROM drafts GROUP BY channel, status")) (out[r.channel] ??= {})[r.status] = Number(r.n);
+  return out;
 }
 
 export function getDraft(sql, id) {
@@ -342,7 +352,7 @@ export function editDraft(sql, { id, text, actor, check }, { now = Date.now() } 
   if (t === d.text) return { ok: false, error: "nothing changed" };
   const r = check({ ...d, text: t });
   if (!r.guardian.pass) return { ok: false, error: "the guardian refused the new text; nothing was saved", guardian: r.guardian };
-  const status = initialStatus(d.channel);
+  const status = mediaStatusOf(d);
   sql.exec("UPDATE drafts SET text = ?, guardian = ?, status = ?, image_url = NULL WHERE id = ?", t, JSON.stringify(r.guardian), status, d.id);
   event(sql, { at: iso(now), id: d.id, action: "edited", actor: who, detail: `${d.text.length} → ${t.length} characters; ${d.status} → ${status}` });
   return { ok: true, id: d.id, status, guardian: r.guardian };
@@ -362,7 +372,7 @@ export function duplicateDraft(sql, { id, newId: stem, actor, check }, { now = D
   const r = check(d);
   if (!r.guardian.pass) return { ok: false, error: "the guardian refused the copy (check its text in the library); nothing was saved", guardian: r.guardian };
   const copy = { id: newId, kind: d.kind, channel: d.channel, text: d.text, image_url: null, window: d.window_from ? { from: d.window_from, to: d.window_to } : null,
-    decision_times: d.decision_times, guardian: r.guardian, overlay: d.overlay, status: initialStatus(d.channel) };
+    decision_times: d.decision_times, guardian: r.guardian, overlay: d.overlay, status: mediaStatusOf(d) };
   const added = addDrafts(sql, [copy], { now, actor: who });
   if (!added.length) return { ok: false, error: "the copy exists already" };
   event(sql, { at: iso(now), id: newId, action: "duplicated", actor: who, detail: `from ${d.id}` });

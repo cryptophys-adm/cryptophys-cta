@@ -128,7 +128,7 @@ const CONFIRMED = { chart: "H4", pattern: "descending_channel", name: "Descendin
 /** A linear price scale over a 1000 x 670 pane, like TradingView's (a higher price is higher on the chart). */
 const geoFor = (prices, { from = 3790, to = 3940, h = 670 } = {}) => ({ pane: { x: 1, y: 1, w: 1000, h }, xLast: 700, ys: prices.map((p) => ((to - p) / (to - from)) * h), range: { from, to } });
 
-test("the overlay data: the zones nearest the price and the pattern's own numbers, only on image channels", () => {
+test("the overlay data: the zones nearest the price and the pattern's own numbers, on every draft (a text channel may be switched to Image)", () => {
   const analysis = { ...ANALYSIS, price: 3884.7, zones: [
     { role: "supply", low: 3990, high: 3995 }, { role: "supply", low: 3915.5, high: 3921.2, strength: "strong" }, { role: "supply", low: 3898, high: 3902.4 },
     { role: "demand", low: 3861.1, high: 3866.8 }, { role: "demand", low: 3831, high: 3836.5 }, { role: "demand", low: 3700, high: 3705 }
@@ -138,7 +138,7 @@ test("the overlay data: the zones nearest the price and the pattern's own number
   assert.deepEqual(o.pattern, { name: "Descending Channel", chart: "H4", status: "confirmed", direction: "down", upper: 3905.2, lower: 3871.6, projection: 3820.4 });
   assert.equal(overlayOf(analysis, { pattern: { ...CONFIRMED, status: "forming" } }).pattern.projection, null, "a forming pattern has no projection");
   const drafts = analysisDrafts(analysis, { now: Date.parse("2026-11-17T06:09:30Z"), channels: ["threads", "instagram"], levelsRun: true });
-  for (const d of drafts) assert.equal(Boolean(d.overlay), d.channel === "instagram", `${d.id} overlay`);
+  for (const d of drafts) assert.ok(d.overlay, `${d.id} overlay: the card can be drawn for any channel's format`);
   const sql = sqlite();
   addDrafts(sql, drafts, { now: Date.parse("2026-11-17T06:09:30Z") });
   assert.deepEqual(getDraft(sql, drafts.find((d) => d.channel === "instagram" && d.kind === "pattern").id).overlay.pattern.projection, 3820.4, "the desk keeps the overlay");

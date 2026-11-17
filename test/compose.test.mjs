@@ -61,7 +61,7 @@ test("composing: every channel must pass or nothing is saved; drafts wait for ap
   const made = composeDrafts({ kind: "key_levels", posts: [{ channel: "threads", text: ok }, { channel: "instagram", text: insta }], now: NOW, id: "ab12cd34", overlay: () => overlayFor("key_levels", ANALYSIS) });
   assert.ok(made.ok, JSON.stringify(made));
   assert.deepEqual(made.drafts.map((d) => [d.id, d.status]), [["manual:2026-11-17:ab12cd34:threads", "pending"], ["manual:2026-11-17:ab12cd34:instagram", "needs_image"]]);
-  assert.equal(made.drafts[0].overlay, null, "a text channel has no card");
+  assert.equal(made.drafts[0].overlay.zones.length, 2, "a text channel keeps the card's numbers too, for when its format is Image");
   assert.equal(made.drafts[1].overlay.zones.length, 2, "the card draws the template's numbers, from the server's analysis");
   for (const [input, err] of [[[], /at least one/], [[{ channel: "myspace", text: ok }], /unknown channel/], [[{ channel: "threads", text: ok }, { channel: "threads", text: ok }], /twice/], [null, /at least one/]]) {
     assert.match(composeDrafts({ kind: "custom", posts: input, now: NOW, id: "x" }).error, err);

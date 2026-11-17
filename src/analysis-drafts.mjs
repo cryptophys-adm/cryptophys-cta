@@ -144,7 +144,7 @@ export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS
   for (const channel of channels.filter((c) => CHANNELS.includes(c))) {
     if (levelsRun) {
       const text = keyLevelsText(analysis, { channel });
-      if (text) out.push(draft({ id: `levels:${day}:${channel}`, kind: "key_levels", channel, text, now, overlay: hasImage(channel) ? overlayOf(analysis, { maxZones: 3 }) : null }));
+      if (text) out.push(draft({ id: `levels:${day}:${channel}`, kind: "key_levels", channel, text, now, overlay: overlayOf(analysis, { maxZones: 3 }) }));
     }
     let room = MAX_PATTERN_DRAFTS_PER_DAY - (Number(postedToday[channel]) || 0);
     for (const p of postablePatterns(analysis)) {
@@ -153,7 +153,7 @@ export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS
       if (known.has(id)) continue;
       const text = patternText(p, analysis, { channel });
       if (!text) continue;
-      out.push(draft({ id, kind: "pattern", channel, text, now, overlay: hasImage(channel) ? overlayOf(analysis, { pattern: p }) : null }));
+      out.push(draft({ id, kind: "pattern", channel, text, now, overlay: overlayOf(analysis, { pattern: p }) }));
       room -= 1;
     }
   }
