@@ -4,7 +4,8 @@
   const el = (id) => document.getElementById(id);
   const text = (node, value) => { if (node && value) node.textContent = value; return node; };
   const make = (tag, cls, value) => { const n = document.createElement(tag); if (cls) n.className = cls; if (value != null) n.textContent = value; return n; };
-  const when = (iso) => (iso ? new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }) + " UTC" : "");
+  // "17 Nov 2026, 5:27 PM UTC": UTC clock times in 12-hour form (owner 2026-11-17).
+  const when = (iso) => (iso ? `${new Date(iso).toLocaleDateString("en-GB", { dateStyle: "medium", timeZone: "UTC" })}, ${new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "UTC" })} UTC` : "");
   const day = (iso) => (iso ? new Date(iso).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) : "");
   const initial = (s) => String(s || "?").trim().charAt(0).toUpperCase();
   const KIND = { key_levels: "Key-level map", pattern: "Chart pattern", daily_recap: "Daily recap", custom: "Post" };
