@@ -13,7 +13,7 @@ import { ANALYSIS_DISCLAIMER } from "./analysis-drafts.mjs";
 import { effectiveSettings, normalizeSettings, draftingChannels, applySettings, wibDayStart, FORMATS, PLANNED_FORMATS, KINDS, KIND_NAMES, DAYS, TIMEZONE, MAX_PER_DAY, MAX_SLOTS } from "./settings.mjs";
 import { recheck } from "./desk.mjs";
 import { dueSlots, nextSlots } from "./scheduler.mjs";
-import { PROVIDERS, BOT_CHANNELS, CONNECT_SECRETS, appOf, newAttempt, authorizeUrl, exchangeCode, refreshX, identify, checkTelegram, redirectUri, sealToken, openToken, encryptionReady, STATE_RE, CALLBACK_PATH } from "./oauth.mjs";
+import { PROVIDERS, BOT_CHANNELS, CONNECT_SECRETS, appOf, newAttempt, authorizeUrl, exchangeCode, refreshX, identify, checkTelegram, telegramChatIdProblem, TELEGRAM_CHAT_NOT_FOUND, redirectUri, sealToken, openToken, encryptionReady, STATE_RE, CALLBACK_PATH } from "./oauth.mjs";
 import { bestTimes, abResult, evergreen, EVERGREEN_MIN_DAYS } from "./growth.mjs";
 import { linkHosts, normalizeLink, randomSlug, shortUrl, redirectTarget, GO_PATH, normalizeHashtagSet, MAX_SETS, normalizeMix, DEFAULT_MIX, MIX_KINDS, wibWeek, mixReport } from "./marketing.mjs";
 import { templateTexts, checkPost, composeDrafts, overlayFor, recapWindow, COMPOSE_KINDS, COMPOSE_KIND_NAMES } from "./compose.mjs";
@@ -547,13 +547,18 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
         // The account id of Threads and Instagram is optional: the provider's answer gives it.
         const missing = fields.filter((f) => (f === "user_id" ? value[f] && /\s/.test(value[f]) : !value[f] || /\s/.test(value[f])));
         if (missing.length) return json({ error: `missing or malformed: ${missing.join(", ")}` }, 400);
+        if (channel === "telegram") { const problem = telegramChatIdProblem(value.chat_id); if (problem) return json({ error: problem }, 400); }
         // Checked with the provider before it is kept: a token that does not work is never stored.
         let check;
         try {
           check = channel === "telegram"
             ? await checkTelegram({ bot_token: value.bot_token, chat_id: value.chat_id }, { fetcher: fetchImpl })
             : await identify(channel, { access_token: value.access_token }, { fetcher: fetchImpl });
-        } catch (e) { return json({ error: `the provider refused it: ${String(e?.message ?? e).slice(0, 160)}` }, 400); }
+        } catch (e) {
+          const msg = String(e?.message ?? e).slice(0, 160);
+          if (channel === "telegram" && /chat not found/i.test(msg)) return json({ error: TELEGRAM_CHAT_NOT_FOUND }, 400);
+          return json({ error: `the provider refused it: ${msg}` }, 400);
+        }
         if (channel === "telegram" && check?.can_post === false) return json({ error: `The bot cannot post in that chat (${check.chat_type ?? "chat"}, bot is ${check.status ?? "not a member"}). ${check.advice ?? "Make the bot an administrator with Post Messages, then press Set bot again."}` }, 400);
         if ("user_id" in value && !value.user_id) value.user_id = check?.id || "";
         if ("user_id" in value && !value.user_id) return json({ error: "the provider gave no account id: enter it" }, 400);
