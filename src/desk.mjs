@@ -3,7 +3,8 @@
 //
 // Statuses: pending (waits for approval), needs_image / needs_video (the channel needs media not made yet; cannot
 // be approved), blocked
-// (the guardian failed), approved (waits for publishing, or publishing is off), rejected, published, failed.
+// (the guardian failed), approved (waits for publishing, or publishing is off), rejected, published, failed, expired
+// (an analysis draft older than ANALYSIS_TTL_HOURS: its price levels have aged; owner 2026-11-17 "kadaluwarsa otomatis").
 // Each change is an event with who and why. An approval runs the guardian again on the stored text.
 import { checkContentDraft } from "./guardian.mjs";
 import { initialStatus, mediaStatusOf } from "./channels.mjs";
@@ -62,7 +63,7 @@ export const DESK_SCHEMA = [
 ];
 /** A media chunk: 1 MB of base64 per row (a Durable Object's SQLite row holds up to 2 MB). */
 export const MEDIA_CHUNK = 1_000_000;
-export const STATUSES = Object.freeze(["pending", "needs_image", "needs_video", "blocked", "approved", "rejected", "published", "failed"]);
+export const STATUSES = Object.freeze(["pending", "needs_image", "needs_video", "blocked", "approved", "rejected", "published", "failed", "expired"]);
 
 const rows = (sql, q, ...b) => sql.exec(q, ...b).toArray();
 const clip = (v, n) => (typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, n) : "");
@@ -77,8 +78,35 @@ export function recheck(d, { delayHours = 24, now = Date.now() } = {}) {
   return checkContentDraft({ text: d.text, chart: Boolean(d.image_url), decisionTimes: d.decision_times, delayHours, allowLevels: LEVEL_KINDS.includes(d.kind), now });
 }
 
+/**
+ * How long an analysis draft (the key-level map, a pattern post) may still be approved or published (owner
+ * 2026-11-17: "kadaluwarsa otomatis", after a 06:10 UTC map went out at 15:50 with "Price is inside the zone ...").
+ * Counted from when the draft was made from the analysis. A recap is not an analysis kind: it is about the past.
+ */
+export const ANALYSIS_TTL_HOURS = 2;
+const EXPIRABLE = Object.freeze(["pending", "needs_image", "needs_video", "blocked", "approved", "failed"]);
+export const EXPIRED_NOTE = `older than ${ANALYSIS_TTL_HOURS} hours: the price has moved since it was read; make a fresh one from Create`;
+/** Pure: whether a draft is an analysis whose levels have aged past the limit. */
+export function isStale(d, { now = Date.now(), ttlHours = ANALYSIS_TTL_HOURS } = {}) {
+  const made = Date.parse(d?.created_at ?? "");
+  return LEVEL_KINDS.includes(d?.kind) && Number.isFinite(made) && now - made > ttlHours * 3_600_000;
+}
+
 function event(sql, { at, id, action, actor, detail = null }) {
   sql.exec("INSERT INTO events (at, draft_id, action, actor, detail) VALUES (?, ?, ?, ?, ?)", at, id, action, actor, detail);
+}
+
+/** Marks every aged analysis draft that could still go out as expired (with an event). Returns the ids. */
+export function expireStale(sql, { now = Date.now(), ttlHours = ANALYSIS_TTL_HOURS } = {}) {
+  ensureDesk(sql);
+  const cutoff = iso(now - ttlHours * 3_600_000);
+  const marks = EXPIRABLE.map(() => "?").join(", ");
+  const ids = rows(sql, `SELECT id FROM drafts WHERE kind IN (${LEVEL_KINDS.map(() => "?").join(", ")}) AND status IN (${marks}) AND created_at < ?`, ...LEVEL_KINDS, ...EXPIRABLE, cutoff).map((r) => r.id);
+  for (const id of ids) {
+    sql.exec("UPDATE drafts SET status = 'expired' WHERE id = ?", id);
+    event(sql, { at: iso(now), id, action: "expired", actor: "content-engine", detail: EXPIRED_NOTE });
+  }
+  return ids;
 }
 
 /** Adds drafts once (by id); a draft already queued is left as it is. `actor`: the engine, or the person who wrote it (Create). Returns the ids added. */
@@ -144,6 +172,10 @@ export function decideDraft(sql, { id, decision, actor, reason = "", delayHours 
   const d = getDraft(sql, id);
   if (!d) return { ok: false, error: "no such draft" };
   if (d.status !== "pending") return { ok: false, error: `the draft is ${d.status}, not pending` };
+  if (decision === "approve" && isStale(d, { now })) {
+    expireStale(sql, { now });
+    return { ok: true, id: d.id, status: "expired", note: EXPIRED_NOTE, guardian: d.guardian };
+  }
   let status = decision === "approve" ? "approved" : "rejected";
   let guardian = d.guardian;
   if (decision === "approve") {
@@ -172,6 +204,7 @@ export function requeueFailed(sql, { id, actor }, { now = Date.now() } = {}) {
   ensureDesk(sql);
   const d = getDraft(sql, id);
   if (!d || d.status !== "failed") return false;
+  if (isStale(d, { now })) { expireStale(sql, { now }); return false; }
   sql.exec("UPDATE drafts SET status = 'approved', error = NULL, published_at = NULL WHERE id = ? AND status = 'failed'", String(id));
   event(sql, { at: iso(now), id: String(id), action: "requeued", actor: clip(String(actor ?? "person"), 120), detail: clip(String(d.error ?? ""), 300) });
   return true;
@@ -368,6 +401,8 @@ export function duplicateDraft(sql, { id, newId: stem, actor, check }, { now = D
   if (!who) return { ok: false, error: "actor is required" };
   const d = getDraft(sql, id);
   if (!d) return { ok: false, error: "no such draft" };
+  // A copy of an aged analysis would carry its old levels as new: refused (make a fresh one from Create).
+  if (isStale(d, { now })) return { ok: false, error: `this analysis is ${EXPIRED_NOTE}` };
   const newId = `${clip(stem, 120)}:${d.channel}`;
   const r = check(d);
   if (!r.guardian.pass) return { ok: false, error: "the guardian refused the copy (check its text in the library); nothing was saved", guardian: r.guardian };
@@ -408,8 +443,9 @@ export function listMedia(sql, { limit = 24, offset = 0 } = {}) {
 // ---- The scheduler (src/scheduler.mjs): one row per channel slot that ran, so a slot is never used twice ----
 
 /** The oldest approved draft of a channel (the next post of its schedule), or null. */
-export function nextApproved(sql, channel) {
+export function nextApproved(sql, channel, { now = Date.now() } = {}) {
   ensureDesk(sql);
+  expireStale(sql, { now });
   return rows(sql, "SELECT * FROM drafts WHERE status = 'approved' AND channel = ? ORDER BY COALESCE(decided_at, created_at) ASC, id LIMIT 1", channel).map(shape)[0] ?? null;
 }
 /** How many approved drafts each channel holds (waiting for publishing or for a slot). */

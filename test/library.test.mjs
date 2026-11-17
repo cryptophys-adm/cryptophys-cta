@@ -75,7 +75,11 @@ test("a copy of any draft (a published post reused): checked again, a new draft 
   assert.deepEqual([copy.text, copy.kind, copy.remote_id, copy.published_at], [getDraft(sql, "b:threads").text, "custom", null, null]);
   assert.deepEqual(draftEvents(sql, c.id).map((e) => [e.action, e.actor]).sort(), [["composed", "owner@example.com"], ["duplicated", "owner@example.com"]]);
   assert.equal(duplicateDraft(sql, { id: "b:threads", newId: "manual:2026-11-17:0a0b0c0d", actor: "o", check }, now).error, "the copy exists already");
-  const ig = duplicateDraft(sql, { id: "c:instagram", newId: "manual:2026-11-17:01020304", actor: "o", check }, now);
+  // c:instagram is a key-level map made at 02:00: at 09:00 it has aged, so a copy is refused (it would carry old levels);
+  // within the limit (03:00) the copy gets its own card.
+  const stale = duplicateDraft(sql, { id: "c:instagram", newId: "manual:2026-11-17:01020304", actor: "o", check }, now);
+  assert.equal(stale.ok, false); assert.match(stale.error, /older than 2 hours/);
+  const ig = duplicateDraft(sql, { id: "c:instagram", newId: "manual:2026-11-17:01020305", actor: "o", check }, { now: at("2026-11-17T03:00:00Z") });
   assert.equal(ig.status, "needs_image", "a copy gets its own card");
 });
 

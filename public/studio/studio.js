@@ -8,10 +8,10 @@
   const $ = (id) => document.getElementById(id);
   const make = (tag, cls, value) => { const n = document.createElement(tag); if (cls) n.className = cls; if (value != null) n.textContent = value; return n; };
   const when = (iso) => (iso ? `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC` : "—");
-  const LABEL = { pending: "Waiting for you", needs_image: "Needs image", needs_video: "Needs video", blocked: "Held by guardian", approved: "Approved", rejected: "Rejected", published: "Published", failed: "Failed to publish" };
-  const TONE = { pending: "blue", needs_image: "", needs_video: "", blocked: "red", approved: "amber", rejected: "", published: "green", failed: "red" };
+  const LABEL = { pending: "Waiting for you", needs_image: "Needs image", needs_video: "Needs video", blocked: "Held by guardian", approved: "Approved", rejected: "Rejected", published: "Published", failed: "Failed to publish", expired: "Expired (old analysis)" };
+  const TONE = { pending: "blue", needs_image: "", needs_video: "", blocked: "red", approved: "amber", rejected: "", published: "green", failed: "red", expired: "" };
   const KIND = { daily_recap: "Daily recap", key_levels: "Key-level map", pattern: "Chart pattern", custom: "Custom post" };
-  const FILTERS = ["pending", "needs_image", "needs_video", "blocked", "approved", "published", "rejected", "failed", ""];
+  const FILTERS = ["pending", "needs_image", "needs_video", "blocked", "approved", "published", "rejected", "failed", "expired", ""];
   const VIEWS = ["dashboard", "queue", "create", "library", "calendar", "media", "marketing", "performance", "channels"];
   const EDITABLE = ["pending", "blocked", "needs_image", "needs_video"];
   let chFilter = "",
@@ -26,8 +26,9 @@
   const showErr = (e) => { $("err").textContent = e ? String(e.message || e) : ""; };
   /** Why an approved post did not go out (publishDraft's held codes), in words; null when it went out. */
   const HELD = { publishing_off: "publishing is off", channel_not_publishing: "this channel does not publish yet", waiting_for_slot: "it waits for the channel's next posting slot",
-    publisher_not_built: "this channel's publisher is not built yet", account_not_configured: "the channel's account is not connected", not_approved: "the draft is not approved" };
-  const publishNote = (p) => (!p ? null : p.status === "published" ? "Published." : p.status === "failed" ? `Publishing failed: ${p.error ?? "see the draft"}` : p.held ? `Approved, not sent: ${HELD[p.held] ?? p.held}${p.next?.wib ? ` (${p.next.wib} WIB)` : ""}.` : null);
+    publisher_not_built: "this channel's publisher is not built yet", account_not_configured: "the channel's account is not connected", not_approved: "the draft is not approved",
+    expired: "the analysis is older than 2 hours (the price has moved); make a fresh one from Create" };
+  const publishNote = (p) => (!p ? null : p.status === "expired" ? `Expired, not sent: ${HELD.expired}.` : p.status === "published" ? "Published." : p.status === "failed" ? `Publishing failed: ${p.error ?? "see the draft"}` : p.held ? `Approved, not sent: ${HELD[p.held] ?? p.held}${p.next?.wib ? ` (${p.next.wib} WIB)` : ""}.` : null);
   const badge = (tone, value) => make("span", `badge${tone ? ` ${tone}` : ""}`, value);
   const posts = (n) => `${n} post${n === 1 ? "" : "s"}`;
   const fmt = (n) => (n == null ? "–" : n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(n));
@@ -509,12 +510,20 @@
       const decide = async (decision) => {
         if (decision === "reject" && !reason.value.trim()) { err.textContent = "a reason is required to reject"; return; }
         ok.disabled = no.disabled = true;
-        try { const r = await call("/api/studio/decide", "POST", { id: d.id, decision, reason: reason.value.trim() }); await refresh(); const m = publishNote(r?.publish); if (m) showErr(m); }
+        try { const r = await call("/api/studio/decide", "POST", { id: d.id, decision, reason: reason.value.trim() }); await refresh(); const m = r?.status === "expired" ? `Expired, not approved: ${HELD.expired}.` : publishNote(r?.publish); if (m) showErr(m); }
         catch (e) { err.textContent = e.message; ok.disabled = no.disabled = false; }
       };
       ok.addEventListener("click", () => decide("approve"));
       no.addEventListener("click", () => decide("reject"));
       actions.append(reason, no, ok);
+    }
+    // Expired (owner 2026-11-17: "kadaluwarsa otomatis"): an analysis older than 2 hours never goes out; a fresh one is
+    // made from Create with the latest analysis.
+    if (d.status === "expired" && canWrite) {
+      const fresh = make("button", "btn primary", "Make a fresh one"); fresh.type = "button";
+      fresh.title = "Open Create with the same kind, filled from the latest analysis";
+      fresh.addEventListener("click", () => { cs.kind = d.kind; cs.ref = null; cs.started = false; location.hash = "#create"; show(); });
+      actions.append(fresh);
     }
     // Publish now: an approved post that waits (approved while publishing was off, or between slots), or a failed one
     // tried again. An approver, on a channel that publishes.

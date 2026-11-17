@@ -8,7 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule } from "../src/app.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
-import { addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus } from "../src/desk.mjs";
+import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
@@ -47,7 +47,7 @@ function deskStub() {
     library: async (i) => searchDrafts(sql, i ?? {}), calendar: async (m) => calendarMonth(sql, m), mediaList: async (i) => listMedia(sql, i ?? {}),
     edit: async (i, now) => editDraft(sql, { ...i, check: (x) => editCheck(x, i.checkOptions ?? {}) }, { now }),
     duplicate: async (i, now) => duplicateDraft(sql, { ...i, check: (x) => editCheck(x, i.checkOptions ?? {}) }, { now }),
-    nextApproved: async (c) => nextApproved(sql, c), approvedCounts: async () => approvedCounts(sql), claimSlot: async (i, now) => claimSlot(sql, i, { now }),
+    nextApproved: async (c, now) => nextApproved(sql, c, { now: now ?? Date.now() }), expireStale: async (now) => expireStale(sql, { now: now ?? Date.now() }), approvedCounts: async () => approvedCounts(sql), claimSlot: async (i, now) => claimSlot(sql, i, { now }),
     slotOutcome: async (i) => { slotOutcome(sql, i); return true; }, recentSlots: async (n) => recentSlots(sql, { limit: n }),
     addLink: async (i, now) => addLink(sql, i, { now }), link: async (s) => getLink(sql, s), click: async (i, now) => { countClick(sql, i, { now }); return true; },
     links: async () => listLinks(sql), hashtagSets: async () => listHashtagSets(sql), saveHashtagSet: async (i, now) => saveHashtagSet(sql, i, { now }),
@@ -303,7 +303,8 @@ test("the performance report: metrics read for the last two weeks' posts, shown 
     { id: "p2", channel: "telegram", kind: "pattern", text: "Education only. Not financial advice.", status: "pending" },
     { id: "p3", channel: "threads", kind: "pattern", text: "Education only. Not financial advice.", status: "pending" }
   ], { now: at - 40 * 86_400_000 });
-  for (const id of ["p1", "p2", "p3"]) decideDraft(d.sql, { id, decision: "approve", actor: "owner" }, { now: at - 30 * 86_400_000 });
+  // Approved within the hour (an analysis older than 2 hours expires instead of being approved).
+  for (const id of ["p1", "p2", "p3"]) decideDraft(d.sql, { id, decision: "approve", actor: "owner" }, { now: at - 40 * 86_400_000 + 3_600_000 });
   recordPublish(d.sql, { id: "p1", remoteId: "th1" }, { now: at - 86_400_000 });
   recordPublish(d.sql, { id: "p2", remoteId: "tg1" }, { now: at - 86_400_000 });
   recordPublish(d.sql, { id: "p3", remoteId: "th-old" }, { now: at - 20 * 86_400_000 });
