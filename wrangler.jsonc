@@ -41,7 +41,9 @@
     "CONTENT_PUBLISH": "on",
     // The channels that publish while CONTENT_PUBLISH is "on". Unset or empty: none. One channel at a time, each in
     // an owner PR. Every post still waits for a person's approval in the studio.
-    "PUBLISH_CHANNELS": "telegram",
+    // Owner 2026-11-17: Telegram first; Threads after Telegram's first post went out (06:15 UTC) and @cryptophys.adm
+    // was connected by OAuth ("ya lanjutkan").
+    "PUBLISH_CHANNELS": "telegram,threads",
     "CONTENT_CHANNELS": "threads,instagram,x,telegram,youtube,tiktok",
     "PUBLIC_DELAY_HOURS": "24",
     "ACCESS_TEAM_DOMAIN": "cryptophys.cloudflareaccess.com",

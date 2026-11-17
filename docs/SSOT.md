@@ -190,7 +190,7 @@ the forms wait.
 Meta's endpoint shapes follow the published guides (Meta's own pages were unreachable from the build session).
 YouTube's resumable upload and TikTok's Direct Post and media transfer follow their guides, read on 2026-11-15; the
 two token refreshes (Google's token endpoint, TikTok's `/v2/oauth/token/`) follow the standard flows. One dry run and
-one real post on a test account per channel confirm them before `CONTENT_PUBLISH` is turned on. Owner 2026-11-17 (the POJK 6/2026 check done): `CONTENT_PUBLISH` "on" with `PUBLISH_CHANNELS` "telegram"; each other channel is added in its own owner PR once the one before works. Unset or empty `PUBLISH_CHANNELS` publishes nothing. Daily quotas are read
+one real post on a test account per channel confirm them before `CONTENT_PUBLISH` is turned on. Owner 2026-11-17 (the POJK 6/2026 check done): `CONTENT_PUBLISH` "on" with `PUBLISH_CHANNELS` "telegram", then "telegram,threads" (owner "ya lanjutkan", after Telegram's first post at 06:15 UTC and @cryptophys.adm connected by OAuth); each other channel is added in its own owner PR once the one before works. Unset or empty `PUBLISH_CHANNELS` publishes nothing. Daily quotas are read
 from Meta's limit endpoints at run time.
 
 Metrics (`src/insights.mjs`, `post_metrics` in the Desk): Threads (views, likes, replies, reposts, quotes, shares),
