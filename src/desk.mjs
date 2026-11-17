@@ -154,6 +154,19 @@ export function recordPublish(sql, { id, remoteId = null, error = null }, { now 
   return { status };
 }
 
+/**
+ * A failed post back to approved (owner 2026-11-17, "Publish now" in the studio), so a person can try it again.
+ * Only a failed draft; the error is kept in its events. Returns whether it moved.
+ */
+export function requeueFailed(sql, { id, actor }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  const d = getDraft(sql, id);
+  if (!d || d.status !== "failed") return false;
+  sql.exec("UPDATE drafts SET status = 'approved', error = NULL, published_at = NULL WHERE id = ? AND status = 'failed'", String(id));
+  event(sql, { at: iso(now), id: String(id), action: "requeued", actor: clip(String(actor ?? "person"), 120), detail: clip(String(d.error ?? ""), 300) });
+  return true;
+}
+
 /** Counts per status (health and the Nexus page). */
 export function deskCounts(sql) {
   ensureDesk(sql);

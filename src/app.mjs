@@ -407,7 +407,7 @@ async function rpc(fn, failure) {
 }
 
 const isStudio = (path) => path === "/studio" || path.startsWith("/studio/") || path.startsWith("/api/studio/");
-const STUDIO_ROUTES = ["/api/studio/connections", "/api/studio/connect/app", "/api/studio/connect/token", "/api/studio/connect/start", "/api/studio/connect/disconnect", "/api/studio/connect/check", "/api/studio/growth", "/api/studio/links", "/api/studio/hashtag-sets", "/api/studio/mix", "/api/studio/schedule", "/api/studio/library", "/api/studio/edit", "/api/studio/duplicate", "/api/studio/calendar", "/api/studio/media-library", "/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
+const STUDIO_ROUTES = ["/api/studio/connections", "/api/studio/connect/app", "/api/studio/connect/token", "/api/studio/connect/start", "/api/studio/connect/disconnect", "/api/studio/connect/check", "/api/studio/growth", "/api/studio/links", "/api/studio/hashtag-sets", "/api/studio/mix", "/api/studio/schedule", "/api/studio/library", "/api/studio/edit", "/api/studio/duplicate", "/api/studio/calendar", "/api/studio/media-library", "/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/publish-now", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
 /** The public origin of the cards Instagram fetches (GET /media/<id>.jpg). */
 export const originOf = (env) => String(env?.PUBLIC_ORIGIN || "https://cta.cryptophys.work").replace(/\/+$/, "");
 const MEDIA_PATH = /^\/media\/([0-9a-f]{32})\.(jpg|webm)$/;
@@ -523,6 +523,27 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
           if (!out.ok || out.status !== "approved") return out;
           return { ...out, publish: await publishDraft(env, await desk(env).get(out.id), { now: at }) };
         }, "decide_failed");
+      }
+      // Publish now (owner 2026-11-17: an approval made while publishing was off waited with no way out): an approver
+      // sends one approved (or failed, tried again) draft now, slots or not. Only a channel in PUBLISH_CHANNELS.
+      if (route === "POST /api/studio/publish-now") {
+        const r = await personJson(request, url, identity);
+        if (r.response) return r.response;
+        const denied = approverOnly(role);
+        if (denied) return denied;
+        const id = typeof r.body.id === "string" ? r.body.id.slice(0, 160) : "";
+        if (!id) return json({ error: "id is required" }, 400);
+        return rpc(async () => {
+          const at = now ? now * 1000 : Date.now();
+          const d = desk(env);
+          let draft = await d.get(id);
+          if (!draft) return { ok: false, error: "no such draft" };
+          if (!publishesTo(env, draft.channel)) return { ok: false, error: `${CHANNEL_SPECS[draft.channel]?.name ?? draft.channel} does not publish yet (PUBLISH_CHANNELS)` };
+          if (draft.status === "failed") { await d.requeue({ id, actor: identity.subject }, at); draft = await d.get(id); }
+          if (draft.status !== "approved") return { ok: false, error: `only an approved or failed draft can be sent (this one is ${draft.status})` };
+          const out = await publishDraft(env, draft, { now: at, slot: true, fetcher: fetchImpl });
+          return { ok: out?.status === "published", ...out };
+        }, "publish_failed");
       }
       // Channel accounts (src/oauth.mjs): Connect, Disconnect and Check by an approver; the status for anyone signed in.
       if (route === "GET /api/studio/connections") return rpc(async () => ({ ...(await studioConnections(env)), can_connect: role === "approver", role, who: identity.subject ?? null }), "connections_failed");
