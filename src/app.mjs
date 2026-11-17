@@ -530,7 +530,7 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
         const channel = typeof b.channel === "string" ? b.channel : "";
         if (!CHANNELS.includes(channel)) return json({ error: "unknown channel" }, 400);
         const at = now ? now * 1000 : Date.now();
-        if (!(await encryptionReady(env))) return json({ error: "TOKEN_ENC_KEY is not set yet: the deploy sets it once (32 random bytes); nothing is stored unencrypted" }, 409);
+        if (!(await encryptionReady(env))) return json({ error: "TOKEN_ENC_KEY is not set yet: the platform sets it once (32 random bytes, base64); nothing is stored unencrypted" }, 409);
         const str = (v, max) => (typeof v === "string" ? v.trim() : "").slice(0, max);
         if (route === "POST /api/studio/connect/app") {
           if (!PROVIDERS[channel]) return json({ error: `${CHANNEL_SPECS[channel].name} has no OAuth app: use Set bot` }, 400);
@@ -600,7 +600,7 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
         if (BOT_CHANNELS.includes(channel)) return json({ error: "Telegram connects with a bot token (Set bot), not OAuth" }, 400);
         const app = await appFor(env, channel);
         if (!app) return json({ error: `the ${PROVIDERS[channel].name} app is not set up: enter its ${PROVIDERS[channel].app.id} and ${PROVIDERS[channel].app.secret} with "Set up app"` }, 400);
-        if (!(await encryptionReady(env))) return json({ error: "TOKEN_ENC_KEY is not set yet: the deploy sets it once (32 random bytes), before any account is connected" }, 400);
+        if (!(await encryptionReady(env))) return json({ error: "TOKEN_ENC_KEY is not set yet: the platform sets it once (32 random bytes, base64) before any account is connected" }, 400);
         return rpc(async () => {
           const attempt = await newAttempt(channel);
           await desk(env).putOAuthState({ state: attempt.state, channel, verifier: attempt.verifier, actor: identity.subject }, at);

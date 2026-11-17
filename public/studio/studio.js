@@ -133,7 +133,7 @@
     if (x.scopes) meta.push(`scopes: ${x.scopes}`);
     if (x.method === "oauth" && x.app_source) meta.push(x.app_source === "studio" ? `app entered in the studio${x.app_hint ? ` (${x.app_hint})` : ""}` : "app set by the platform");
     if (meta.length) f.appendChild(make("div", "hint", meta.join(" · ")));
-    if (!conns.token_key_set) f.appendChild(make("div", "hint warnline", `The token key (${conns.key_secret}) is not set yet: the next deploy sets it once. Until then nothing can be stored, so Connect and the forms wait.`));
+    if (!conns.token_key_set) f.appendChild(make("div", "hint warnline", `The token key (${conns.key_secret}) is not set yet: the platform sets it once (32 random bytes, base64). Until then nothing can be stored, so Connect and the forms wait.`));
     const out = make("div", "hint"); const err = make("div", "err");
     const acts = make("div", "toolbar");
     const forms = make("div", "acctforms");

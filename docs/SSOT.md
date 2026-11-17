@@ -181,9 +181,9 @@ POST-only to `/api/studio/connect/app` or `/api/studio/connect/token` (an approv
 checked with the provider first (a token or bot that does not work is never kept), sealed with `TOKEN_ENC_KEY` in the
 Desk table `connect_creds`, and never echoed: answers and the page carry a masked hint (last 4 characters) at most. The
 platform's secrets win over the app entered in the studio; a pasted token or bot wins over the platform's account
-secrets; an OAuth connection and a pasted token replace each other; Disconnect deletes both. `TOKEN_ENC_KEY` is set
-once by the deploy workflow when it is missing (generated in the runner, never printed, never overwritten); until it
-exists nothing is stored and the forms wait.
+secrets; an OAuth connection and a pasted token replace each other; Disconnect deletes both. `TOKEN_ENC_KEY` stays a
+Worker secret set once through the platform (the deploy workflow sets no secret); until it exists nothing is stored and
+the forms wait.
 
 Meta's endpoint shapes follow the published guides (Meta's own pages were unreachable from the build session).
 YouTube's resumable upload and TikTok's Direct Post and media transfer follow their guides, read on 2026-11-15; the
