@@ -810,7 +810,13 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
       if (route === "POST /api/studio/draft-now") {
         const r = await personJson(request, url, identity, 256);
         if (r.response) return r.response;
-        return rpc(async () => ({ recap: await draftDay(env), analysis: await draftAnalysis(env) }), "draft_failed");
+        // The cards too, as the scheduled run does right after drafting (2026-11-17: drafts made here waited for the next
+        // hourly run with "Needs image", and an analysis expires 2 hours after it was read).
+        return rpc(async () => {
+          const at = now ? now * 1000 : Date.now();
+          const recap = await draftDay(env), analysis = await draftAnalysis(env);
+          return { recap, analysis, cards: await renderImages(env, { launch, now: at }) };
+        }, "draft_failed");
       }
       if (STUDIO_ROUTES.includes(path)) return json({ error: "method_not_allowed" }, 405);
       return json({ error: "not_found" }, 404);

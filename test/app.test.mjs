@@ -123,6 +123,7 @@ test("drafting and deciding: drafts from the projection, an approval held while 
   const person = await jwt({ email: "owner@example.com" });
   const made = await (await handle(req("/api/studio/draft-now", { token: person, method: "POST", body: {} }), e, opts)).json();
   assert.ok(made.recap.added.length >= 1, JSON.stringify(made));
+  assert.deepEqual(made.cards, { status: "no_browser" }, "Draft now makes the cards too (here: no browser bound)");
   const list = await (await handle(req("/api/studio/drafts?status=pending", { token: person }), e, opts)).json();
   assert.ok(list.drafts.length >= 1);
   const id = list.drafts[0].id;
