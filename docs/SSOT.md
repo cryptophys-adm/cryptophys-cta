@@ -101,6 +101,8 @@ rest of the host stays public.
 | `9 * * * 1-5` | pattern posts (confirmed on H1/H4/D1, forming on H4/D1; once each; at most four a day per channel); at 06:09 the key-level map |
 | `17 22 * * 2-6` | the recap of the trading day that ended 24 hours earlier; token refresh (only while publishing is on: Threads and Instagram long-lived tokens, TikTok's rotating refresh token); then the metrics of the last 14 days' posts (`src/insights.mjs`; only while publishing is on) |
 
+**Expiry (owner 2026-11-17: "kadaluwarsa otomatis").** An analysis draft (`key_levels`, `pattern`) expires `ANALYSIS_TTL_HOURS` (2) after it was made: each scheduler run (every 5 minutes, publishing on or off), an approval, a send again, a slot's next draft and the publisher itself mark it `expired` (with an event), and a copy of it is refused. The studio shows it as "Expired (old analysis)" with "Make a fresh one" (Create, the same kind, the latest analysis). The cause: a 06:10 UTC map went out at 15:50 with "Price is inside the zone ...". A recap is about the past and does not expire.
+
 ## 4. Channels
 
 | Channel | Media | Publisher | Secrets |

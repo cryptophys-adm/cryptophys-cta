@@ -11,7 +11,7 @@ import { DISCLAIMER } from "./drafts.mjs";
 import { postInsights, performanceReport, insightChannelsOf, INSIGHTS_DAYS } from "./insights.mjs";
 import { ANALYSIS_DISCLAIMER } from "./analysis-drafts.mjs";
 import { effectiveSettings, normalizeSettings, draftingChannels, applySettings, withFormat, wibDayStart, FORMATS, PLANNED_FORMATS, KINDS, KIND_NAMES, DAYS, TIMEZONE, MAX_PER_DAY, MAX_SLOTS } from "./settings.mjs";
-import { recheck } from "./desk.mjs";
+import { recheck, isStale, EXPIRED_NOTE } from "./desk.mjs";
 import { dueSlots, nextSlots } from "./scheduler.mjs";
 import { PROVIDERS, BOT_CHANNELS, CONNECT_SECRETS, appOf, newAttempt, authorizeUrl, exchangeCode, refreshX, identify, checkTelegram, telegramChatIdProblem, TELEGRAM_CHAT_NOT_FOUND, redirectUri, sealToken, openToken, encryptionReady, STATE_RE, CALLBACK_PATH } from "./oauth.mjs";
 import { bestTimes, abResult, evergreen, EVERGREEN_MIN_DAYS } from "./growth.mjs";
@@ -151,6 +151,8 @@ export async function publishDraft(env, draft, { now = Date.now(), fetcher, slot
   if (!publishOn(env)) return { status: "approved", held: "publishing_off" };
   if (!publishesTo(env, draft?.channel)) return { status: "approved", held: "channel_not_publishing" };
   if (draft?.status !== "approved") return { status: draft?.status ?? "missing", held: "not_approved" };
+  // An analysis older than ANALYSIS_TTL_HOURS never goes out (owner 2026-11-17: "kadaluwarsa otomatis").
+  if (isStale(draft, { now })) { await desk(env).expireStale(now); return { status: "expired", held: "expired", note: EXPIRED_NOTE }; }
   // A channel with posting slots publishes in its slots only (src/scheduler.mjs), never at the approval.
   if (!slot) {
     const { settings } = await channelSettings(env);
@@ -224,6 +226,8 @@ export async function draftAnalysis(env, { now = Date.now() } = {}) {
  * is off. Never throws for one channel's failure (publishDraft records a failed post).
  */
 export async function runSchedule(env, { now = Date.now(), fetcher } = {}) {
+  // Aged analysis drafts are marked expired every run, publishing on or off, so the studio shows them as such.
+  try { await desk(env).expireStale(now); } catch { /* the next run tries again */ }
   if (!publishOn(env)) return { status: "publishing_off" };
   const { settings } = await channelSettings(env, { strict: true });
   const d = desk(env);
@@ -233,7 +237,7 @@ export async function runSchedule(env, { now = Date.now(), fetcher } = {}) {
     if (!s?.enabled || !s.schedule?.length || !publishesTo(env, channel)) continue;
     for (const slot of dueSlots(s.schedule, now)) {
       if (!(await d.claimSlot({ key: slot.key, channel, at: slot.at }, now))) continue;
-      const draft = await d.nextApproved(channel);
+      const draft = await d.nextApproved(channel, now);
       if (!draft) { await d.slotOutcome({ key: slot.key, channel, outcome: "empty" }); slots.push({ channel, slot: slot.key, outcome: "empty" }); continue; }
       const r = await publishDraft(env, draft, { now, fetcher, slot: true });
       const outcome = r?.status ?? "unknown";
@@ -248,12 +252,13 @@ export async function runSchedule(env, { now = Date.now(), fetcher } = {}) {
 export async function studioSchedule(env, { now = Date.now() } = {}) {
   const { settings } = await channelSettings(env, { strict: true });
   const d = desk(env);
+  try { await d.expireStale(now); } catch { /* shown as approved until the next run */ }
   const waiting = await d.approvedCounts();
   const channels = {};
   for (const c of channelsOf(env)) {
     const s = settings[c];
     const next = s?.enabled && s.schedule?.length ? nextSlots(s.schedule, now, 3) : [];
-    const draft = s?.schedule?.length ? await d.nextApproved(c) : null;
+    const draft = s?.schedule?.length ? await d.nextApproved(c, now) : null;
     channels[c] = { scheduled: Boolean(s?.schedule?.length), enabled: Boolean(s?.enabled), next: next.map((x) => ({ at: new Date(x.at).toISOString(), wib: x.key })),
       waiting: waiting[c] ?? 0, next_draft: draft ? { id: draft.id, kind: draft.kind, text: draft.text.slice(0, 160) } : null };
   }

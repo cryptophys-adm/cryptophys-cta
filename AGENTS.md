@@ -20,6 +20,9 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
    `PUBLISH_CHANNELS` only, starting with `telegram`, then `threads` (owner "ya lanjutkan", after Telegram's first post); another channel is added in its own owner PR after the one
    before it works. `PUBLISH_CHANNELS` unset or empty publishes nothing. Every draft waits in the studio for a person's approval; an approval
    runs the guardian again. A service token can read the studio, never decide.
+   An analysis draft (the key-level map, a pattern post) expires 2 hours after it was made from the analysis (owner
+   2026-11-17: "kadaluwarsa otomatis"): it is never approved, sent again, copied or published after that; a fresh one is
+   made from Create with the latest analysis. A recap is about the past and does not expire.
 3. **Content policy (owner 2026-11-14):**
    - all public content in English (owner 2026-11-15: "Semua content in english"): posts, captions, cards, the
      public page; the studio UI is English too (owner 2026-11-17: "all in english, hanya percakapan owner dengan
