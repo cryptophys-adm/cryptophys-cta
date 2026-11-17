@@ -554,7 +554,7 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
             ? await checkTelegram({ bot_token: value.bot_token, chat_id: value.chat_id }, { fetcher: fetchImpl })
             : await identify(channel, { access_token: value.access_token }, { fetcher: fetchImpl });
         } catch (e) { return json({ error: `the provider refused it: ${String(e?.message ?? e).slice(0, 160)}` }, 400); }
-        if (channel === "telegram" && check?.can_post === false) return json({ error: `the bot cannot post to that chat (${check.status ?? "not an administrator"})` }, 400);
+        if (channel === "telegram" && check?.can_post === false) return json({ error: `The bot cannot post in that chat (${check.chat_type ?? "chat"}, bot is ${check.status ?? "not a member"}). ${check.advice ?? "Make the bot an administrator with Post Messages, then press Set bot again."}` }, 400);
         if ("user_id" in value && !value.user_id) value.user_id = check?.id || "";
         if ("user_id" in value && !value.user_id) return json({ error: "the provider gave no account id: enter it" }, 400);
         const hint = hintOf(value.access_token ?? value.bot_token);

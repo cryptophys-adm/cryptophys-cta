@@ -155,8 +155,8 @@ export async function identify(channel, account, { fetcher = (...a) => fetch(...
 }
 
 /**
- * Telegram: the bot behind TELEGRAM_BOT_TOKEN, and whether it can post in TELEGRAM_CHAT_ID (an administrator with
- * the right to post). Read-only Bot API calls; returns { ok, bot, chat, status, can_post } without the token.
+ * Telegram: the bot behind TELEGRAM_BOT_TOKEN, and whether it can post in TELEGRAM_CHAT_ID (telegramCanPost: by chat
+ * type). Read-only Bot API calls; returns { ok, bot, chat, chat_type, status, can_post, advice } without the token.
  */
 export async function checkTelegram({ bot_token, chat_id }, { fetcher = (...a) => fetch(...a) } = {}) {
   const call = async (method, params = {}) => {
@@ -168,8 +168,33 @@ export async function checkTelegram({ bot_token, chat_id }, { fetcher = (...a) =
   const me = await call("getMe");
   const chat = await call("getChat", { chat_id });
   const member = await call("getChatMember", { chat_id, user_id: String(me.id) });
-  const can_post = member?.status === "creator" || (member?.status === "administrator" && member?.can_post_messages !== false);
-  return { ok: can_post, bot: me.username ? `@${me.username}` : null, chat: chat?.title ?? chat?.username ?? null, status: member?.status ?? null, can_post };
+  const verdict = telegramCanPost(chat, member);
+  return { ok: verdict.can_post, bot: me.username ? `@${me.username}` : null, chat: chat?.title ?? chat?.username ?? null, chat_type: chat?.type ?? null, status: member?.status ?? null, can_post: verdict.can_post, advice: verdict.advice };
+}
+
+/**
+ * Pure: whether the bot can post, by chat type (2026-11-17: a group's plain member was refused). A channel takes an
+ * administrator with "Post Messages" (or the creator). A group or supergroup takes any member the group lets send
+ * messages: creator, administrator, member (unless the group's default permissions forbid sending), or restricted
+ * with can_send_messages. The advice says what to change in Telegram, never a raw status.
+ */
+export function telegramCanPost(chat, member) {
+  const status = member?.status ?? null;
+  const type = chat?.type ?? null;
+  if (status === "creator") return { can_post: true, advice: null };
+  if (status === "left" || status === "kicked") return { can_post: false, advice: "The bot is not in that chat: add it, then press Set bot again." };
+  if (type === "channel" || type == null) {
+    if (status === "administrator" && member?.can_post_messages !== false) return { can_post: true, advice: null };
+    if (status === "administrator") return { can_post: false, advice: "The bot is an administrator without \"Post Messages\": in the channel's Administrators, turn on Post Messages for the bot, then press Set bot again." };
+    return { can_post: false, advice: "In a channel only administrators post: in the channel's Administrators, add the bot with \"Post Messages\" on, then press Set bot again." };
+  }
+  if (type === "group" || type === "supergroup") {
+    if (status === "administrator") return { can_post: true, advice: null };
+    if (status === "member" && chat?.permissions?.can_send_messages !== false) return { can_post: true, advice: null };
+    if (status === "restricted" && member?.is_member !== false && member?.can_send_messages !== false) return { can_post: true, advice: null };
+    return { can_post: false, advice: "The group does not let the bot send messages: make it an administrator, or allow members to send messages, then press Set bot again." };
+  }
+  return { can_post: false, advice: "That chat id is not a channel or a group the bot can post in: use the channel's @username or its -100… id." };
 }
 
 // ---- token encryption at rest (AES-GCM, TOKEN_ENC_KEY: 32 bytes, base64) ----

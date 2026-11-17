@@ -245,7 +245,7 @@
           const r = await call("/api/studio/connect/check", "POST", { channel: c });
           if (r.ok === false) throw new Error(r.error || "check failed");
           const k = r.check || {};
-          out.textContent = c === "telegram" ? `Bot ${k.bot ?? "?"} in ${k.chat ?? "?"}: ${k.can_post ? "can post" : `cannot post (${k.status ?? "?"})`}` : `Works: ${k.name ?? k.id ?? "account found"}`;
+          out.textContent = c === "telegram" ? `Bot ${k.bot ?? "?"} in ${k.chat ?? "?"}: ${k.can_post ? "can post" : `cannot post. ${k.advice ?? `(${k.status ?? "?"})`}`}` : `Works: ${k.name ?? k.id ?? "account found"}`;
         } catch (e) { err.textContent = e.message; }
         finally { chk.disabled = false; }
       });

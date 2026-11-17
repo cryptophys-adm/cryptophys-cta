@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { PROVIDERS, authorizeUrl, newAttempt, exchangeCode, refreshX, checkTelegram, sealToken, openToken, encryptionReady, appOf, STATE_RE, redirectUri } from "../src/oauth.mjs";
+import { PROVIDERS, authorizeUrl, newAttempt, exchangeCode, refreshX, checkTelegram, telegramCanPost, sealToken, openToken, encryptionReady, appOf, STATE_RE, redirectUri } from "../src/oauth.mjs";
 import { putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, storedToken } from "../src/desk.mjs";
 
 const KEY = Buffer.alloc(32, 7).toString("base64");
@@ -71,12 +71,12 @@ test("the code exchange per provider: server-side, the long-lived token for Meta
   assert.deepEqual([tk.account_id, tk.account_name, tk.refresh_token], ["o1", "CTA", "tr"]);
 });
 
-test("Telegram: the bot can post only as the channel's creator or an administrator allowed to post", async () => {
+test("Telegram: in a channel the bot posts as the creator or an administrator allowed to post", async () => {
   const bot = (member) => async (url) => {
     const m = /\/(getMe|getChat|getChatMember)\?/.exec(String(url))[1];
     return json({ ok: true, result: m === "getMe" ? { id: 9, username: "cta_bot" } : m === "getChat" ? { title: "XAUUSD AI" } : member });
   };
-  assert.deepEqual(await checkTelegram({ bot_token: "123:SECRET", chat_id: "@c" }, { fetcher: bot({ status: "administrator", can_post_messages: true }) }), { ok: true, bot: "@cta_bot", chat: "XAUUSD AI", status: "administrator", can_post: true });
+  assert.deepEqual(await checkTelegram({ bot_token: "123:SECRET", chat_id: "@c" }, { fetcher: bot({ status: "administrator", can_post_messages: true }) }), { ok: true, bot: "@cta_bot", chat: "XAUUSD AI", chat_type: null, status: "administrator", can_post: true, advice: null });
   assert.equal((await checkTelegram({ bot_token: "t", chat_id: "@c" }, { fetcher: bot({ status: "member" }) })).can_post, false);
   assert.ok(!JSON.stringify(await checkTelegram({ bot_token: "123:SECRET", chat_id: "@c" }, { fetcher: bot({ status: "creator" }) })).includes("SECRET"));
 });
@@ -115,4 +115,20 @@ test("without the token key the account buttons stay clickable: each opens its f
   assert.match(js, /save\.disabled = locked/, "only Save waits: nothing is stored unencrypted");
   assert.match(js, /if \(locked\) \{ err\.textContent = keyMissing; return; \}/, "Connect explains instead of starting a sign-in that cannot be stored");
   assert.match(js, /only an approver \(STUDIO_APPROVERS\) connects accounts/, "a non-approver is told who is signed in and why");
+});
+
+test("Telegram by chat type (2026-11-17): a group's member posts, a channel's member does not; the advice says what to change", () => {
+  const ch = { type: "channel" }, grp = { type: "supergroup" };
+  assert.equal(telegramCanPost(ch, { status: "member" }).can_post, false);
+  assert.match(telegramCanPost(ch, { status: "member" }).advice, /administrators.*"Post Messages"/i);
+  assert.match(telegramCanPost(ch, { status: "administrator", can_post_messages: false }).advice, /turn on Post Messages/);
+  assert.equal(telegramCanPost(ch, { status: "administrator", can_post_messages: true }).can_post, true);
+  assert.equal(telegramCanPost(grp, { status: "member" }).can_post, true, "a plain member posts in a group");
+  assert.equal(telegramCanPost({ type: "group" }, { status: "administrator" }).can_post, true);
+  assert.equal(telegramCanPost({ type: "supergroup", permissions: { can_send_messages: false } }, { status: "member" }).can_post, false, "unless the group forbids members to send");
+  assert.equal(telegramCanPost(grp, { status: "restricted", is_member: true, can_send_messages: true }).can_post, true);
+  assert.equal(telegramCanPost(grp, { status: "restricted", is_member: true, can_send_messages: false }).can_post, false);
+  assert.match(telegramCanPost(grp, { status: "left" }).advice, /not in that chat/);
+  assert.equal(telegramCanPost({ type: "private" }, { status: "member" }).can_post, false);
+  for (const [c, m] of [[ch, { status: "member" }], [grp, { status: "kicked" }]]) assert.doesNotMatch(telegramCanPost(c, m).advice, /^\(?member\)?$/, "never a raw status");
 });
