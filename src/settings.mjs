@@ -24,11 +24,11 @@ const MEDIA_FORMAT = { none: "text", image: "image", video: "video" };
  * What each channel's publisher can post today: its own media first (the default), then what a person may choose
  * instead (owner 2026-11-17: Telegram with the card image, "user/owner/admin yang menentukan" the format).
  */
-const EXTRA_FORMATS = { telegram: ["image"] };
+const EXTRA_FORMATS = { telegram: ["image"], threads: ["image"], x: ["image"] };
 export const FORMATS = Object.freeze(Object.fromEntries(CHANNELS.map((c) => [c, Object.freeze([MEDIA_FORMAT[CHANNEL_SPECS[c].media], ...(EXTRA_FORMATS[c] ?? [])])])));
 /** Formats the channel's API allows but our publisher does not post yet (shown as planned, refused when saved). */
 export const PLANNED_FORMATS = Object.freeze({
-  threads: Object.freeze(["image", "video"]), instagram: Object.freeze(["video"]), x: Object.freeze(["image", "video"]),
+  threads: Object.freeze(["video"]), instagram: Object.freeze(["video"]), x: Object.freeze(["video"]),
   telegram: Object.freeze(["video"]), youtube: Object.freeze([]), tiktok: Object.freeze([])
 });
 export const MAX_SLOTS = 12;

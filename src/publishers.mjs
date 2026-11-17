@@ -45,12 +45,15 @@ async function waitReady(fetcher, url, token, field, { sleep, polls = STATUS_POL
  * One Threads text post. `account` is { user_id, access_token }. Returns { remote_id } (the published post's id),
  * or { dry_run: true, requests } when `dryRun`.
  */
-export async function publishThreads({ account, text, fetcher = (...a) => fetch(...a), dryRun = false, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export async function publishThreads({ account, text, imageUrl = null, fetcher = (...a) => fetch(...a), dryRun = false, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const uid = String(account?.user_id ?? "");
-  const create = { url: `${THREADS_BASE}/${uid}/threads`, params: { media_type: "TEXT", text, access_token: account?.access_token } };
+  // With the card (owner 2026-11-17, Threads set to Image): an IMAGE container from the card's public JPEG URL,
+  // served once its draft is approved (as for Instagram).
+  const create = { url: `${THREADS_BASE}/${uid}/threads`, params: imageUrl ? { media_type: "IMAGE", image_url: imageUrl, text, access_token: account?.access_token } : { media_type: "TEXT", text, access_token: account?.access_token } };
   const publish = { url: `${THREADS_BASE}/${uid}/threads_publish`, params: { creation_id: "<container>", access_token: account?.access_token } };
   if (dryRun) return { dry_run: true, requests: [create, publish].map((r) => ({ method: "POST", url: r.url, params: redact(r.params) })) };
   if (!uid || !account?.access_token) throw new Error("threads account not configured");
+  if (imageUrl && !/^https:\/\//.test(String(imageUrl))) throw new Error("threads needs a public https image URL");
   const container = await call(fetcher, "POST", create.url, create.params);
   await waitReady(fetcher, `${THREADS_BASE}/${container.id}`, account.access_token, "status", { sleep });
   const post = await call(fetcher, "POST", publish.url, { ...publish.params, creation_id: container.id });
@@ -104,10 +107,25 @@ export async function refreshToken({ channel, token, fetcher = (...a) => fetch(.
  * Billed per post by X (owner's account). Returns { remote_id } or a dry run.
  */
 export const X_BASE = "https://api.x.com/2";
-export async function publishX({ account, text, fetcher = (...a) => fetch(...a), dryRun = false }) {
+export async function publishX({ account, text, image = null, fetcher = (...a) => fetch(...a), dryRun = false }) {
   const req = { method: "POST", url: `${X_BASE}/tweets`, body: { text } };
-  if (dryRun) return { dry_run: true, requests: [{ ...req, headers: { authorization: "Bearer [token]" } }] };
+  // With the card (owner 2026-11-17, X set to Image): the JPEG goes first to POST /2/media/upload (multipart, media
+  // category tweet_image; the user token needs media.write), then the post carries its media id.
+  const upload = { method: "POST", url: `${X_BASE}/media/upload`, body: { media: "[card.jpg]", media_category: "tweet_image" } };
+  if (dryRun) return { dry_run: true, requests: [...(image ? [{ ...upload, headers: { authorization: "Bearer [token]" } }] : []), { ...req, ...(image ? { body: { text, media: { media_ids: ["<media id>"] } } } : {}), headers: { authorization: "Bearer [token]" } }] };
   if (!account?.access_token) throw new Error("x account not configured");
+  if (image) {
+    const { bytes, mime } = await image();
+    const form = new FormData();
+    form.append("media", new Blob([bytes], { type: mime || "image/jpeg" }), "card.jpg");
+    form.append("media_category", "tweet_image");
+    const up = await fetcher(upload.url, { method: "POST", headers: { authorization: `Bearer ${account.access_token}` }, body: form });
+    let ub = null;
+    try { ub = await up.json(); } catch { ub = null; }
+    const mediaId = ub?.data?.id ?? ub?.media_id_string ?? null;
+    if (!up.ok || !mediaId) throw new Error(`media upload ${up.status} ${String(ub?.detail ?? ub?.title ?? ub?.errors?.[0]?.message ?? "failed").slice(0, 200)}`);
+    req.body = { text, media: { media_ids: [String(mediaId)] } };
+  }
   const res = await fetcher(req.url, { method: "POST", headers: { authorization: `Bearer ${account.access_token}`, "content-type": "application/json" }, body: JSON.stringify(req.body) });
   let body = null;
   try { body = await res.json(); } catch { body = null; }
@@ -260,12 +278,14 @@ export async function publishTikTok({ account, text, video, fetcher = (...a) => 
  * One draft through its channel's publisher. A video channel loads its video with `media()` ({ bytes, mime }); a
  * rotated token is stored with `saveToken(token)`.
  */
+/** A draft's chart card (a JPEG this Worker serves), as opposed to a video or no media. */
+const CARD_JPG = /\/media\/[0-9a-f]{32}\.jpg$/;
 export async function publishTo(channel, { account, draft, fetcher, dryRun = false, sleep, media = async () => null, saveToken = async () => {} } = {}) {
   switch (channel) {
-    case "threads": return publishThreads({ account, text: draft.text, fetcher, dryRun, ...(sleep ? { sleep } : {}) });
+    case "threads": return publishThreads({ account, text: draft.text, imageUrl: CARD_JPG.test(String(draft.image_url ?? "")) ? draft.image_url : null, fetcher, dryRun, ...(sleep ? { sleep } : {}) });
     case "instagram": return publishInstagram({ account, caption: draft.text, imageUrl: draft.image_url, fetcher, dryRun, ...(sleep ? { sleep } : {}) });
-    case "x": return publishX({ account, text: draft.text, fetcher, dryRun });
-    case "telegram": return publishTelegram({ account, text: draft.text, image: /\/media\/[0-9a-f]{32}\.jpg$/.test(String(draft.image_url ?? "")) ? media : null, fetcher, dryRun });
+    case "x": return publishX({ account, text: draft.text, image: CARD_JPG.test(String(draft.image_url ?? "")) ? media : null, fetcher, dryRun });
+    case "telegram": return publishTelegram({ account, text: draft.text, image: CARD_JPG.test(String(draft.image_url ?? "")) ? media : null, fetcher, dryRun });
     case "youtube": return publishYouTube({ account, text: draft.text, video: dryRun ? await media().catch(() => null) : await media(), fetcher, dryRun });
     case "tiktok": return publishTikTok({ account, text: draft.text, video: dryRun ? await media().catch(() => null) : await media(), fetcher, dryRun, onToken: saveToken });
     default: throw new Error(`${channel}: publisher not built yet`);
