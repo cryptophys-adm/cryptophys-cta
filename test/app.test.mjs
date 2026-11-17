@@ -79,7 +79,7 @@ const req = (path, { token, method = "GET", body, origin = "https://cta.cryptoph
 test("the public face: health, the brand's profile and links, the empty archive, the page; no studio data", async () => {
   resetKeyCacheForTests();
   const { env: e } = env();
-  assert.deepEqual(await (await handle(req("/health"), e, opts)).json(), { ok: true, service: "cryptophys-cta", publish: "off" });
+  assert.deepEqual(await (await handle(req("/health"), e, opts)).json(), { ok: true, service: "cryptophys-cta", publish: "off", publish_channels: [] });
   const p = await (await handle(req("/api/public/profile"), e, opts)).json();
   assert.equal(p.brand.id, "xauusd-ai-cta");
   assert.match(p.brand.disclaimer, /not an invitation to buy or sell and not financial advice/);
@@ -139,7 +139,7 @@ test("drafting and deciding: drafts from the projection, an approval held while 
 });
 
 test("publishing on: an approved Telegram draft goes out with the channel's secrets; a channel without a built publisher waits", async () => {
-  const { env: e, d } = env({ CONTENT_PUBLISH: "on", TELEGRAM_BOT_TOKEN: "123:SECRET", TELEGRAM_CHAT_ID: "@xauusd_ai_cta" });
+  const { env: e, d } = env({ CONTENT_PUBLISH: "on", PUBLISH_CHANNELS: "telegram,youtube", TELEGRAM_BOT_TOKEN: "123:SECRET", TELEGRAM_CHAT_ID: "@xauusd_ai_cta" });
   assert.deepEqual(await accountOf(e, "telegram"), { bot_token: "123:SECRET", chat_id: "@xauusd_ai_cta", refreshed_at: null });
   assert.equal(await accountOf(e, "threads"), null);
   assert.equal(await accountOf(e, "youtube"), null);
@@ -339,7 +339,9 @@ test("the bridge deploy workflow: main or by hand, no Worker secret, no delete, 
   assert.match(code, /deploy\.health/);
   assert.match(code, /deploy\.smoke/);
   const cfg = JSON.parse(readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8").replace(/^\s*\/\/.*$/gm, ""));
-  assert.equal(cfg.vars.CONTENT_PUBLISH, "off");
+  // Owner 2026-11-17: publishing on for Telegram only, other channels after it works ("setelah sukses baru ke channel lain").
+  assert.deepEqual([cfg.vars.CONTENT_PUBLISH, cfg.vars.PUBLISH_CHANNELS], ["on", "telegram"]);
+  assert.match(code, /PUBLISH_CHANNELS/, "the deploy refuses publishing on without a named channel list");
 });
 
 test("the pages: no inline script or style (CSP 'self'), the studio's four views, and no other company's name", () => {
@@ -457,7 +459,7 @@ test("content management through the studio API: library, edit, duplicate, calen
 
 test("the per-channel scheduler: a scheduled channel posts in its slots only, one post per slot, never twice, never late", async () => {
   resetKeyCacheForTests();
-  const { env: e, d } = env({ CONTENT_PUBLISH: "on", CONTENT_CHANNELS: "telegram,x", TELEGRAM_BOT_TOKEN: "123:SECRET", TELEGRAM_CHAT_ID: "@c" });
+  const { env: e, d } = env({ CONTENT_PUBLISH: "on", PUBLISH_CHANNELS: "telegram,x", CONTENT_CHANNELS: "telegram,x", TELEGRAM_BOT_TOKEN: "123:SECRET", TELEGRAM_CHAT_ID: "@c" });
   const text = "Education only. Not financial advice.";
   addDrafts(d.sql, [1, 2, 3].map((n) => ({ id: `t${n}:telegram`, channel: "telegram", kind: "custom", text: `${text} ${n}`, status: "pending" })));
   saveChannelSettings(d.sql, { channel: "telegram", settings: { ...JSON.parse(JSON.stringify((await import("../src/settings.mjs")).defaultSettings("telegram"))), schedule: [{ days: ["mon"], time: "19:00" }] }, actor: "owner" });
@@ -668,4 +670,19 @@ test("entered in the studio (owner 2026-11-17): Set up app, Paste token, Set bot
   assert.equal(await accountFor(e, "threads"), null);
   assert.equal((await post("/api/studio/connect/app", { channel: "x", clear: true }, owner)).status, 200);
   assert.equal(credsOf(d.sql, { channel: "x", kind: "app" }), null);
+});
+
+test("publishing per channel (owner 2026-11-17: Telegram first, the others after it works): PUBLISH_CHANNELS names them; unset publishes nothing", async () => {
+  const { publishChannels, publishesTo } = await import("../src/app.mjs");
+  assert.deepEqual(publishChannels({ CONTENT_PUBLISH: "on" }), [], "on without a list: no channel (fail closed)");
+  assert.deepEqual(publishChannels({ CONTENT_PUBLISH: "off", PUBLISH_CHANNELS: "telegram" }), [], "off wins");
+  assert.deepEqual(publishChannels({ CONTENT_PUBLISH: "on", PUBLISH_CHANNELS: " telegram , nope ,x" }), ["telegram", "x"], "unknown names dropped");
+  assert.equal(publishesTo({ CONTENT_PUBLISH: "on", PUBLISH_CHANNELS: "telegram" }, "threads"), false);
+  const { env: e, d } = env({ CONTENT_PUBLISH: "on", PUBLISH_CHANNELS: "telegram", TELEGRAM_BOT_TOKEN: "123:SECRET", TELEGRAM_CHAT_ID: "@xauusd_ai_cta", X_ACCESS_TOKEN: "XSECRET" });
+  addDrafts(d.sql, [{ id: "x1", channel: "x", kind: "daily_recap", text: "Education only. Not financial advice.", status: "pending" }]);
+  decideDraft(d.sql, { id: "x1", decision: "approve", actor: "owner" });
+  const calls = [];
+  const r = await publishDraft(e, getDraft(d.sql, "x1"), { fetcher: async (url) => { calls.push(url); return Response.json({}); } });
+  assert.deepEqual([r.status, r.held, calls.length], ["approved", "channel_not_publishing", 0], "an approved X draft waits: X is not named yet");
+  assert.deepEqual((await (await handle(req("/health"), e, opts)).json()).publish_channels, ["telegram"]);
 });

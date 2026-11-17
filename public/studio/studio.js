@@ -52,6 +52,9 @@
     return t;
   }
 
+  /** The channels that publish (PUBLISH_CHANNELS while CONTENT_PUBLISH is "on"). */
+  const pubTo = (c) => status?.publish === "on" && (status?.publish_channels ?? []).includes(c);
+  const pubList = () => ((status?.publish_channels ?? []).join(", ") || "no channel yet");
   function renderDashboard() {
     const c = status?.counts ?? {};
     const channels = Object.values(status?.channels ?? {});
@@ -62,6 +65,12 @@
       const d = make("div");
       d.appendChild(make("b", null, "Publishing is off"));
       d.appendChild(make("span", null, "Approved drafts wait; nothing is posted until the owner turns publishing on."));
+      notice.appendChild(d);
+    } else {
+      notice.appendChild(svgInfo());
+      const d = make("div");
+      d.appendChild(make("b", null, `Publishing on for: ${pubList()}`));
+      d.appendChild(make("span", null, "Approved drafts for other channels wait until the owner adds that channel."));
       notice.appendChild(d);
     }
     const tiles = $("tiles"); tiles.textContent = "";
@@ -81,7 +90,7 @@
 
   function renderStatus() {
     const on = status?.publish === "on";
-    const p = $("publish"); p.textContent = `Publishing ${on ? "on" : "off"}`; p.className = `badge ${on ? "green" : "amber"}`;
+    const p = $("publish"); p.textContent = on ? `Publishing on: ${pubList()}` : "Publishing off"; p.className = `badge ${on ? "green" : "amber"}`;
     renderDashboard();
   }
 
@@ -277,7 +286,7 @@
       line.appendChild(make("b", null, "Times are in WIB (UTC+7). "));
       n.appendChild(line);
       line.appendChild(document.createTextNode(status?.publish === "on"
-        ? "At each slot, the channel's oldest approved post goes out (one per slot). A channel without slots posts at approval."
+        ? `Publishing on for ${pubList()}; other channels wait. At each slot, the channel's oldest approved post goes out (one per slot). A channel without slots posts at approval.`
         : "Publishing is off: the slots pass without posting and approved posts wait. Once publishing is on, each slot posts the channel's oldest approved post."));
       const box = $("channels"); box.textContent = "";
       for (const c of Object.keys(cfg.settings || {})) box.appendChild(channelCard(c, cfg));
@@ -477,7 +486,7 @@
       const reason = make("input", "reason"); reason.placeholder = "Reason (required to reject)"; reason.setAttribute("aria-label", "Reason");
       const no = make("button", "btn danger", "Reject"); no.type = "button";
       const slotted = sched?.channels?.[d.channel]?.scheduled;
-      const ok = make("button", "btn primary", status?.publish !== "on" ? "Approve (publishing off)" : slotted ? "Approve (posts at the next slot)" : "Approve & publish"); ok.type = "button";
+      const ok = make("button", "btn primary", !pubTo(d.channel) ? (status?.publish !== "on" ? "Approve (publishing off)" : "Approve (this channel does not publish yet)") : slotted ? "Approve (posts at the next slot)" : "Approve & publish"); ok.type = "button";
       const decide = async (decision) => {
         if (decision === "reject" && !reason.value.trim()) { err.textContent = "a reason is required to reject"; return; }
         ok.disabled = no.disabled = true;

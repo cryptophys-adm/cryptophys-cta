@@ -31,6 +31,13 @@ export const SECURITY_HEADERS = Object.freeze({
 const json = (data, status = 200) => new Response(JSON.stringify(data, null, 2), { status, headers: JSON_HEADERS });
 
 export const publishOn = (env) => String(env?.CONTENT_PUBLISH ?? "off").trim().toLowerCase() === "on";
+/**
+ * The channels that may publish while CONTENT_PUBLISH is "on" (owner 2026-11-17: "kita sambungkan dulu ke Telegram
+ * setelah sukses baru ke channel lain"): PUBLISH_CHANNELS, a comma-separated list. Unset or empty: none (fail closed),
+ * so turning CONTENT_PUBLISH on never opens a channel nobody named.
+ */
+export const publishChannels = (env) => (publishOn(env) ? String(env?.PUBLISH_CHANNELS ?? "").split(",").map((c) => c.trim()).filter((c) => CHANNELS.includes(c)) : []);
+export const publishesTo = (env, channel) => publishChannels(env).includes(channel);
 export const channelsOf = (env) => String(env?.CONTENT_CHANNELS ?? CHANNELS.join(",")).split(",").map((c) => c.trim()).filter((c) => CHANNELS.includes(c));
 const delayOf = (env) => { const n = Number(env?.PUBLIC_DELAY_HOURS ?? 24); return Number.isFinite(n) && n >= 1 ? n : 24; };
 /** The Worker secrets of each channel's account (kept by the native deploy; organism.json `deploy.secrets_kept`). */
@@ -142,6 +149,7 @@ export async function accountFor(env, channel, { now = Date.now(), fetcher } = {
 /** Publishes one approved draft now, when publishing is on. Never throws. */
 export async function publishDraft(env, draft, { now = Date.now(), fetcher, slot = false } = {}) {
   if (!publishOn(env)) return { status: "approved", held: "publishing_off" };
+  if (!publishesTo(env, draft?.channel)) return { status: "approved", held: "channel_not_publishing" };
   if (draft?.status !== "approved") return { status: draft?.status ?? "missing", held: "not_approved" };
   // A channel with posting slots publishes in its slots only (src/scheduler.mjs), never at the approval.
   if (!slot) {
@@ -222,7 +230,7 @@ export async function runSchedule(env, { now = Date.now(), fetcher } = {}) {
   const slots = [];
   for (const channel of channelsOf(env)) {
     const s = settings[channel];
-    if (!s?.enabled || !s.schedule?.length) continue;
+    if (!s?.enabled || !s.schedule?.length || !publishesTo(env, channel)) continue;
     for (const slot of dueSlots(s.schedule, now)) {
       if (!(await d.claimSlot({ key: slot.key, channel, at: slot.at }, now))) continue;
       const draft = await d.nextApproved(channel);
@@ -249,7 +257,7 @@ export async function studioSchedule(env, { now = Date.now() } = {}) {
     channels[c] = { scheduled: Boolean(s?.schedule?.length), enabled: Boolean(s?.enabled), next: next.map((x) => ({ at: new Date(x.at).toISOString(), wib: x.key })),
       waiting: waiting[c] ?? 0, next_draft: draft ? { id: draft.id, kind: draft.kind, text: draft.text.slice(0, 160) } : null };
   }
-  return { publish: publishOn(env) ? "on" : "off", channels, recent: await d.recentSlots(20) };
+  return { publish: publishOn(env) ? "on" : "off", publish_channels: publishChannels(env), channels, recent: await d.recentSlots(20) };
 }
 
 /** Refreshes Threads' and Instagram's long-lived tokens after REFRESH_AFTER_DAYS (only while publishing is on). */
@@ -363,7 +371,7 @@ export async function studioStatus(env) {
     };
   }
   const brand = brandOf(DEFAULT_BRAND);
-  return { publish: publishOn(env) ? "on" : "off", brand: { id: brand.id, name: brand.name, handles: brand.handles }, delay_hours: delayOf(env), channels, counts: await desk(env).counts() };
+  return { publish: publishOn(env) ? "on" : "off", publish_channels: publishChannels(env), brand: { id: brand.id, name: brand.name, handles: brand.handles }, delay_hours: delayOf(env), channels, counts: await desk(env).counts() };
 }
 
 /**
@@ -442,7 +450,7 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   const route = `${request.method} ${path}`;
-  if (route === "GET /health") return json({ ok: true, service: "cryptophys-cta", publish: publishOn(env) ? "on" : "off" });
+  if (route === "GET /health") return json({ ok: true, service: "cryptophys-cta", publish: publishOn(env) ? "on" : "off", publish_channels: publishChannels(env) });
 
   // The public face: the brand's profile and the published archive. Nothing private.
   if (route === "GET /api/public/profile") {
