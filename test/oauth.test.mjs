@@ -19,7 +19,7 @@ test("sign-in URLs: the provider's own page, our fixed redirect, the scopes, a o
   const expected = Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(a.verifier))).toString("base64url");
   assert.equal(a.challenge, expected, "S256");
   const x = new URL(authorizeUrl("x", { clientId: "cid", redirect: REDIRECT, state: a.state, challenge: a.challenge }));
-  assert.deepEqual([x.origin + x.pathname, x.searchParams.get("code_challenge_method"), x.searchParams.get("scope")], ["https://x.com/i/oauth2/authorize", "S256", "tweet.read tweet.write users.read offline.access"]);
+  assert.deepEqual([x.origin + x.pathname, x.searchParams.get("code_challenge_method"), x.searchParams.get("scope")], ["https://x.com/i/oauth2/authorize", "S256", "tweet.read tweet.write users.read media.write offline.access"]);
   assert.equal((await newAttempt("threads")).verifier, null);
   const t = new URL(authorizeUrl("tiktok", { clientId: "ck", redirect: REDIRECT, state: a.state }));
   assert.deepEqual([t.searchParams.get("client_key"), t.searchParams.get("client_id")], ["ck", null]);

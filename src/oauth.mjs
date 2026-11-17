@@ -24,7 +24,7 @@ export const PROVIDERS = Object.freeze({
   instagram: Object.freeze({ name: "Instagram (Meta)", authorize: "https://www.instagram.com/oauth/authorize", token: "https://api.instagram.com/oauth/access_token",
     scopes: ["instagram_business_basic", "instagram_business_content_publish", "instagram_business_manage_insights"], scopeSep: ",", app: { id: "INSTAGRAM_APP_ID", secret: "INSTAGRAM_APP_SECRET" }, pkce: false }),
   x: Object.freeze({ name: "X", authorize: "https://x.com/i/oauth2/authorize", token: "https://api.x.com/2/oauth2/token",
-    scopes: ["tweet.read", "tweet.write", "users.read", "offline.access"], scopeSep: " ", app: { id: "X_CLIENT_ID", secret: "X_CLIENT_SECRET" }, pkce: true }),
+    scopes: ["tweet.read", "tweet.write", "users.read", "media.write", "offline.access"], scopeSep: " ", app: { id: "X_CLIENT_ID", secret: "X_CLIENT_SECRET" }, pkce: true }),
   youtube: Object.freeze({ name: "YouTube (Google)", authorize: "https://accounts.google.com/o/oauth2/v2/auth", token: "https://oauth2.googleapis.com/token",
     scopes: ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"], scopeSep: " ", app: { id: "YOUTUBE_CLIENT_ID", secret: "YOUTUBE_CLIENT_SECRET" }, pkce: false }),
   tiktok: Object.freeze({ name: "TikTok", authorize: "https://www.tiktok.com/v2/auth/authorize/", token: "https://open.tiktokapis.com/v2/oauth/token/",

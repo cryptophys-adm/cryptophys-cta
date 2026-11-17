@@ -743,7 +743,7 @@ test("Create: the format chosen per channel before the post is made; an edit kee
   const person = await jwt({ email: "owner@example.com" });
   const post = (body) => handle(req("/api/studio/compose", { token: person, method: "POST", body }), e, opts);
   const text = "Education · XAUUSD\n\nGold held its range through London.\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD";
-  assert.equal((await post({ kind: "custom", posts: [{ channel: "x", text, format: "image" }] })).status, 400, "X cannot post an image yet");
+  assert.equal((await post({ kind: "custom", posts: [{ channel: "x", text, format: "video" }] })).status, 400, "X cannot post a video yet");
   const r = await (await post({ kind: "custom", posts: [{ channel: "telegram", text, format: "image" }] })).json();
   assert.equal(r.ok, true, JSON.stringify(r));
   const made = getDraft(d.sql, r.added[0]);
@@ -768,4 +768,27 @@ test("the queue by channel (owner 2026-11-17): one tab per channel, the status t
   const js = readFileSync(new URL("../public/studio/studio.js", import.meta.url), "utf8");
   assert.match(js, /function renderChannelTabs/);
   assert.match(js, /"All channels"/);
+});
+
+test("Threads and X with the card (owner 2026-11-17 \"Ok\"): Threads IMAGE from the public card URL; X uploads the card, then posts with its media id", async () => {
+  const card = "https://cta.cryptophys.work/media/0123456789abcdef0123456789abcdef.jpg";
+  const image = async () => ({ bytes: new Uint8Array([255, 216, 255]), mime: "image/jpeg" });
+  // Threads: the container is an IMAGE with the card's URL; a text draft stays TEXT.
+  const th = await publishTo("threads", { account: { user_id: "7", access_token: "TSECRET" }, draft: { text: "t", image_url: card }, dryRun: true });
+  assert.deepEqual([th.requests[0].params.media_type, th.requests[0].params.image_url], ["IMAGE", card]);
+  assert.equal((await publishTo("threads", { account: { user_id: "7", access_token: "TSECRET" }, draft: { text: "t", image_url: null }, dryRun: true })).requests[0].params.media_type, "TEXT");
+  assert.ok(!JSON.stringify(th).includes("TSECRET"));
+  // X: media upload (multipart, tweet_image), then the post with the media id.
+  const calls = [];
+  const fetcher = async (url, init) => {
+    calls.push({ url: String(url), form: init.body instanceof FormData ? init.body : null, json: typeof init.body === "string" ? JSON.parse(init.body) : null, auth: init.headers?.authorization });
+    return String(url).endsWith("/media/upload") ? Response.json({ data: { id: "1880028106020515840" } }) : Response.json({ data: { id: "99" } });
+  };
+  const r = await publishX({ account: { access_token: "XSECRET" }, text: "Education · XAUUSD\nChart by TradingView.", image, fetcher });
+  assert.deepEqual([calls.length, calls[0].url.endsWith("/2/media/upload"), calls[0].form.get("media_category"), calls[0].form.get("media").type], [2, true, "tweet_image", "image/jpeg"]);
+  assert.deepEqual([calls[1].json.media.media_ids, r.remote_id], [["1880028106020515840"], "99"]);
+  await assert.rejects(publishX({ account: { access_token: "XSECRET" }, text: "t", image, fetcher: async () => Response.json({ title: "Forbidden", detail: "missing media.write" }, { status: 403 }) }), /media upload 403 missing media\.write/);
+  const dry = await publishTo("x", { account: { access_token: "XSECRET" }, draft: { text: "t", image_url: card }, dryRun: true, media: image });
+  assert.deepEqual(dry.requests.map((q) => q.url.replace(/^https:\/\/api\.x\.com/, "")), ["/2/media/upload", "/2/tweets"]);
+  assert.ok(!JSON.stringify(dry).includes("XSECRET"));
 });
