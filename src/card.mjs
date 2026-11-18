@@ -19,7 +19,7 @@ export const CARD_HEIGHT = 1350;
 export const chartHeightFor = (lines) => (lines <= 7 ? 700 : lines <= 11 ? 600 : 520);
 export const CARD_VERSION = "cryptophys.cta-card.v2";
 
-const KIND_LABEL = { pattern: "Chart pattern", key_levels: "Key-level map", daily_recap: "Daily recap" };
+const KIND_LABEL = { pattern: "Chart pattern", key_levels: "Key-level map", daily_recap: "Daily recap", warroom: "War Room reading" };
 /** TradingView widget intervals. */
 const INTERVAL = { M15: "15", H1: "60", H4: "240", D1: "D" };
 
@@ -32,6 +32,8 @@ export function chartOf(draft) {
     if (m) return m[1];
   }
   if (draft?.kind === "key_levels") return "H4";
+  // War Room (owner 2026-11-18): the source's own timeframe (news on H1).
+  if (draft?.kind === "warroom" && INTERVAL[draft?.overlay?.chart]) return draft.overlay.chart;
   return "H1";
 }
 

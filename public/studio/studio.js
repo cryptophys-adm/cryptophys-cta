@@ -925,7 +925,9 @@
   }
 
   // ---- create: a person's post, per channel, checked as it is typed (GET templates, POST check, POST compose) ----
-  const CREATE_KINDS = [["custom", "Custom post"], ["key_levels", "Key-level map"], ["pattern", "Chart pattern"], ["daily_recap", "Daily recap"]];
+  const CREATE_KINDS = [["custom", "Custom post"], ["key_levels", "Key-level map"], ["pattern", "Chart pattern"], ["daily_recap", "Daily recap"], ["warroom", "War Room"]];
+  /** The kinds with a choice under them: a pattern, or the War Room's source (owner 2026-11-18). */
+  const OPTION_LABEL = { pattern: "Pattern", warroom: "Source" };
   const MEDIA_NOTE = { image: "The chart card (TradingView's chart with our levels, and the Cryptophys panel) is made after saving.", video: "The 9:16 video made from the chart card is made after saving." };
   const FORMAT_BADGE = { none: "Text only", text: "Text only", image: "Image card", video: "Video" };
   const cs = { kind: "custom", ref: null, chosen: null, texts: {}, textsB: {}, results: {}, timers: {}, formats: {}, started: false, dirty: false };
@@ -978,7 +980,8 @@
       cs.ref = t.ref ?? null;
       const sel = $("cpattern"); sel.textContent = "";
       for (const o of t.options ?? []) { const op = make("option", null, o.label); op.value = o.ref; op.selected = o.ref === cs.ref; sel.appendChild(op); }
-      $("cpatternf").hidden = cs.kind !== "pattern" || !(t.options ?? []).length;
+      $("cpatternf").hidden = !OPTION_LABEL[cs.kind] || !(t.options ?? []).length;
+      if (OPTION_LABEL[cs.kind]) { $("cpatternl").textContent = OPTION_LABEL[cs.kind]; $("cpattern").setAttribute("aria-label", OPTION_LABEL[cs.kind]); }
       const missing = channels.filter((c) => !t.texts?.[c]);
       $("cnote").textContent = t.note ?? (missing.length && cs.kind !== "custom" ? `The template does not fit ${missing.map((c) => status.channels[c].name).join(", ")}: write that channel's text yourself.` : "");
       if (t.at) $("cnote").textContent = `${$("cnote").textContent ? $("cnote").textContent + " " : ""}Analysis read ${when(t.at)}.`.trim();

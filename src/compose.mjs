@@ -12,9 +12,10 @@ import { CHART_CREDIT, SHORT_DISCLAIMER, dailyRecapText, summarizeDay } from "./
 import { ANALYSIS_DISCLAIMER, keyLevelsText, patternText, postablePatterns, patternKey, overlayOf, hasImage } from "./analysis-drafts.mjs";
 import { LEVEL_KINDS } from "./desk.mjs";
 import { initialStatus } from "./channels.mjs";
+import { WARROOM_SOURCES, WARROOM_CHART, sourceOf, warroomText } from "./warroom-drafts.mjs";
 
-export const COMPOSE_KINDS = Object.freeze(["custom", ...KINDS]);
-export const COMPOSE_KIND_NAMES = Object.freeze({ custom: "Custom post", key_levels: "Key-level map", pattern: "Chart pattern", daily_recap: "Daily recap" });
+export const COMPOSE_KINDS = Object.freeze(["custom", ...KINDS, "warroom"]);
+export const COMPOSE_KIND_NAMES = Object.freeze({ custom: "Custom post", key_levels: "Key-level map", pattern: "Chart pattern", daily_recap: "Daily recap", warroom: "War Room" });
 export const MAX_COMPOSE_CHANNELS = CHANNELS.length;
 
 /** The blank post: a title line, room to write, TradingView's credit where the post is the chart card, the disclaimer, the hashtags. */
@@ -33,7 +34,7 @@ export function recapWindow(recaps, now) {
  * Pure: a template's text per channel. `analysis` (key levels, patterns) and `recaps` come from the projection.
  * Returns { kind, ref, options, texts: { channel: text | null }, note }.
  */
-export function templateTexts(kind, { channels, settings, analysis = null, recaps = null, ref = null, now = Date.now() }) {
+export function templateTexts(kind, { channels, settings, analysis = null, recaps = null, warroom = null, ref = null, now = Date.now() }) {
   const tags = (c) => settings?.[c]?.hashtags;
   const out = { kind, ref: null, options: [], texts: {}, note: null };
   if (kind === "custom") { for (const c of channels) out.texts[c] = customTemplate(c, tags(c)); return out; }
@@ -47,13 +48,20 @@ export function templateTexts(kind, { channels, settings, analysis = null, recap
     out.ref = p ? patternKey(p) : null;
     for (const c of channels) out.texts[c] = p ? patternText(p, analysis, { channel: c }) : null;
     if (!p) out.note = "No pattern to post right now (confirmed on H1, H4, D1; forming on H4, D1).";
+  } else if (kind === "warroom") {
+    // Owner 2026-11-18 ("Real-time analysis"): the source's latest reading, never its decision.
+    out.options = WARROOM_SOURCES.map((s) => ({ ...s }));
+    out.ref = sourceOf(ref);
+    for (const c of channels) out.texts[c] = warroomText(warroom, { channel: c });
+    if (!warroom || warroom.error) out.note = `No reading from this source right now${warroom?.error ? ` (${warroom.error})` : ""}.`;
+    else if (warroom.at) out.at = warroom.at;
   } else if (kind === "daily_recap") {
     const w = recapWindow(recaps, now);
     for (const c of channels) out.texts[c] = dailyRecapText(w.summary, { channel: c, dayIso: w.to });
     if (!w.summary?.bars) out.note = "No recap: the projection has no decisions in the recap window (48 to 24 hours ago).";
   } else return { ...out, error: "unknown kind" };
   for (const c of channels) if (out.texts[c]) out.texts[c] = swapHashtags(out.texts[c], c, tags(c));
-  if (analysis?.at && kind !== "daily_recap") out.at = analysis.at;
+  if (analysis?.at && kind !== "daily_recap" && kind !== "warroom") out.at = analysis.at;
   return out;
 }
 
@@ -120,6 +128,8 @@ export function composeDrafts({ kind, posts, allowed = CHANNELS, decisionTimes =
 
 /** The card's numbers for a template post (the same as the engine's), or null for a custom post. */
 export function overlayFor(kind, analysis, ref) {
+  // War Room: no levels on the chart, only its timeframe (the card's chart).
+  if (kind === "warroom") return { chart: WARROOM_CHART[sourceOf(ref)] };
   if (kind === "key_levels" && analysis) return overlayOf(analysis, { maxZones: 3 });
   if (kind === "pattern" && analysis) {
     const p = postablePatterns(analysis).find((x) => patternKey(x) === ref);

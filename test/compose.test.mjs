@@ -30,7 +30,7 @@ test("templates: blank, key levels, pattern and recap per channel, with the chan
   assert.match(templateTexts("pattern", { channels: ["threads"], settings, analysis: { ...ANALYSIS, patterns: [] } }).note, /No pattern/);
   assert.match(templateTexts("daily_recap", { channels: ["threads"], settings, recaps: [], now: NOW }).note, /No recap/);
   assert.equal(templateTexts("meme", { channels: ["threads"], settings }).error, "unknown kind");
-  assert.deepEqual(COMPOSE_KINDS, ["custom", "key_levels", "pattern", "daily_recap"]);
+  assert.deepEqual(COMPOSE_KINDS, ["custom", "key_levels", "pattern", "daily_recap", "warroom"]);
 });
 
 test("the guardian per channel: the blank post needs words; advice, internal names, levels in a custom post and overlong text are refused", () => {

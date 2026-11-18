@@ -798,3 +798,23 @@ test("Threads and X with the card (owner 2026-11-17 \"Ok\"): Threads IMAGE from 
   assert.deepEqual(dry.requests.map((q) => q.url.replace(/^https:\/\/api\.x\.com/, "")), ["/2/media/upload", "/2/tweets"]);
   assert.ok(!JSON.stringify(dry).includes("XSECRET"));
 });
+
+test("Create → War Room through the studio API (owner 2026-11-18): the source's reading as analysis; an AI Worker without it says so", async () => {
+  resetKeyCacheForTests();
+  const asked = [];
+  const reading = { source: "4h", label: "4H", at: "2026-11-18T16:00:00.000Z", bias: "bullish", analysts: 9, reasons: ["Buyers defended the weekly pivot range."], metrics: ["weekly pivot central range"] };
+  const base = env({ CONTENT_CHANNELS: "threads,x" });
+  const e = { ...base.env, PROJECTION: { ...base.env.PROJECTION, warroom: async (input) => { asked.push(input); return reading; } } };
+  const person = await jwt({ email: "owner@example.com" });
+  const t = await (await handle(req("/api/studio/templates?kind=warroom&ref=4h&channels=threads", { token: person }), e, opts)).json();
+  assert.deepEqual(asked, [{ source: "4h" }]);
+  assert.deepEqual([t.ref, t.options.map((o) => o.ref), t.at], ["4h", ["news", "15m", "1h", "4h", "1d"], reading.at]);
+  assert.match(t.texts.threads, /^Education · XAUUSD 4H War Room reading\n\nBias on the 4-hour chart: Bullish \(9 analysts heard\)\./);
+  const c = await (await handle(req("/api/studio/check", { token: person, method: "POST", body: { kind: "warroom", channel: "threads", text: t.texts.threads } }), e, opts)).json();
+  assert.equal(c.guardian.pass, true, JSON.stringify(c.guardian.failures));
+  const old = { ...base.env };
+  const n = await (await handle(req("/api/studio/templates?kind=warroom&ref=1d&channels=threads", { token: person }), old, opts)).json();
+  assert.deepEqual([n.texts.threads, n.note], [null, "No reading from this source right now (the AI Worker has no War Room reading yet)."]);
+  const bad = await (await handle(req("/api/studio/templates?kind=warroom&ref=5m&channels=threads", { token: person }), e, opts)).json();
+  assert.equal(bad.ref, "news", "an unknown source reads the news");
+});
