@@ -552,7 +552,10 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
           if (draft.status === "failed") { await d.requeue({ id, actor: identity.subject }, at); draft = await d.get(id); }
           if (draft.status !== "approved") return { ok: false, error: `only an approved or failed draft can be sent (this one is ${draft.status})` };
           const out = await publishDraft(env, draft, { now: at, slot: true, fetcher: fetchImpl });
-          return { ok: out?.status === "published", ...out };
+          if (out?.status === "published") return { ok: true, ...out };
+          // Why it did not go out, in the answer (2026-11-18: a TikTok refusal showed only "HTTP 400" in the studio).
+          const after = await d.get(id).catch(() => null);
+          return { ok: false, ...out, error: String(out?.error ?? after?.error ?? out?.held ?? "not published").slice(0, 300) };
         }, "publish_failed");
       }
       // Channel accounts (src/oauth.mjs): Connect, Disconnect and Check by an approver; the status for anyone signed in.
