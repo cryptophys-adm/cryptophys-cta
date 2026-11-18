@@ -2,7 +2,8 @@
 // YouTube & TikTok; "lanjutkan semua"). A 1080 x 1920 (9:16) video of VIDEO_SECONDS, made in the browser (Browser
 // Run) from the draft's card (src/card.mjs: TradingView's chart with our overlay, the panel), so the video carries
 // exactly what the guardian checked and nothing more:
-//   - the intro: the brand and what the post is;
+//   - the cover, from the first frame: the brand, what the post is, the card and the title (2026-11-18: the platforms
+//     take the first frame as the thumbnail, and a fade-in from black gave YouTube and TikTok a dark one);
 //   - the card, slowly closing in, with the draft's lines appearing one by one under it;
 //   - the end: "Chart by TradingView", the disclaimer and cta.cryptophys.work.
 // The page draws on a canvas and records it with the browser's MediaRecorder (WebM, VP9 or VP8, 30 fps); the
@@ -62,13 +63,13 @@ export function videoHtml(cardDataUrl, script, { seconds = VIDEO_SECONDS, fps = 
     g.fillStyle = INK; g.font = "700 54px Inter, Segoe UI, Arial, sans-serif"; g.fillText(S.brand, 60, 120);
     g.fillStyle = GOLD; g.font = "600 36px Inter, Segoe UI, Arial, sans-serif"; g.fillText(S.kind, 60, 180);
     if (t < end) {
-      // The card: in from 0.6 s, slowly closer.
-      var a = ease((t - 0.6) / 0.8), z = 1 + 0.035 * Math.min(1, Math.max(0, t - 1) / (end - 1));
+      // The card: there from the first frame (the cover), slowly closer.
+      var a = 1, z = 1 + 0.035 * Math.min(1, Math.max(0, t - 1) / (end - 1));
       var cw = W * z, ch = 1350 * z, top = 230;
       g.save(); g.globalAlpha = a; g.beginPath(); g.rect(0, top, W, 1350); g.clip();
       g.drawImage(img, (W - cw) / 2, top - (ch - 1350) / 2, cw, ch); g.restore();
-      // The title, then the lines one by one.
-      g.globalAlpha = ease((t - 1.2) / 0.6); g.fillStyle = "#ffffff"; g.font = "700 44px Inter, Segoe UI, Arial, sans-serif";
+      // The title (on the cover too), then the lines one by one.
+      g.globalAlpha = 1; g.fillStyle = "#ffffff"; g.font = "700 44px Inter, Segoe UI, Arial, sans-serif";
       var used = wrap(S.title, 60, 1655, W - 120, 54); g.globalAlpha = 1;
       var per = Math.max(1.1, (end - 2.6) / Math.max(1, S.lines.length));
       var shown = Math.min(S.lines.length, Math.floor((t - 2.2) / per) + 1);

@@ -276,10 +276,14 @@ async function tiktokCall(fetcher, path, token, payload) {
  * One TikTok video, Direct Post with FILE_UPLOAD in one chunk. `account` is { client_key, client_secret,
  * refresh_token }; `onToken` stores the rotated refresh token. The privacy is the most public the creator allows.
  */
+export const TIKTOK_COVER_MS = 1000;
+
 export async function publishTikTok({ account, text, video, fetcher = (...a) => fetch(...a), dryRun = false, onToken = async () => {}, audited = false }) {
   const size = video?.bytes?.length ?? 0, mime = video?.mime ?? "video/webm";
   const postInfo = (privacy) => ({ title: String(text ?? "").slice(0, 2200), privacy_level: privacy, disable_duet: false, disable_comment: false, disable_stitch: false,
-    brand_content_toggle: false, brand_organic_toggle: false, is_aigc: false });
+    brand_content_toggle: false, brand_organic_toggle: false, is_aigc: false,
+    // The cover frame: 1 s in, the card and the title (2026-11-18: the first frame made a dark thumbnail).
+    video_cover_timestamp_ms: TIKTOK_COVER_MS });
   const source = { source: "FILE_UPLOAD", video_size: size, chunk_size: size, total_chunk_count: 1 };
   if (dryRun) return { dry_run: true, requests: [
     { method: "POST", url: `${TIKTOK_BASE}/oauth/token/`, params: { grant_type: "refresh_token", client_key: "[client]", client_secret: "[secret]", refresh_token: "[token]" } },

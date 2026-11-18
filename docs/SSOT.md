@@ -40,7 +40,9 @@ Bindings:
     dependency (`nodejs_compat`).
   - The video (YouTube Shorts, TikTok; `src/video.mjs`): the same card, then a 9:16 1080 × 1920 recording of
     `VIDEO_SECONDS` (14 s): the brand, the card slowly closing in with the draft's own lines appearing one by one,
-    and an end card with "Chart by TradingView", the disclaimer and cta.cryptophys.work. Drawn on a canvas and
+    and an end card with "Chart by TradingView", the disclaimer and cta.cryptophys.work. The card and the title are on
+    screen from the first frame, the cover the platforms take as the thumbnail; TikTok's cover is set 1 s in
+    (`video_cover_timestamp_ms`). Drawn on a canvas and
     recorded by the browser's MediaRecorder (WebM VP9/VP8, about 30 fps, about 4 MB); the recorder writes no duration,
     so `src/webm.mjs` adds it to the Segment Info. About 22 seconds of browser time a video. A video is larger than
     a Desk row may be, so it is kept in `media_chunks` (1 MB of base64 each).
