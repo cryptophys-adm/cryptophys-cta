@@ -52,6 +52,9 @@ test("the video's words are the draft's own (title, lines, the end card with Tra
   assert.deepEqual(s.end, ["Chart by TradingView", brand.card_disclaimer, "cta.cryptophys.work"]);
   assert.match(s.end[1], /not financial advice/);
   const html = videoHtml("data:image/jpeg;base64,AAAA", { ...s, title: "</script><script>alert(1)</script>" });
+  // The cover (2026-11-18: a fade-in from black gave a dark thumbnail): the card and the title are drawn from frame 0.
+  assert.match(html, /var a = 1, z = /);
+  assert.doesNotMatch(html, /ease\(\(t - 0\.6\)/);
   assert.doesNotMatch(html, /<\/script><script>alert/);
   assert.match(html, /MediaRecorder/);
   assert.match(html, new RegExp(`"seconds":${VIDEO_SECONDS}`));
@@ -144,6 +147,7 @@ test("TikTok: refreshes (and stores the rotated refresh token), asks the creator
   const init = JSON.parse(p.calls[2].body);
   assert.deepEqual(init.source_info, { source: "FILE_UPLOAD", video_size: 1234, chunk_size: 1234, total_chunk_count: 1 });
   assert.equal(init.post_info.brand_content_toggle, false);
+  assert.equal(init.post_info.video_cover_timestamp_ms, 1000, "the cover: 1 s in, the card and the title, never the first dark frame");
   assert.equal(p.calls[3].headers["content-range"], "bytes 0-1233/1234");
   const dry = JSON.stringify(await publishTikTok({ account: { client_key: "ck", client_secret: "cs", refresh_token: "rft.old" }, text: "x", video: VIDEO, dryRun: true }));
   assert.doesNotMatch(dry, /rft\.old|"cs"/);
