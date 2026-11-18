@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-18
+- config(publish): YouTube joins `PUBLISH_CHANNELS` ("telegram,threads,instagram,tiktok,youtube"; owner 2026-11-18: "lanjutkan setup youtube"). A YouTube post is the card video (1080x1920, 14 s, WebM) uploaded with the Data API's resumable upload as a Short (category Education, made-for-kids false), asked public; Google keeps uploads from an unaudited API project private, which the publisher reports. Every post still waits for a person's approval. Until a channel is connected (Set up app with the OAuth client id and secret, then Connect), an approved YouTube post waits with "account not connected". The default Data API quota (10,000 units a day) allows about six uploads a day (1,600 units each).
+
 ## 2026-11-17
 - chore(site): TikTok's URL-prefix verification file `public/tiktokoI9bzsiKXfivf6fDPnA6LkyjN1B22Eye.txt` (served at `https://cta.cryptophys.work/tiktokoI9bzsiKXfivf6fDPnA6LkyjN1B22Eye.txt`), so TikTok's developer portal can verify the app's website, terms and privacy URLs (owner 2026-11-17, TikTok app setup). It holds only the public verification string.
 - config(publish): TikTok joins `PUBLISH_CHANNELS` ("telegram,threads,instagram,tiktok"; owner 2026-11-17: "bantu setup cta untuk tiktok", after Instagram's first post). A TikTok post is the card video (1080x1920, 14 s, WebM VP9/VP8 at 30 fps), sent with the Content Posting API's Direct Post (one-chunk FILE_UPLOAD); until TikTok audits the app, every post is private (SELF_ONLY), which the publisher reports. Every post still waits for a person's approval. Until a TikTok account is connected in the studio (Set up app with the client key and secret, then Connect), an approved TikTok post waits with "account not connected".
