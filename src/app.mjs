@@ -164,7 +164,7 @@ export async function publishDraft(env, draft, { now = Date.now(), fetcher, slot
   if (!account) return { status: "approved", held: "account_not_configured" };
   try {
     const r = await publishTo(draft.channel, { account, draft, fetcher, media: () => mediaBytes(env, draft),
-      saveToken: (token) => saveTokenSealed(env, draft.channel, token, now) });
+      saveToken: (token) => saveTokenSealed(env, draft.channel, token, now), tiktokAudited: String(env.TIKTOK_AUDITED ?? "").trim().toLowerCase() === "yes" });
     return desk(env).published({ id: draft.id, remoteId: r.remote_id }, now);
   } catch (error) {
     return desk(env).published({ id: draft.id, error: String(error?.message ?? error) }, now);
