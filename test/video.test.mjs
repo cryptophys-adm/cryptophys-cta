@@ -137,7 +137,9 @@ test("TikTok: refreshes (and stores the rotated refresh token), asks the creator
     : url.startsWith("https://open-upload.example/") ? { status: 201 } : { status: 404 });
   const saved = [];
   const r = await publishTikTok({ account: { client_key: "ck", client_secret: "cs", refresh_token: "rft.old" }, text: "Education · caption", video: VIDEO, fetcher: p.fetcher, onToken: async (t) => saved.push(t) });
-  assert.deepEqual(r, { remote_id: "v_pub_1", privacy: "MUTUAL_FOLLOW_FRIENDS" }, "the most public option the creator allows");
+  assert.deepEqual(r, { remote_id: "v_pub_1", privacy: "SELF_ONLY" }, "an unaudited client posts SELF_ONLY");
+  const audited = await publishTikTok({ account: { client_key: "ck", client_secret: "cs", refresh_token: "rft.old" }, text: "x", video: VIDEO, fetcher: p.fetcher, audited: true });
+  assert.equal(audited.privacy, "MUTUAL_FOLLOW_FRIENDS", "once audited: the most public option the creator allows");
   assert.deepEqual(saved, [{ access_token: "act.1", expires_in: 7200, refresh_token: "rft.new" }]);
   const init = JSON.parse(p.calls[2].body);
   assert.deepEqual(init.source_info, { source: "FILE_UPLOAD", video_size: 1234, chunk_size: 1234, total_chunk_count: 1 });

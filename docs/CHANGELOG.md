@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-11-18
+- fix(publish): TikTok posts `SELF_ONLY` until the app is audited. With the account set private, TikTok still refused the post with `unaudited_client_can_only_post_to_private_accounts`, because the publisher asked for the most public option the creator allows (a private account still offers followers-only). `TIKTOK_AUDITED` "yes" (after TikTok's audit) restores the most public option. The dry run shows the privacy it would ask for.
 - fix(studio): **Publish now** and **Try again now** show the platform's refusal (for example TikTok's `unaudited_client_can_only_post_to_private_accounts`) instead of only "HTTP 400"; the answer of `POST /api/studio/publish-now` carries the draft's error.
 - config(publish): YouTube joins `PUBLISH_CHANNELS` ("telegram,threads,instagram,tiktok,youtube"; owner 2026-11-18: "lanjutkan setup youtube"). A YouTube post is the card video (1080x1920, 14 s, WebM) uploaded with the Data API's resumable upload as a Short (category Education, made-for-kids false), asked public; Google keeps uploads from an unaudited API project private, which the publisher reports. Every post still waits for a person's approval. Until a channel is connected (Set up app with the OAuth client id and secret, then Connect), an approved YouTube post waits with "account not connected". The default Data API quota (10,000 units a day) allows about six uploads a day (1,600 units each).
 

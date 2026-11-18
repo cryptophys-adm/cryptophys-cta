@@ -276,7 +276,7 @@ async function tiktokCall(fetcher, path, token, payload) {
  * One TikTok video, Direct Post with FILE_UPLOAD in one chunk. `account` is { client_key, client_secret,
  * refresh_token }; `onToken` stores the rotated refresh token. The privacy is the most public the creator allows.
  */
-export async function publishTikTok({ account, text, video, fetcher = (...a) => fetch(...a), dryRun = false, onToken = async () => {} }) {
+export async function publishTikTok({ account, text, video, fetcher = (...a) => fetch(...a), dryRun = false, onToken = async () => {}, audited = false }) {
   const size = video?.bytes?.length ?? 0, mime = video?.mime ?? "video/webm";
   const postInfo = (privacy) => ({ title: String(text ?? "").slice(0, 2200), privacy_level: privacy, disable_duet: false, disable_comment: false, disable_stitch: false,
     brand_content_toggle: false, brand_organic_toggle: false, is_aigc: false });
@@ -284,7 +284,7 @@ export async function publishTikTok({ account, text, video, fetcher = (...a) => 
   if (dryRun) return { dry_run: true, requests: [
     { method: "POST", url: `${TIKTOK_BASE}/oauth/token/`, params: { grant_type: "refresh_token", client_key: "[client]", client_secret: "[secret]", refresh_token: "[token]" } },
     { method: "POST", url: `${TIKTOK_BASE}/post/publish/creator_info/query/`, headers: { authorization: "Bearer [token]" } },
-    { method: "POST", url: `${TIKTOK_BASE}/post/publish/video/init/`, headers: { authorization: "Bearer [token]" }, body: { post_info: postInfo("<most public allowed>"), source_info: source } },
+    { method: "POST", url: `${TIKTOK_BASE}/post/publish/video/init/`, headers: { authorization: "Bearer [token]" }, body: { post_info: postInfo(audited ? "<most public allowed>" : "SELF_ONLY"), source_info: source } },
     { method: "PUT", url: "<upload_url>", headers: { "content-type": mime, "content-length": String(size), "content-range": `bytes 0-${Math.max(0, size - 1)}/${size}` }, body: `<${size} bytes>` }
   ] };
   if (!account?.client_key || !account?.client_secret || !account?.refresh_token) throw new Error("tiktok account not configured");
@@ -294,7 +294,10 @@ export async function publishTikTok({ account, text, video, fetcher = (...a) => 
   if (token.refresh_token) await onToken(token);
   const creator = await tiktokCall(fetcher, "/post/publish/creator_info/query/", token.access_token, {});
   const options = Array.isArray(creator.privacy_level_options) ? creator.privacy_level_options : [];
-  const privacy = ["PUBLIC_TO_EVERYONE", "FOLLOWER_OF_CREATOR", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"].find((p) => options.includes(p)) ?? "SELF_ONLY";
+  // An unaudited client may post only SELF_ONLY (2026-11-18: with the account private, TikTok still refused the most
+  // public option with "unaudited_client_can_only_post_to_private_accounts"). Once TikTok audits the app,
+  // TIKTOK_AUDITED "yes" picks the most public option the creator allows.
+  const privacy = !audited ? "SELF_ONLY" : ["PUBLIC_TO_EVERYONE", "FOLLOWER_OF_CREATOR", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"].find((p) => options.includes(p)) ?? "SELF_ONLY";
   const init = await tiktokCall(fetcher, "/post/publish/video/init/", token.access_token, { post_info: postInfo(privacy), source_info: source });
   if (!init.upload_url || !init.publish_id) throw new Error("tiktok init gave no upload url");
   const put = await fetcher(init.upload_url, { method: "PUT", headers: { "content-type": mime, "content-length": String(size), "content-range": `bytes 0-${size - 1}/${size}` }, body: video.bytes });
@@ -308,14 +311,14 @@ export async function publishTikTok({ account, text, video, fetcher = (...a) => 
  */
 /** A draft's chart card (a JPEG this Worker serves), as opposed to a video or no media. */
 const CARD_JPG = /\/media\/[0-9a-f]{32}\.jpg$/;
-export async function publishTo(channel, { account, draft, fetcher, dryRun = false, sleep, media = async () => null, saveToken = async () => {} } = {}) {
+export async function publishTo(channel, { account, draft, fetcher, dryRun = false, sleep, media = async () => null, saveToken = async () => {}, tiktokAudited = false } = {}) {
   switch (channel) {
     case "threads": return publishThreads({ account, text: draft.text, imageUrl: CARD_JPG.test(String(draft.image_url ?? "")) ? draft.image_url : null, fetcher, dryRun, ...(sleep ? { sleep } : {}) });
     case "instagram": return publishInstagram({ account, caption: draft.text, imageUrl: draft.image_url, fetcher, dryRun, ...(sleep ? { sleep } : {}) });
     case "x": return publishX({ account, text: draft.text, image: CARD_JPG.test(String(draft.image_url ?? "")) ? media : null, fetcher, dryRun });
     case "telegram": return publishTelegram({ account, text: draft.text, image: CARD_JPG.test(String(draft.image_url ?? "")) ? media : null, fetcher, dryRun });
     case "youtube": return publishYouTube({ account, text: draft.text, video: dryRun ? await media().catch(() => null) : await media(), fetcher, dryRun });
-    case "tiktok": return publishTikTok({ account, text: draft.text, video: dryRun ? await media().catch(() => null) : await media(), fetcher, dryRun, onToken: saveToken });
+    case "tiktok": return publishTikTok({ account, text: draft.text, video: dryRun ? await media().catch(() => null) : await media(), fetcher, dryRun, onToken: saveToken, audited: tiktokAudited });
     default: throw new Error(`${channel}: publisher not built yet`);
   }
 }
