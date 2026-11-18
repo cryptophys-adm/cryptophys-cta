@@ -84,7 +84,7 @@ Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (dr
 | `POST /api/studio/duplicate` | a person, same origin, JSON | `{ id }`: a copy of any draft as `manual:<day>:<id>:<channel>`, checked again, waiting for approval; events `composed` and `duplicated` (with the source) |
 | `GET /api/studio/calendar?month=YYYY-MM` | Access JWT | drafts made and posts published per WIB day and channel |
 | `GET /api/studio/media-library?offset=` | Access JWT | every card and video (no bytes): channel, type, status, size |
-| `GET /api/studio/templates?kind=&channels=&ref=` | Access JWT | Create: a blank post (`custom`) or the engine's template (`key_levels`, `pattern`, `daily_recap`) filled with the current projection, per channel, with the channel's hashtags |
+| `GET /api/studio/templates?kind=&channels=&ref=` | Access JWT | Create: a blank post (`custom`) or the engine's template (`key_levels`, `pattern`, `daily_recap`) filled with the current projection, or a War Room reading (`warroom`, `ref` news, 15m, 1h, 4h or 1d), per channel, with the channel's hashtags |
 | `POST /api/studio/check` | a person, same origin, JSON | Create: the guardian's check of one channel's text as typed (length, the guardian's rules, a custom post's own words) |
 | `POST /api/studio/compose` | a person, same origin, JSON | Create: `{ kind, ref, posts: [{ channel, text, text_b?, format? }] }` (`text_b`: an A/B variant; `format`: text, image or video, chosen before the post is made, else the channel's setting; a format the channel cannot post is refused); saved only when every channel passes; drafts `manual:<day>:<id>:<channel>` wait for approval (event `composed`, the person as actor); a template's card numbers come from the server's analysis, never the browser |
 | `GET /api/studio/settings` | Access JWT | each channel's settings (stored over the defaults), the formats each channel can take, who changed them last; never a token. The format drives every draft, scheduled or made by hand (`withFormat`): a text channel set to Image (Telegram, owner 2026-11-17) waits for the chart card, its text names TradingView, and the publisher sends the card (Telegram: `sendPhoto`, the text as caption up to 1024 characters, else right after; Threads: an IMAGE container from the card's public URL; X: `POST /2/media/upload` with `tweet_image`, then the post with its media id, scope `media.write`, so an X account connected before 2026-11-17 reconnects once) |
@@ -165,6 +165,15 @@ its video, the recap's delay rule with the recap window's decisions; a custom po
 own besides the template lines. A post is saved only when every channel passes; the drafts then wait for approval like
 any other (cards and videos are made for them by the same run). Settings' kinds and daily maximum bound the engine,
 not a person's post.
+
+War Room (owner 2026-11-18: "tambahkan create content war room dengan pilihan news, 15m, 1h, 4h, 1D"; confirmed:
+"Real-time analysis"; `src/warroom-drafts.mjs`). Create's "War Room" start with a Source: News (the last 24 hours),
+15m War Room, 1H, 4H or 1D room. It reads the AI Worker's `PublicProjection.warroom({ source })`: a room's bias
+(bullish, bearish, neutral), at most three reasons, the metrics it weighed and how many analysts were heard, or the news
+digest's reading of gold, its summary, the bias tally and at most six headlines with their effect on gold. Analysis
+only: never the room's decision (BUY, SELL, WAIT), its confidence, a price or order wording (the projection drops
+them; in this kind the guardian allows no price level). The card and video use the source's chart (news on H1), with no
+levels drawn. An AI Worker without the method answers "No reading from this source right now".
 
 Accounts by OAuth (owner 2026-11-16: "ya, kerjakan halaman koneksi OAuth per channel"; `src/oauth.mjs`, the Channels
 page's Account section). An approver presses Connect; the provider's own sign-in and consent page asks them; the

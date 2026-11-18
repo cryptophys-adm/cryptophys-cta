@@ -17,6 +17,7 @@ import { PROVIDERS, BOT_CHANNELS, CONNECT_SECRETS, appOf, newAttempt, authorizeU
 import { bestTimes, abResult, evergreen, EVERGREEN_MIN_DAYS } from "./growth.mjs";
 import { linkHosts, normalizeLink, randomSlug, shortUrl, redirectTarget, GO_PATH, normalizeHashtagSet, MAX_SETS, normalizeMix, DEFAULT_MIX, MIX_KINDS, wibWeek, mixReport } from "./marketing.mjs";
 import { templateTexts, checkPost, composeDrafts, overlayFor, recapWindow, COMPOSE_KINDS, COMPOSE_KIND_NAMES } from "./compose.mjs";
+import { sourceOf } from "./warroom-drafts.mjs";
 
 export const RECAP_CRON = "17 22 * * 2-6";
 export const ANALYSIS_CRON = "9 * * * 1-5";
@@ -387,7 +388,15 @@ export async function studioStatus(env) {
  * What a composed post needs from the projection: the recap window's decision times (the guardian's delay rule) for
  * a recap, the analysis for a template's card (the same numbers as its text).
  */
-async function composeContext(env, kind, { now, analysis = false }) {
+async function composeContext(env, kind, { now, analysis = false, ref = null }) {
+  // War Room (owner 2026-11-18): the source's latest reading; an AI Worker without the method answers as "not yet".
+  if (kind === "warroom") {
+    if (!analysis) return { decisionTimes: [] };
+    let warroom;
+    try { warroom = typeof env.PROJECTION?.warroom === "function" ? await env.PROJECTION.warroom({ source: sourceOf(ref) }) : { error: "the AI Worker has no War Room reading yet" }; }
+    catch { warroom = { error: "the AI Worker did not answer" }; }
+    return { warroom, decisionTimes: [] };
+  }
   if (kind === "daily_recap") {
     const p = await env.PROJECTION.recaps({ days: 3 });
     return { recaps: p?.recaps ?? [], decisionTimes: recapWindow(p?.recaps ?? [], now).summary?.decision_times ?? [] };
@@ -742,9 +751,9 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
         const channels = String(url.searchParams.get("channels") || "").split(",").filter((c) => channelsOf(env).includes(c));
         return rpc(async () => {
           const at = now ? now * 1000 : Date.now();
-          const ctx = await composeContext(env, kind, { now: at, analysis: true });
+          const ctx = await composeContext(env, kind, { now: at, analysis: true, ref: url.searchParams.get("ref") });
           const { settings } = await channelSettings(env);
-          return { ...templateTexts(kind, { channels, settings, analysis: ctx.analysis, recaps: ctx.recaps, ref: url.searchParams.get("ref"), now: at }), kinds: COMPOSE_KINDS, kind_names: COMPOSE_KIND_NAMES };
+          return { ...templateTexts(kind, { channels, settings, analysis: ctx.analysis, recaps: ctx.recaps, warroom: ctx.warroom, ref: url.searchParams.get("ref"), now: at }), kinds: COMPOSE_KINDS, kind_names: COMPOSE_KIND_NAMES };
         }, "template_failed");
       }
       if (route === "POST /api/studio/check") {

@@ -15,7 +15,7 @@ export const VIDEO_HEIGHT = 1920;
 export const VIDEO_SECONDS = 14;
 export const VIDEO_FPS = 30;
 export const VIDEO_VERSION = "cryptophys.cta-video.v1";
-const KIND_LABEL = { pattern: "Chart pattern", key_levels: "Key-level map", daily_recap: "Daily recap" };
+const KIND_LABEL = { pattern: "Chart pattern", key_levels: "Key-level map", daily_recap: "Daily recap", warroom: "War Room reading" };
 
 /** The words of a video: the title, the lines shown one by one (at most six), the end card. */
 export function videoScript(draft, brand, { disclaimers = [] } = {}) {

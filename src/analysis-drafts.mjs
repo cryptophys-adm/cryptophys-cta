@@ -24,7 +24,7 @@ const f2 = (x) => (Number.isFinite(Number(x)) ? Number(x).toFixed(2) : "?");
 /** "an H4", "a D1". */
 const an = (chart) => `${/^[HM]/.test(String(chart)) ? "an" : "a"} ${chart}`;
 
-function finish(lines, channel) {
+export function finish(lines, channel) {
   // X: the short disclaimer, so the analysis keeps its lines within 280 characters.
   // Instagram, YouTube, TikTok: the post is the card (or its video) with TradingView's chart, so the caption names it
   // (the guardian's attribution).
