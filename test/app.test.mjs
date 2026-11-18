@@ -717,6 +717,7 @@ test("Publish now (owner 2026-11-17: approved while publishing was off, then no 
   assert.match((await (await post({ id: "t2" }, owner)).json()).error, /only an approved or failed draft/, "a pending draft is approved first");
   const first = await (await post({ id: "t1" }, owner)).json();
   assert.deepEqual([first.ok, first.status, getDraft(d.sql, "t1").status], [false, "failed", "failed"], "Telegram refused: recorded as failed");
+  assert.match(first.error, /chat not found/, "the platform's refusal comes back in the answer, not only HTTP 400");
   fail = false;
   const again = await (await post({ id: "t1" }, owner)).json();
   assert.deepEqual([again.ok, again.status, getDraft(d.sql, "t1").status, getDraft(d.sql, "t1").remote_id], [true, "published", "published", "9"], "tried again: requeued, then sent");
