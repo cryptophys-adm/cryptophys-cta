@@ -8,20 +8,22 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { PEOPLE, MEETINGS, READS } from './data.js';
-import { meetingsFromResponse, freshMeetings, latestMeeting, whenOf } from './script.js';
+import { meetingsFromResponse, freshMeetings, latestMeeting, whenOf, statusOf } from './script.js';
+import { onScene } from './feed.js';
 import { ambient } from './sound.js';
 
 // The holo war room (owner 2026-11-19). People are life-size holograms that beam in around a projection table; the
 // indicator analysts are holographic constructs, each with its own form; the platform agents are drones on patrol.
-// It follows the real rooms: GET /api/public/warroom-scene every minute, and a room that has just concluded meets
+// It follows the real rooms: the page's one feed of GET /api/public/warroom-scene (feed.js, every minute), and a room
+// that has just concluded meets
 // here; between rooms the hall idles. Phones and small GPUs get the same scene without bloom at pixel ratio 1;
 // prefers-reduced-motion stops the camera drift, the spins and the flicker.
 const $ = (id) => document.getElementById(id);
 const media = (q) => window.matchMedia?.(q).matches ?? false;
 const TOUCH = media('(pointer: coarse)'), CALM = media('(prefers-reduced-motion: reduce)');
 const LOW = TOUCH || window.innerWidth < 760 || (navigator.hardwareConcurrency || 8) <= 4;
-const MOTION = CALM ? 0.12 : 1, POLL_MS = 60000, GAP_S = 4;
-const SCENE_URL = '/api/public/warroom-scene', MANNEQUIN_URL = '/room/mannequin.glb';
+const MOTION = CALM ? 0.12 : 1, GAP_S = 4;
+const MANNEQUIN_URL = '/room/mannequin.glb';
 const HOLO = 0x55c8ff, WARM = 0xffb454, BIAS = { neutral: 0x9fd8ff, bearish: 0x3aa0ff, bullish: 0xffa630 };
 const CONSTRUCTS = ['prophet', 'trade_management', 'interstellar_eyes', 'kinetic_engine', 'fabio_amt', 'chronos_matrix', 'tactical_muscles', 'macro_aether', 'decision_matrix', 'supertrend', 'aegis_footprint', 'order_blocks'];
 const LABEL = { hall: 'Analyst', lead: 'Leader', research: 'Research', content: 'Content studio', ops: 'Platform', knowledge: 'Knowledge' };
@@ -79,7 +81,7 @@ function init() {
   // The bloom pass is the costly part: phones and small GPUs render without it.
   if (!LOW) { composer = new EffectComposer(renderer); composer.addPass(new RenderPass(scene, camera)); composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.42, 0.5, 0.55)); composer.addPass(new OutputPass()); }
   buildRoom(); buildTable(); buildAether(); buildCorpus(); buildVault(); bindUi(); resize(); window.addEventListener('resize', resize);
-  new GLTFLoader().loadAsync(MANNEQUIN_URL).then((g) => { mannequin = g.scene; buildAgents(); $('loading').hidden = true; poll(); setInterval(poll, POLL_MS); }).catch((e) => { console.error(e); $('loading').textContent = 'The scene did not load.'; });
+  new GLTFLoader().loadAsync(MANNEQUIN_URL).then((g) => { mannequin = g.scene; buildAgents(); $('loading').hidden = true; onScene(take); }).catch((e) => { console.error(e); $('loading').textContent = 'The scene did not load.'; });
   // Draw only while the room is on screen and the tab is visible.
   const run = () => renderer.setAnimationLoop(state.visible && !document.hidden ? frame : null);
   if ('IntersectionObserver' in window) new IntersectionObserver(([e]) => { state.visible = e.isIntersecting; run(); }).observe(canvas);
@@ -272,16 +274,13 @@ function buildAgents() {
 }
 
 /* ---------- meetings: the real rooms, as they conclude ---------- */
-async function poll() {
-  try {
-    const r = await fetch(SCENE_URL, { headers: { accept: 'application/json' }, cache: 'no-store' }); // the edge caches it; the browser never
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const next = meetingsFromResponse(await r.json());
-    // The first read meets the room that concluded last; later reads meet every room that concluded since.
-    const fresh = state.polled ? freshMeetings(state.live, next) : [latestMeeting(next)].filter(Boolean);
-    state.live = next; state.polled = true;
-    for (const id of fresh) if (!state.pending.includes(id) && state.meet?.type !== id) state.pending.push(id);
-  } catch (e) { console.warn('warroom-scene', String(e?.message ?? e)); }
+function take(body) {
+  if (!body) { syncUi(); return; } // the feed failed before any answer: the scene keeps idling
+  const next = meetingsFromResponse(body);
+  // The first answer meets the room that concluded last; later answers meet every room that concluded since.
+  const fresh = state.polled ? freshMeetings(state.live, next) : [latestMeeting(next)].filter(Boolean);
+  state.live = next; state.polled = true;
+  for (const id of fresh) if (!state.pending.includes(id) && state.meet?.type !== id) state.pending.push(id);
   syncUi();
 }
 function beam(a, to, pose) { a.jump = { to: to ? to.clone() : a.home.clone(), pose: pose || a.basePose, face: null }; a.want = 0; }
@@ -305,7 +304,7 @@ function say(a, text, to) {
   state.speaker = a; const sub = $('sub'); if (!a) { sub.classList.remove('on'); return; }
   if (a.human) { a.meetPose = a.pose === 'talk' ? a.meetPose : a.pose; applyPose(a, 'talk'); }
   const toNames = (to ?? []).map((id) => byId[id]).filter(Boolean).map((b) => nameOf(b.def));
-  $('sub-name').textContent = toNames.length ? `${nameOf(a.def)} → ${toNames.join(', ')}` : nameOf(a.def); $('sub-text').textContent = text; sub.classList.remove('on'); void sub.offsetWidth; sub.classList.add('on');
+  $('sub-name').textContent = toNames.length ? `${nameOf(a.def)}, in reply to ${toNames.join(' and ')}` : nameOf(a.def); $('sub-text').textContent = text; sub.classList.remove('on'); void sub.offsetWidth; sub.classList.add('on');
   sound?.blip();
 }
 
@@ -356,8 +355,9 @@ function frame() {
 let sound = null;
 function syncUi() {
   document.querySelectorAll('[data-meet]').forEach((b) => { const id = b.dataset.meet; b.disabled = !state.live[id] || !agents.length; b.setAttribute('aria-pressed', String(state.meet?.type === id)); });
-  const m = state.meet, st = $('room-status');
-  st.textContent = m ? `${m.def.label} · ${whenOf(m.live.at)} · reading ${m.live.bias}` : state.polled ? (Object.keys(state.live).length ? 'Between meetings. The next room meets when its candle closes.' : 'No room reading yet.') : '';
+  // The hero's status (one element, also written by the page before the scene loads): the meeting replaying, else
+  // the 15-minute room's reading.
+  const st = statusOf(state.live, state.meet?.type ?? null); if (st) window.dispatchEvent(new CustomEvent('warroom-status', { detail: st }));
 }
 function latestOf(id) {
   // The newest public excerpt of this agent across the rooms, and the metrics it weighed there.
@@ -370,8 +370,8 @@ function openCard(o) {
   state.card = o; const rows = $('card-rows'); rows.textContent = ''; const row = (k, v) => { const h = document.createElement('div'); h.className = 'k'; h.textContent = k; rows.appendChild(h); if (Array.isArray(v)) { const ul = document.createElement('ul'); v.forEach((x) => { const li = document.createElement('li'); li.textContent = x; ul.appendChild(li); }); rows.appendChild(ul); } else { const d = document.createElement(k.startsWith('Latest') ? 'blockquote' : 'div'); d.textContent = v; rows.appendChild(d); } };
   if (o.thing) { $('card-kind').textContent = o.kind; $('card-name').textContent = o.name; $('card-title').textContent = ''; $('card-role').textContent = o.role; o.group.getWorldPosition(tmpV2); const p = tmpV2.clone(), far = Math.hypot(p.x, p.z) > 6; flyTo(far ? new THREE.Vector3(p.x * 0.5, 4, p.z * 0.5) : new THREE.Vector3(0, 4.6, 9.5), p.clone().setY(Math.max(1.6, p.y))); }
   else { const d = o.def, live = latestOf(d.id); $('card-kind').textContent = LABEL[d.dept]; $('card-name').textContent = nameOf(d); $('card-title').textContent = d.title; $('card-role').textContent = d.role;
-    const metrics = live?.metrics?.length ? live.metrics : READS[d.id]; if (metrics) row(live?.metrics?.length ? `Weighed in the ${MEETINGS[live.where.id].label}` : 'Reads', metrics);
-    if (live?.latest) row(`Latest · ${MEETINGS[live.where.id].label}, ${whenOf(live.where.at)}`, live.latest);
+    if (live?.metrics?.length) row(`Weighed in the ${MEETINGS[live.where.id].label}`, live.metrics); else if (READS[d.id] && !d.role.startsWith('Reads ')) row('Reads', READS[d.id]);
+    if (live?.latest) row(`Latest, in the ${MEETINGS[live.where.id].label} of ${whenOf(live.where.at)}`, live.latest);
     const p = o.pos.clone(), inward = p.clone().setY(0).normalize().multiplyScalar(-1), dist = o.human ? 4.2 : 3.2; const side = new THREE.Vector3(inward.z, 0, -inward.x), cam = p.clone().addScaledVector(side, dist * 0.8).addScaledVector(inward, dist * 0.45).add(new THREE.Vector3(0, o.human ? 1.6 : 0.5, 0)); flyTo(cam, p.clone().add(new THREE.Vector3(0, o.human ? 1.1 : 0, 0))); }
   $('card').hidden = false; syncUi();
 }

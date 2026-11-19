@@ -35,7 +35,7 @@ export function meetingFromScene(scene) {
     analysts[a.id] = { metrics, latest: rebuttal || claim || '', bias: BIASES.has(a.bias) ? a.bias : null };
     if (claim) claims.push({ agent: a.id, text: claim });
     if (rebuttal) rebuttals.push({ agent: a.id, text: rebuttal, to: (Array.isArray(a.rebuts) ? a.rebuts : []).filter((r) => KNOWN.has(r)).slice(0, 2) });
-    if (metrics.length) weighing.push({ agent: a.id, text: metrics.join(' · ') });
+    if (metrics.length) weighing.push({ agent: a.id, text: metrics.join(', ') });
   }
   const talk = claims.length ? [...claims.slice(0, MAX_CLAIMS), ...rebuttals.slice(0, MAX_REBUTTALS)] : weighing.slice(0, MAX_WEIGHING);
   const reasons = (Array.isArray(scene.moderator) ? scene.moderator : []).map(safeLine).filter(Boolean).slice(0, MAX_REASONS);
@@ -66,4 +66,63 @@ export function whenOf(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   return `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })}, ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'UTC' })} UTC`;
+}
+
+/* ---------- the minutes (the homepage's record of each room's last meeting) ---------- */
+const TITLE = Object.fromEntries(PEOPLE.map((p) => [p.id, p.title]));
+/** The rooms by meeting id, as the page names them. */
+export const ROOM_NAME = { m15: '15-minute room', h1: 'Hourly room', h4: '4-hour room', d1: 'Daily room' };
+/** A reading in words: never red or green, never "neutral" (the room is undecided). */
+export const BIAS_WORD = { bearish: 'bearish', bullish: 'bullish', neutral: 'undecided' };
+const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}`);
+
+/**
+ * Pure: one room's scene as its minutes: { id, room, at, bias, conclusion, speakers, tally }. Each speaker is a known
+ * analyst whose claim passes the public filter (an analyst with no claim did not speak); its rebuttal and whom it
+ * answered come with it. The same filter as the scene: no order word, no price, no position. Null when unusable.
+ */
+export function minutesFromScene(scene) {
+  const id = meetingOf(scene?.source);
+  if (!id || typeof scene.at !== 'string') return null;
+  const speakers = [];
+  for (const a of Array.isArray(scene.analysts) ? scene.analysts : []) {
+    if (!KNOWN.has(a?.id)) continue;
+    const claim = joined(a.claim);
+    if (!claim) continue;
+    const to = (Array.isArray(a.rebuts) ? a.rebuts : []).filter((r) => KNOWN.has(r) && r !== a.id).map((r) => TITLE[r]);
+    speakers.push({ id: a.id, title: TITLE[a.id], bias: BIASES.has(a.bias) ? a.bias : 'neutral', claim, rebuttal: joined(a.rebuttal), to: [...new Set(to)] });
+  }
+  const conclusion = (Array.isArray(scene.moderator) ? scene.moderator : []).map(safeLine).filter(Boolean);
+  if (!speakers.length && !conclusion.length) return null;
+  const tally = { bearish: 0, neutral: 0, bullish: 0 };
+  for (const s of speakers) tally[s.bias] += 1;
+  return { id, room: ROOM_NAME[id], at: scene.at, bias: BIASES.has(scene.bias) ? scene.bias : 'neutral', conclusion, speakers, tally };
+}
+
+/** Every usable room's minutes, by meeting id. */
+export function minutesFromResponse(body) {
+  const out = {};
+  for (const scene of Object.values(body?.rooms ?? {})) { const m = minutesFromScene(scene); if (m) out[m.id] = m; }
+  return out;
+}
+
+/** "8 bearish, 3 undecided and 2 bullish of 13 who spoke". */
+export function tallyWords(tally) {
+  const parts = ['bearish', 'neutral', 'bullish'].filter((k) => tally[k]).map((k) => `${tally[k]} ${BIAS_WORD[k]}`);
+  const n = tally.bearish + tally.neutral + tally.bullish;
+  return n ? `${andList(parts)} of ${n} who spoke` : 'No analyst spoke';
+}
+
+/** "In reply to the Supertrend and Order Blocks", or "In reply" when the analysts it answered are not named. */
+export const replyWords = (to) => (to?.length ? `In reply to ${andList(to)}` : 'In reply');
+
+/**
+ * Pure: the hero's status line. While a meeting replays in the scene: that room is meeting. Otherwise the 15-minute
+ * room's reading (the room that meets most), else the room that met last. Null before any room.
+ */
+export function statusOf(meetings, playing = null) {
+  if (playing && meetings[playing]) return { text: `The ${ROOM_NAME[playing].toLowerCase()} is meeting`, at: meetings[playing].at, bias: meetings[playing].bias };
+  const id = meetings.m15 ? 'm15' : latestMeeting(meetings);
+  if (!id) return null;
+  return { text: `The ${ROOM_NAME[id].toLowerCase()} reads ${BIAS_WORD[meetings[id].bias] ?? 'undecided'}`, at: meetings[id].at, bias: meetings[id].bias };
 }
