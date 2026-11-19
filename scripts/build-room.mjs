@@ -10,12 +10,9 @@ import { build } from "esbuild";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from "node:fs";
 import { withNavigator, sourceHash } from "./navigator.mjs";
+import { FONTS } from "./fonts.mjs";
 
-/** The fonts the page uses: [package, file], each served from /fonts/<file>. */
-export const FONTS = [
-  ["rajdhani", "rajdhani-latin-500-normal.woff2"], ["rajdhani", "rajdhani-latin-600-normal.woff2"], ["rajdhani", "rajdhani-latin-700-normal.woff2"],
-  ["newsreader", "newsreader-latin-400-normal.woff2"], ["newsreader", "newsreader-latin-400-italic.woff2"], ["newsreader", "newsreader-latin-500-normal.woff2"]
-];
+export { FONTS };
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const at = (p) => new URL(`../${p}`, import.meta.url).pathname;

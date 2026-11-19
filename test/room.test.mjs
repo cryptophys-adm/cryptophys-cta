@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { PEOPLE, MEETINGS, READS, DEPTS } from "../site/room/data.js";
 import { meetingFromScene, meetingsFromResponse, freshMeetings, latestMeeting, safeLine, minutesFromScene, minutesFromResponse, tallyWords, replyWords, statusOf } from "../site/room/script.js";
-import { FONTS } from "../scripts/build-room.mjs";
+import { FONTS } from "../scripts/fonts.mjs";
 import { navigatorHtml, withNavigator, sourceHash } from "../scripts/navigator.mjs";
 import { handle, warroomScene, SECURITY_HEADERS, SCENE_TTL_S } from "../src/app.mjs";
 import { CALLBACK_PATH } from "../src/oauth.mjs";
