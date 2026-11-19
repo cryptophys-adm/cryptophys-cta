@@ -884,10 +884,13 @@ const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o?.[k] !== undef
  * The scene as the page reads it: only the fields PublicProjection.warroomScene documents (it already filters every
  * sentence; nothing else it might grow, such as a stance or a confidence, is passed on), cached for SCENE_TTL_S.
  */
+const sceneHeaders = (ok) => ({ "content-type": "application/json; charset=utf-8", "cache-control": ok ? `public, max-age=${SCENE_TTL_S}` : "no-store", "x-content-type-options": "nosniff" });
 export async function warroomScene(env, request, cache) {
   const key = new Request(new URL("/api/public/warroom-scene", request.url).toString(), { method: "GET" });
+  // A copy from the edge cache comes back with the zone's browser TTL (4 hours, seen live 2026-11-19), which would
+  // freeze a visitor's scene: its headers are set again here, so a browser never keeps it longer than a minute.
   const hit = await cache?.match(key).catch(() => null);
-  if (hit) return hit;
+  if (hit) return new Response(hit.body, { status: hit.status, headers: sceneHeaders(true) });
   let body, ok = true;
   try {
     if (typeof env.PROJECTION?.warroomScene !== "function") throw new Error("the AI Worker has no war room scene yet");
@@ -903,7 +906,7 @@ export async function warroomScene(env, request, cache) {
     console.error("warroom_scene_failed", String(error?.message ?? error).slice(0, 160));
     body = { rooms: {}, error: "the war room scene is not available", notice: "Analysis, not a signal." };
   }
-  const res = new Response(JSON.stringify(body), { status: ok ? 200 : 502, headers: { "content-type": "application/json; charset=utf-8", "cache-control": ok ? `public, max-age=${SCENE_TTL_S}` : "no-store", "x-content-type-options": "nosniff" } });
+  const res = new Response(JSON.stringify(body), { status: ok ? 200 : 502, headers: sceneHeaders(ok) });
   if (ok && cache) await cache.put(key, res.clone()).catch(() => {});
   return res;
 }

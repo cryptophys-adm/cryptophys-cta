@@ -131,8 +131,14 @@ test("RM7 GET /api/public/warroom-scene: only the documented fields, cached a mi
   assert.deepEqual(Object.keys(body.rooms), ["15m"], "only the four rooms");
   assert.doesNotMatch(JSON.stringify(body), /stance|confidence|SELL|"model"/);
   assert.deepEqual(Object.keys(body.rooms["15m"].analysts[0]).sort(), ["bias", "claim", "id", "metrics", "rebuts", "rebuttal"]);
-  await handle(req(), env, { cache });
+  // The edge copy comes back with the zone's browser TTL (4 hours, live 2026-11-19): the visitor still gets a minute.
+  const [k] = store.keys(); const stale = store.get(k); const h = new Headers(stale.headers); h.set("cache-control", "public, max-age=14400");
+  store.set(k, new Response(await stale.clone().text(), { status: 200, headers: h }));
+  const again = await handle(req(), env, { cache });
   assert.equal(calls, 1, "the second visitor is answered from the edge cache");
+  assert.equal(again.headers.get("cache-control"), `public, max-age=${SCENE_TTL_S}`);
+  assert.deepEqual(Object.keys((await again.json()).rooms), ["15m"]);
+  assert.match(read("site/room/main.js"), /cache: 'no-store'/, "the page polls past the browser cache");
   const failing = await warroomScene({ PROJECTION: { warroomScene: async () => { throw new Error("down"); } } }, new Request("https://x/api/public/warroom-scene"), { match: async () => null, put: async () => { throw new Error("must not cache"); } });
   assert.equal(failing.status, 502);
   assert.equal(failing.headers.get("cache-control"), "no-store");

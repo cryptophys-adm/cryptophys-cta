@@ -274,7 +274,7 @@ function buildAgents() {
 /* ---------- meetings: the real rooms, as they conclude ---------- */
 async function poll() {
   try {
-    const r = await fetch(SCENE_URL, { headers: { accept: 'application/json' } });
+    const r = await fetch(SCENE_URL, { headers: { accept: 'application/json' }, cache: 'no-store' }); // the edge caches it; the browser never
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const next = meetingsFromResponse(await r.json());
     // The first read meets the room that concluded last; later reads meet every room that concluded since.
