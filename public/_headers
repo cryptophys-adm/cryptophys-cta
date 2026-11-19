@@ -1,0 +1,12 @@
+# The security headers of every static file (the Worker sets the same on what it answers: SECURITY_HEADERS in
+# src/app.mjs; test/room.test.mjs keeps the two equal). Not served itself.
+/*
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; media-src 'self'; connect-src 'self'; font-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+# The war room's scene and mannequin change only with a deploy; a visitor keeps them for an hour.
+/room/*
+  Cache-Control: public, max-age=3600

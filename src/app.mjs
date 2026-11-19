@@ -464,7 +464,7 @@ export async function renderImages(env, { now = Date.now(), launch, limit = 3, r
 const image = (m, cache) => new Response(fromBase64(m.data), { status: 200, headers: { "content-type": m.content_type, "cache-control": cache, "x-content-type-options": "nosniff" } });
 
 /** The HTTP face. `deps` lets tests inject the desk, the clock and the JWT check's fetch. */
-export async function handle(request, env, { fetchImpl = fetch, now, launch } = {}) {
+export async function handle(request, env, { fetchImpl = fetch, now, launch, cache = globalThis.caches?.default } = {}) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   const route = `${request.method} ${path}`;
@@ -492,6 +492,9 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch } = 
     if (request.method === "GET") await desk(env).click({ slug: go[1], channel: go[2] }, now ? now * 1000 : Date.now()).catch(() => {});
     return new Response(null, { status: 302, headers: { location: redirectTarget(link, go[2]), "cache-control": "no-store", "referrer-policy": "no-referrer", "x-content-type-options": "nosniff" } });
   }
+  // The holo war room (the home page): the rooms' latest public scenes, cached at the edge for a minute, so visitors
+  // never reach the AI Worker more than once a minute per data centre. No per-visitor AI call.
+  if (route === "GET /api/public/warroom-scene") return warroomScene(env, request, cache);
   if (route === "GET /api/public/archive") {
     return rpc(async () => ({ posts: await desk(env).archive(Number(url.searchParams.get("limit")) || 30) }), "archive_failed");
   }
@@ -870,6 +873,39 @@ async function oauthCallback(env, url, identity, role, { fetchImpl, now }) {
     console.error("oauth_exchange_failed", channel, String(e?.message ?? e).slice(0, 160));
     return back({ oauth: "error", channel, reason: String(e?.message ?? e).slice(0, 160) });
   }
+}
+
+/** How long the edge keeps the war room's scene (the rooms conclude every 15 minutes at the most). */
+export const SCENE_TTL_S = 60;
+const SCENE_FIELDS = ["source", "label", "at", "bias", "moderator", "analysts"];
+const ANALYST_FIELDS = ["id", "bias", "metrics", "claim", "rebuttal", "rebuts"];
+const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o?.[k] !== undefined).map((k) => [k, o[k]]));
+/**
+ * The scene as the page reads it: only the fields PublicProjection.warroomScene documents (it already filters every
+ * sentence; nothing else it might grow, such as a stance or a confidence, is passed on), cached for SCENE_TTL_S.
+ */
+export async function warroomScene(env, request, cache) {
+  const key = new Request(new URL("/api/public/warroom-scene", request.url).toString(), { method: "GET" });
+  const hit = await cache?.match(key).catch(() => null);
+  if (hit) return hit;
+  let body, ok = true;
+  try {
+    if (typeof env.PROJECTION?.warroomScene !== "function") throw new Error("the AI Worker has no war room scene yet");
+    const s = await env.PROJECTION.warroomScene();
+    const rooms = {};
+    for (const [source, room] of Object.entries(s?.rooms ?? {})) {
+      if (!["15m", "1h", "4h", "1d"].includes(source) || !room || typeof room !== "object") continue;
+      rooms[source] = { ...pick(room, SCENE_FIELDS), analysts: (Array.isArray(room.analysts) ? room.analysts : []).map((a) => pick(a, ANALYST_FIELDS)) };
+    }
+    body = { rooms, notice: "Analysis, not a signal." };
+  } catch (error) {
+    ok = false;
+    console.error("warroom_scene_failed", String(error?.message ?? error).slice(0, 160));
+    body = { rooms: {}, error: "the war room scene is not available", notice: "Analysis, not a signal." };
+  }
+  const res = new Response(JSON.stringify(body), { status: ok ? 200 : 502, headers: { "content-type": "application/json; charset=utf-8", "cache-control": ok ? `public, max-age=${SCENE_TTL_S}` : "no-store", "x-content-type-options": "nosniff" } });
+  if (ok && cache) await cache.put(key, res.clone()).catch(() => {});
+  return res;
 }
 
 async function asset(env, request, url, rewrite, status) {

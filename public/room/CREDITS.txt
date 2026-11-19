@@ -1,0 +1,49 @@
+Third-party work in the holo war room (cta.cryptophys.work)
+===========================================================
+
+1. The mannequin (public/room/mannequin.glb)
+
+Universal Animation Library [Standard] by Quaternius, the "UAL1_Standard.glb" model (Unreal-Godot folder), taken
+from the official download at https://quaternius.itch.io/universal-animation-library on 2026-11-19.
+The animation clips were removed (the scene poses the skeleton itself); the mesh, the skeleton and the materials
+are unchanged. Original file sha256 69591853d817488edaa8fd9bf8fc1d821eaeaf789f8627b3cd23b41c4ed67997 (7,618,436 bytes);
+this file sha256 0d11eb3bbc6df8d30dfe75ce7cc2f060df99c01cf43ed7a4d505332272afacc2 (477,696 bytes).
+Its licence file, as shipped:
+
+-------------------------------------------------------
+License:
+CC0 1.0 Universal (CC0 1.0) 
+Public Domain Dedication
+https://creativecommons.org/publicdomain/zero/1.0/
+
+------------------------------------------------------
+Models by @Quaternius
+Consider supporting me on Patreon!
+
+https://www.patreon.com/quaternius
+
+
+
+2. three.js r170 (bundled into public/room/room.js)
+
+The MIT License
+
+Copyright © 2010-2024 three.js authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.

@@ -5,9 +5,12 @@
   "description": "Cryptophys CTA: the content studio and public CTA page at cta.cryptophys.work",
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "check": "wrangler deploy --dry-run"
+    "check": "wrangler deploy --dry-run",
+    "build:room": "node scripts/build-room.mjs"
   },
   "devDependencies": {
+    "esbuild": "0.28.2",
+    "three": "0.170.0",
     "wrangler": "^4.45.0"
   },
   "dependencies": {

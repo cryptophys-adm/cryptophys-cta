@@ -57,11 +57,15 @@
     // The channels whose post metrics are read once a day (src/insights.mjs). X is not listed: X bills each read.
     "CONTENT_INSIGHTS": "threads,instagram,youtube"
   },
-  // The public page and the studio page (no build step). run_worker_first: the JWT is checked before any studio asset.
+  // The public pages and the studio page. run_worker_first lists the paths the Worker answers first (owner 2026-11-19,
+  // the holo war room: static files, the 670 KB scene among them, no longer invoke the Worker): the health check, the
+  // API, the studio (its Access JWT is checked before any studio asset; the OAuth callback is under it), the cards
+  // Instagram fetches and the tracked links. Every other path is a static file, whose security headers come from
+  // public/_headers (test/room.test.mjs keeps them equal to the Worker's SECURITY_HEADERS).
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": true
+    "run_worker_first": ["/health", "/api/*", "/studio", "/studio/*", "/media/*", "/go/*"]
   },
   "observability": { "enabled": true }
 }
