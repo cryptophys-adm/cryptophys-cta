@@ -1,16 +1,16 @@
-// The home's panels (owner 2026-11-20: "per tab panel klik jangan continuous halaman"): Minutes, The cast and How it
-// works open one at a time under the hero, chosen by the URL hash (#minutes, #cast, #how), so a deep link, back and
-// forward work. The stylesheet shows the panel the hash targets (:target), else Minutes; the page itself only marks
-// the nav link of the open panel (aria-current) and moves focus to its heading when a link opens it. Opening a panel
-// fetches nothing. Pure, except initPanels.
+// The home's panels (owner 2026-11-20: "per tab panel klik jangan continuous halaman"): The cast and How it works
+// open one at a time under the minutes, chosen by the URL hash (#cast, #how), so a deep link, back and forward work.
+// The minutes are no panel: they follow the hero as the page scrolls (owner: "minutes jangan di header tapi ikut ke
+// home page scroll bawah seperti sebelumnya"). The stylesheet shows the panel the hash targets (:target); the page
+// itself only marks the nav link of the open panel (aria-current) and moves focus to its heading when a link opens it.
+// Opening a panel fetches nothing. Pure, except initPanels.
 
-export const PANELS = Object.freeze(['minutes', 'cast', 'how']);
-export const DEFAULT_PANEL = 'minutes';
+export const PANELS = Object.freeze(['cast', 'how']);
 
-/** Pure: the panel a URL hash opens: one of PANELS, else the default (Minutes). */
+/** Pure: the panel a URL hash opens: one of PANELS, else none (null). */
 export function panelOf(hash) {
   const id = String(hash ?? '').replace(/^#/, '');
-  return PANELS.includes(id) ? id : DEFAULT_PANEL;
+  return PANELS.includes(id) ? id : null;
 }
 
 /** Pure: true when the hash names a panel (a link opened it, so its heading takes focus). */
