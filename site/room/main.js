@@ -24,7 +24,7 @@ const TOUCH = media('(pointer: coarse)'), CALM = media('(prefers-reduced-motion:
 const LOW = TOUCH || window.innerWidth < 760 || (navigator.hardwareConcurrency || 8) <= 4;
 const MOTION = CALM ? 0.12 : 1, GAP_S = 4;
 const MANNEQUIN_URL = '/room/mannequin.glb';
-const HOLO = 0x55c8ff, WARM = 0xffb454, BIAS = { neutral: 0x9fd8ff, bearish: 0x3aa0ff, bullish: 0xffa630 };
+const HOLO = 0x55c8ff, WARM = 0xffb454, BIAS = { neutral: 0xffb454, bearish: 0xff4d5e, bullish: 0x3ee08f }; // owner 2026-11-20: bearish red, bullish green, neutral amber
 const CONSTRUCTS = ['prophet', 'trade_management', 'interstellar_eyes', 'kinetic_engine', 'fabio_amt', 'chronos_matrix', 'tactical_muscles', 'macro_aether', 'decision_matrix', 'supertrend', 'aegis_footprint', 'order_blocks'];
 const LABEL = { hall: 'Analyst', lead: 'Leader', research: 'Research', content: 'Content studio', ops: 'Platform', knowledge: 'Knowledge' };
 const Y = new THREE.Vector3(0, 1, 0), CORE = new THREE.Vector3(0, 2.75, 0);
@@ -121,7 +121,7 @@ function buildTable() {
   [1.6, 1.85].forEach((r, i) => { const m = lineMat(BIAS.bearish, 0.8); state.accent.push(m); const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.012, 6, 120), new THREE.MeshBasicMaterial({ color: BIAS.bearish, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false })); state.accent.push(ring.material); ring.rotation.x = 1.2 + i * 0.6; g.add(ring); spinners.push({ o: ring, y: i ? -0.35 : 0.5, x: i ? 0.2 : -0.12 }); });
   // the seal that closes over the core during a huddle
   state.seal = new THREE.Group(); g.add(state.seal); state.seal.add(new THREE.Mesh(new THREE.IcosahedronGeometry(1.34, 1), new THREE.MeshStandardMaterial({ color: 0x05070a, metalness: 1, roughness: 0.22, flatShading: true }))); state.seal.add(edges(new THREE.IcosahedronGeometry(1.35, 1), lineMat(WARM, 0.9))); state.seal.scale.setScalar(0.001);
-  const hit = new THREE.Mesh(new THREE.SphereGeometry(1.6, 12, 8), new THREE.MeshBasicMaterial()); hit.visible = false; g.add(hit); addThing(hit, g, 'Cerebrum', 'Core', 'The core every meeting gathers around. It glows blue when the room reads gold as bearish and amber when bullish, and seals itself for the final huddle.', 2.1);
+  const hit = new THREE.Mesh(new THREE.SphereGeometry(1.6, 12, 8), new THREE.MeshBasicMaterial()); hit.visible = false; g.add(hit); addThing(hit, g, 'Cerebrum', 'Core', 'The core every meeting gathers around. It glows red when the room reads gold as bearish, green when bullish and amber when undecided, and seals itself for the final huddle.', 2.1);
   state.link = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), lineMat(0xffffff, 0.75)); state.link.frustumCulled = false; state.link.visible = false; scene.add(state.link);
 }
 function addThing(hit, group, name, kind, role, h) { const t = { name, kind, role, group, h, thing: true }; hit.userData.thing = t; hits.push(hit); things.push(t); return t; }

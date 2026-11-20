@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { PEOPLE, MEETINGS, READS, DEPTS } from "../site/room/data.js";
-import { meetingFromScene, meetingsFromResponse, freshMeetings, latestMeeting, safeLine, minutesFromScene, minutesFromResponse, tallyWords, replyWords, statusOf } from "../site/room/script.js";
+import { meetingFromScene, meetingsFromResponse, freshMeetings, latestMeeting, safeLine, minutesFromScene, minutesFromResponse, tallyWords, replyWords, statusOf, postHeadline, latestPost } from "../site/room/script.js";
 import { FONTS } from "../scripts/fonts.mjs";
 import { navigatorHtml, withNavigator, sourceHash } from "../scripts/navigator.mjs";
 import { handle, warroomScene, SECURITY_HEADERS, SCENE_TTL_S } from "../src/app.mjs";
@@ -213,4 +213,31 @@ test("RM9 the cast reads as a directory: a distinct role for every agent, indica
   assert.match(page, /data-threads>Follow on Threads</);
   assert.match(page, /href="\/studio"[^>]*>Studio sign in</);
   assert.doesNotMatch(page, /href="\/cta\.css"/, "the home page stands on its own stylesheet");
+});
+
+test("RM10 the latest post on Threads: the headline only, filtered like the rooms; the feed rests in a hidden tab; the reading colours", () => {
+  assert.equal(postHeadline("Education · XAUUSD 1D War Room reading\n\nBias on the daily chart: Bearish"), "XAUUSD 1D War Room reading");
+  assert.equal(postHeadline("Education · Pattern breakout · XAUUSD D1\nFalling Wedge"), "Pattern breakout, XAUUSD D1", "the post's dots read as commas");
+  assert.equal(postHeadline("Education · Gold tests 3740 after the open\nmore"), "", "a price in the headline: not shown");
+  assert.equal(postHeadline("Sell the rally into resistance"), "", "an order word: not shown");
+  assert.equal(postHeadline(""), "");
+  const posts = [
+    { channel: "x", text: "Education · Newer but hidden", published_at: "2026-11-19T12:00:00.000Z" },
+    { channel: "threads", text: "Education · Older post", published_at: "2026-11-18T10:00:00.000Z" },
+    { channel: "threads", text: "Education · Pattern breakout · XAUUSD H1\nBreakout line 3755.2", published_at: "2026-11-19T11:49:50.999Z" }
+  ];
+  assert.deepEqual(latestPost(posts), { channel: "threads", at: "2026-11-19T11:49:50.999Z", headline: "Pattern breakout, XAUUSD H1" }, "Threads only; the body's level never comes along");
+  assert.equal(latestPost([]), null);
+  const page = read("public/index.html");
+  assert.match(page, /id="latest"[^>]*hidden/, "hidden until a post is there");
+  assert.ok(page.indexOf('id="latest"') < page.indexOf('id="minutes"'), "between the room and the minutes");
+  const home = read("site/home/home.js");
+  assert.match(home, /\/api\/public\/archive\?limit=30/);
+  assert.doesNotMatch(home, /(post|p|a)\.text\b|posts\[[^\]]*\]\.text/, "the page never shows a post's body (latestPost gives the headline only)");
+  const feed = read("site/room/feed.js");
+  assert.match(feed, /if \(!document\.hidden\) read\(\)/, "no read in a hidden tab");
+  assert.match(feed, /visibilitychange/, "one read when the tab is shown again");
+  // Owner 2026-11-20: bearish red, bullish green, neutral amber, on the page and in the scene.
+  assert.match(read("public/home.css"), /--bear:#F2606E;--bull:#3FD08A;--flat:#E0A458;/);
+  assert.match(read("site/room/main.js"), /BIAS = \{ neutral: 0xffb454, bearish: 0xff4d5e, bullish: 0x3ee08f \}/);
 });

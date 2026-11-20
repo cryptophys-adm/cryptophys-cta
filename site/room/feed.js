@@ -12,9 +12,14 @@ export function onScene(fn) {
   window.addEventListener(SCENE_EVENT, (e) => fn(e.detail));
 }
 
-/** Starts the minute poll (home bundle only). A failed read is announced as null; the page keeps the last answer. */
+/**
+ * Starts the minute poll (home bundle only). A failed read is announced as null; the page keeps the last answer. A
+ * hidden tab does not read (orchestrator review, 2026-11-19); it reads once when it is shown again.
+ */
 export function startFeed() {
+  let last = 0;
   const read = async () => {
+    last = Date.now();
     try {
       const r = await fetch(SCENE_URL, { headers: { accept: 'application/json' }, cache: 'no-store' }); // the edge caches it; the browser never
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -26,5 +31,6 @@ export function startFeed() {
     }
   };
   read();
-  setInterval(read, POLL_MS);
+  setInterval(() => { if (!document.hidden) read(); }, POLL_MS);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - last >= 15000) read(); });
 }

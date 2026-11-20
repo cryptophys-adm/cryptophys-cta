@@ -1,7 +1,7 @@
 // The home page (owner 2026-11-19, the homepage redesign): the hero's status, the minutes of each room's last meeting,
 // the Threads link and the disclaimer from the public profile, and the holo war room, loaded after first paint and
 // only where WebGL works. One feed of the rooms serves the minutes and the scene (../room/feed.js).
-import { minutesFromResponse, meetingsFromResponse, statusOf, tallyWords, replyWords, whenOf, BIAS_WORD } from '../room/script.js';
+import { minutesFromResponse, meetingsFromResponse, statusOf, tallyWords, replyWords, whenOf, latestPost, BIAS_WORD } from '../room/script.js';
 import { startFeed, onScene } from '../room/feed.js';
 
 const $ = (id) => document.getElementById(id);
@@ -92,12 +92,20 @@ onScene((body) => {
 select('m15');
 startFeed();
 
-/* ---------- the Threads link and the disclaimer, from the public profile ---------- */
-fetch('/api/public/profile').then((r) => r.json()).then((p) => {
+/* ---------- the Threads link, the disclaimer and the latest post, from the public profile and archive ---------- */
+// The latest post on Threads (owner 2026-11-19, "Follow first"): its headline only (a body may carry prices and
+// levels) and when it went out, linked to the channel. X stays hidden; only Threads is shown for now.
+const json = (u) => fetch(u).then((r) => r.json()).catch(() => ({}));
+Promise.all([json('/api/public/profile'), json('/api/public/archive?limit=30')]).then(([p, a]) => {
   const threads = (p?.links ?? []).find((l) => l.channel === 'threads')?.url;
-  if (threads && /^https:\/\/www\.threads\.(net|com)\//.test(threads)) document.querySelectorAll('[data-threads]').forEach((a) => { a.href = threads; });
+  if (threads && /^https:\/\/www\.threads\.(net|com)\//.test(threads)) document.querySelectorAll('[data-threads]').forEach((el) => { el.href = threads; });
   if (p?.brand?.disclaimer && $('disclaimer-text')) $('disclaimer-text').textContent = p.brand.disclaimer;
-}).catch(() => {});
+  const post = latestPost(a?.posts, 'threads');
+  if (!post) return;
+  $('latest-headline').textContent = post.headline || 'The latest post';
+  $('latest-time').textContent = `Posted ${whenOf(post.at)}`;
+  $('latest').hidden = false;
+});
 
 /* ---------- the scene: three.js and the mannequin are this site's own files, fetched once the page has painted ---------- */
 const gl = (() => { try { const c = document.createElement('canvas'); return Boolean(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; } })();

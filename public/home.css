@@ -16,8 +16,8 @@
   --gold:#D4A537;    /* fine gold: the brand and the one main action */
   --ink:#E6EDF7;     /* spoken words */
   --slate:#8A97AB;   /* who, when, and notes */
-  /* readings, never red or green: lower is amber, higher is holo, undecided is slate */
-  --bear:#E0A458;--bull:#8FD8FF;--flat:#8A97AB;
+  /* readings (owner 2026-11-20): bearish red, bullish green, neutral (undecided) amber */
+  --bear:#F2606E;--bull:#3FD08A;--flat:#E0A458;
   --display:Rajdhani,"Arial Narrow",sans-serif;
   --read:Newsreader,Georgia,"Times New Roman",serif;
   --s-1:13.6px;--s0:17px;--s1:21.25px;--s2:26.5px;--s3:33px;--s4:41.5px;--s5:52px;--s6:65px;
@@ -109,6 +109,14 @@ button{font:inherit;color:inherit}
 .room-card .close{position:absolute;right:4px;top:4px;width:44px;height:44px;border:0;background:transparent;font-size:24px;color:var(--slate)}
 .room-msg{position:absolute;z-index:3;left:60%;top:42%;transform:translate(-50%,-50%);width:min(420px,60%);text-align:center;font:600 var(--s0)/1.4 var(--display);color:var(--slate)}
 
+/* ---------- the latest post: a quiet band between the room and the minutes ---------- */
+.latest{border-bottom:1px solid var(--rule);background:var(--deck)}
+.latest-in{max-width:var(--wrap);margin:0 auto;padding:28px var(--gut);display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px 32px}
+.latest h2{font-size:var(--s0);font-weight:600;color:var(--gold);letter-spacing:.02em}
+.latest-headline{font:400 var(--s1)/1.35 var(--read);color:var(--ink);min-width:0}
+.latest-time{grid-column:2;color:var(--slate);font:500 var(--s0)/1.2 var(--display)}
+.latest .btn{grid-column:3;grid-row:1/span 2}
+
 /* ---------- the minutes ---------- */
 .minutes{max-width:var(--wrap);margin:0 auto;padding:96px var(--gut) 80px}
 .minutes-head{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:24px;padding-bottom:20px;border-bottom:1px solid var(--rule)}
@@ -129,7 +137,7 @@ button{font:inherit;color:inherit}
 .tally b{display:block;border-radius:1px;flex-basis:0}
 .tally-words{margin-top:10px;color:var(--slate);font-size:var(--s0);font-weight:500;line-height:1.35}
 .bear{color:var(--bear)}.bull{color:var(--bull)}.flat{color:var(--flat)}
-.tally .bear{background:var(--bear)}.tally .bull{background:var(--bull)}.tally .flat{background:#3A4860}
+.tally .bear{background:var(--bear)}.tally .bull{background:var(--bull)}.tally .flat{background:var(--flat)}
 .conclusion{margin:0}
 .conclusion figcaption{font:600 var(--s0)/1 var(--display);color:var(--gold);letter-spacing:.02em}
 .conclusion blockquote{margin:16px 0 0;font:400 var(--s2)/1.42 var(--read);color:var(--ink);max-width:30em}
@@ -202,6 +210,9 @@ button{font:inherit;color:inherit}
   .chip{min-width:44px;padding:0 9px;font-size:15px}
   .room-card{left:8px;right:8px;top:8px;width:auto;max-height:calc(100% - 16px)}
   .room-msg{left:50%;width:84%}
+  .latest-in{grid-template-columns:1fr;gap:6px}
+  .latest-time,.latest .btn{grid-column:auto;grid-row:auto}
+  .latest .btn{justify-self:start;margin-top:10px}
   .minutes{padding-top:64px}
   .minutes-body{grid-template-columns:1fr}
   .ledger{position:static}

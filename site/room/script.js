@@ -72,7 +72,7 @@ export function whenOf(iso) {
 const TITLE = Object.fromEntries(PEOPLE.map((p) => [p.id, p.title]));
 /** The rooms by meeting id, as the page names them. */
 export const ROOM_NAME = { m15: '15-minute room', h1: 'Hourly room', h4: '4-hour room', d1: 'Daily room' };
-/** A reading in words: never red or green, never "neutral" (the room is undecided). */
+/** A reading in words: never "neutral" (the room is undecided). Colours: bearish red, bullish green, undecided amber. */
 export const BIAS_WORD = { bearish: 'bearish', bullish: 'bullish', neutral: 'undecided' };
 const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}`);
 
@@ -125,4 +125,22 @@ export function statusOf(meetings, playing = null) {
   const id = meetings.m15 ? 'm15' : latestMeeting(meetings);
   if (!id) return null;
   return { text: `The ${ROOM_NAME[id].toLowerCase()} reads ${BIAS_WORD[meetings[id].bias] ?? 'undecided'}`, at: meetings[id].at, bias: meetings[id].bias };
+}
+
+/* ---------- the latest post (owner 2026-11-19: "Follow first", each channel's latest post; Threads only for now) ---------- */
+/**
+ * Pure: a post's headline for the home page: its first line without the "Education ·" prefix, the post's own dots as
+ * commas, through the same filter as the rooms. Only the headline: a post's body may carry prices and levels.
+ * Empty when the line does not pass.
+ */
+export function postHeadline(text) {
+  const first = String(text ?? '').split('\n').map((l) => l.trim()).find(Boolean) ?? '';
+  return safeLine(first.replace(/^Education\s*·\s*/i, '').replace(/\s*·\s*/g, ', '));
+}
+
+/** Pure: the newest published post of a channel from GET /api/public/archive, or null. */
+export function latestPost(posts, channel = 'threads') {
+  const mine = (Array.isArray(posts) ? posts : []).filter((p) => p?.channel === channel && typeof p.published_at === 'string');
+  const last = mine.sort((a, b) => b.published_at.localeCompare(a.published_at))[0];
+  return last ? { channel, at: last.published_at, headline: postHeadline(last.text) } : null;
 }
