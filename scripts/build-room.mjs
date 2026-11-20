@@ -18,8 +18,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const at = (p) => new URL(`../${p}`, import.meta.url).pathname;
   const opts = { bundle: true, format: "esm", minify: true, target: "es2020", legalComments: "none", logLevel: "warning" };
   await build({ ...opts, entryPoints: [at("site/room/main.js")], outfile: at("public/room/room.js") });
-  // /room/room.js is the scene's own file: the page imports it at run time, never into its bundle.
-  await build({ ...opts, entryPoints: [at("site/home/home.js")], outfile: at("public/home.js"), external: ["/room/room.js"] });
+  // /room/room.js is the scene's own file: the page imports it at run time, never into its bundle, with the scene's hash
+  // in the URL (?v=), so a new scene is fetched at once although browsers keep /room/* for an hour.
+  const roomHash = createHash("sha256").update(readFileSync(at("public/room/room.js"))).digest("hex");
+  await build({ ...opts, entryPoints: [at("site/home/home.js")], outfile: at("public/home.js"), define: { __ROOM_VERSION__: JSON.stringify(roomHash.slice(0, 12)) } });
   mkdirSync(at("public/fonts"), { recursive: true });
   for (const [pkg, file] of FONTS) copyFileSync(at(`node_modules/@fontsource/${pkg}/files/${file}`), at(`public/fonts/${file}`));
   // Both families' licences in one file (the OFL asks for it to travel with the fonts).

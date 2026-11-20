@@ -115,7 +115,9 @@ if (!gl) {
   document.querySelectorAll('[data-agent]').forEach((b) => b.replaceWith(document.createTextNode(b.textContent)));
 }
 else {
-  const start = () => { $('loading').hidden = false; import('/room/room.js').catch(() => { $('loading').textContent = 'The scene did not load.'; }); };
+  // The scene's URL carries its build's hash, so a deploy is never hidden behind the hour browsers keep /room/* (owner
+  // 2026-11-20: the live page still showed the blue core from before the deploy).
+  const start = () => { $('loading').hidden = false; import(`/room/room.js?v=${__ROOM_VERSION__}`) /* global __ROOM_VERSION__: set by scripts/build-room.mjs */.catch(() => { $('loading').textContent = 'The scene did not load.'; }); };
   const later = () => (window.requestIdleCallback ? requestIdleCallback(start, { timeout: 1500 }) : setTimeout(start, 200));
   if (document.readyState === 'complete') later(); else window.addEventListener('load', later, { once: true });
 }

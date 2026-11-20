@@ -87,6 +87,7 @@ test("RM4 the build is current: the bundle was built from these sources, the nav
   for (const p of PEOPLE) assert.ok(page.includes(`data-agent="${p.id}"`), p.id);
   assert.ok(navigatorHtml().includes("<dd>"), "each agent's role is text on the page (screen readers, no WebGL)");
   assert.equal(b.home, createHash("sha256").update(readFileSync(new URL("../public/home.js", import.meta.url))).digest("hex"), "public/home.js is built from site/home");
+  assert.ok(read("public/home.js").includes(`/room/room.js?v=${b.bundle.slice(0, 12)}`), "the page loads this very scene: its hash in the URL, past the browsers' hour of /room/*");
   const files = readdirSync(new URL("../public/room/", import.meta.url)).sort();
   assert.deepEqual(files, ["CREDITS.txt", "build.json", "mannequin.glb", "room.js"]);
   const credits = read("public/room/CREDITS.txt");
