@@ -80,7 +80,7 @@ function init() {
   scene.add(new THREE.HemisphereLight(0x5b7fb5, 0x05070b, 0.55));
   // The bloom pass is the costly part: phones and small GPUs render without it.
   if (!LOW) { composer = new EffectComposer(renderer); composer.addPass(new RenderPass(scene, camera)); composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.42, 0.5, 0.55)); composer.addPass(new OutputPass()); }
-  buildRoom(); buildTable(); buildAether(); buildCorpus(); buildVault(); bindUi(); resize(); window.addEventListener('resize', resize);
+  buildRoom(); buildTable(); buildAether(); buildCorpus(); buildVault(); bindUi(); resize(); window.addEventListener('resize', resize); gold.el = $('gold-live');
   new GLTFLoader().loadAsync(MANNEQUIN_URL).then((g) => { mannequin = g.scene; buildAgents(); $('loading').hidden = true; onScene(take); }).catch((e) => { console.error(e); $('loading').textContent = 'The scene did not load.'; });
   // Draw only while the room is on screen and the tab is visible.
   const run = () => renderer.setAnimationLoop(state.visible && !document.hidden ? frame : null);
@@ -344,10 +344,21 @@ function tickCamera() {
 }
 function flyTo(pos, target) { state.tween = { dur: CALM ? 0.01 : 1.5, at: performance.now(), p0: camera.position.clone(), p1: pos.clone(), q0: controls.target.clone(), q1: target.clone() }; controls.enabled = false; state.touched = performance.now(); }
 function place(el, world, dy) { const c = renderer.domElement; tmpV.copy(world); tmpV.y += dy; tmpV.project(camera); if (tmpV.z > 1) { el.hidden = true; return; } el.hidden = false; el.style.transform = `translate(-50%,-100%) translate(${((tmpV.x + 1) / 2) * c.clientWidth}px,${((1 - tmpV.y) / 2) * c.clientHeight}px)`; }
+// TradingView's quote rides the core (owner 2026-11-20: "widget hanya ditempatkan dalam core"): the core's place on
+// screen, projected like the labels; the page's element is moved only when that place changes (a resize, a drag, a
+// fly-to), and hidden while the core is off screen. The quote's frame and attribution are the page's (home.js).
+const gold = { el: null, at: '' };
+function placeGold() {
+  const el = gold.el; if (!el) return; const c = renderer.domElement, w = c.clientWidth, h = c.clientHeight;
+  tmpV.copy(CORE).project(camera); const off = tmpV.z > 1 || Math.abs(tmpV.x) > 1 || Math.abs(tmpV.y) > 1;
+  const x = Math.round(((tmpV.x + 1) / 2) * w), y = Math.round(((1 - tmpV.y) / 2) * h), at = off ? 'off' : `${x},${y}`;
+  if (at === gold.at) return; gold.at = at; el.classList.toggle('off-core', off); if (!off) { el.style.left = `${x}px`; el.style.top = `${y}px`; }
+}
 function resize() { const c = renderer.domElement, w = c.clientWidth || innerWidth, h = c.clientHeight || innerHeight; renderer.setSize(w, h, false); composer?.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 function frame() {
   const dt = Math.min(0.1, clock.getDelta()), t = clock.elapsedTime; time.value += dt * MOTION; tick(dt, t); tickCamera();
   const h = state.hover, tag = $('tag'); if (h && !state.card) { tag.textContent = h.thing ? h.name : nameOf(h.def); if (h.thing) { h.group.getWorldPosition(tmpV2); place(tag, tmpV2, h.h); } else place(tag, h.pos, (h.human ? h.tall : h.tall) + 0.25); } else tag.hidden = true;
+  placeGold();
   if (composer) composer.render(); else renderer.render(scene, camera);
 }
 

@@ -1,5 +1,6 @@
-// The hero's clock (owner 2026-11-20, "approved all"): the countdown to the next meeting with the rooms that meet then,
-// the UTC time and the visitor's local time. Pure: no DOM; home.js writes the lines every second. Rooms meet at their
+// The rooms' clock (owner 2026-11-20, "approved all"): the countdown to the next meeting with the rooms that meet then
+// (the hero's dial), the UTC time and the visitor's local time (the header). Pure: no DOM; the pages write the lines
+// every second. Rooms meet at their
 // candle's close in UTC: 15m every quarter hour, 1H on the hour, 4H at 22, 02, 06, 10, 14 and 18 UTC, 1D at 22:00 UTC.
 // A room meets only when gold traded just before its close (the AI Worker's War Room: marketOpenAt(close - 1)), so
 // while gold is closed for the weekend the next meeting is the first quarter hour after the reopen.
@@ -30,6 +31,22 @@ export function nextMeeting(now) {
   let q = Math.floor(now / QUARTER_MS) * QUARTER_MS + QUARTER_MS;
   for (let i = 0; i < 4 * 24 * 8 && !meetsAt(q); i++) q += QUARTER_MS;
   return { at: q, rooms: roomsAt(q), closed: goldClosedAt(now) };
+}
+
+/** The rooms by meeting id, as the scene's replay buttons name them (site/room/data.js `short`). */
+export const ROOM_SHORT = { m15: '15m', h1: '1h', h4: '4h', d1: '1d' };
+
+/**
+ * Pure: the hero's meeting dial at `now` (owner 2026-11-20: the countdown as an "atomic clock" over the Sound button).
+ * `progress` is the share of the quarter hour gone before the next meeting (0 to 1, the ring's fill); `left` mm:ss;
+ * `rooms` the rooms that meet then, as the replay buttons name them. While gold is closed: no count, no fill, and
+ * `again` the visitor's day and time the rooms meet again.
+ */
+export function meetDial(now, fmt = clockFormat()) {
+  const n = nextMeeting(now);
+  if (n.closed) return { closed: true, progress: 0, left: '', rooms: [], again: `${fmt.day(n.at)} ${fmt.zone(n.at)}`.trim(), at: n.at };
+  const progress = Math.min(1, Math.max(0, 1 - (n.at - now) / QUARTER_MS));
+  return { closed: false, progress, left: countdown(now, n.at), rooms: n.rooms.map((r) => ROOM_SHORT[r]), again: '', at: n.at };
 }
 
 /** Pure: whole seconds until `at` as mm:ss (the next meeting is never more than a quarter hour away while gold trades). */

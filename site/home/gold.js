@@ -1,7 +1,7 @@
 // The live gold quote (owner 2026-11-20: "Widget only, core without a price"). TradingView licenses its market data for
 // display only and allows public display through its own widgets with their attribution, so the page shows the price
-// only through TradingView's Single Quote widget, in TradingView's own frame (the CSP's one frame-src), under the hero's
-// status box and never in the header. The page runs no TradingView script. Pure.
+// only through TradingView's Single Quote widget, in TradingView's own frame (the CSP's one frame-src), on the scene's
+// core (owner 2026-11-20: "widget hanya ditempatkan dalam core") and never in the header. The page runs no TradingView script. Pure.
 
 /** The only element on the public page that may carry a gold price: TradingView's quote (test/gold.test.mjs). */
 export const GOLD_PRICE_IDS = Object.freeze(['gold-live']);

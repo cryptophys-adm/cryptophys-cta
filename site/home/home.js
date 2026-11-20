@@ -1,9 +1,11 @@
-// The home page (owner 2026-11-19, the homepage redesign): the hero's status, the minutes of each room's last meeting,
-// the Threads link and the disclaimer from the public profile, and the holo war room, loaded after first paint and
-// only where WebGL works. One feed of the rooms serves the minutes and the scene (../room/feed.js).
+// The home page (owner 2026-11-19, the homepage redesign): the header's clock and menu, the panels, the hero's meeting
+// dial, the minutes of each room's last meeting, the Threads link and the disclaimer from the public profile, and the
+// holo war room, loaded after first paint and only where WebGL works. One feed of the rooms serves the minutes and the scene (../room/feed.js).
 import { minutesFromResponse, meetingsFromResponse, statusOf, tallyWords, replyWords, whenOf, latestPost, BIAS_WORD } from '../room/script.js';
 import { startFeed, onScene } from '../room/feed.js';
-import { clockLines, clockFormat } from './clock.js';
+import { clockFormat, meetDial } from './clock.js';
+import { startClock, initMenu } from './header.js';
+import { initPanels } from './panels.js';
 import { TRACK_URL } from './track.js';
 import { renderAvgStrip } from './avg-strip.js';
 import { tvQuoteSrc } from './gold.js';
@@ -25,23 +27,43 @@ function renderStatus(st) {
 }
 window.addEventListener('warroom-status', (e) => { sceneOwnsStatus = true; renderStatus(e.detail); });
 
-/* ---------- the clock under the status (owner 2026-11-20): the next meeting, UTC and the visitor's own time ---------- */
-// Written every second; the rows carry no live region, so a screen reader is not interrupted by the count.
-const fmt = clockFormat();
-function tickClock() {
-  const c = clockLines(Date.now(), fmt);
-  $('next-rooms').textContent = c.next;
-  $('next-in').textContent = c.left;
-  $('next-in').hidden = c.closed;
-  $('clock-utc').textContent = c.utc;
-  $('clock-local').textContent = c.local;
+/* ---------- the header: the clock and the menu; the panels under the hero ---------- */
+initMenu();
+initPanels();
+
+/* ---------- the meeting dial (owner 2026-11-20: the countdown as an "atomic clock" over the Sound button) ---------- */
+// The ring fills as the quarter hour runs out; the digits and the rooms are the dial's face. Written every second with
+// the header's clock; nothing ticking is a live region. Reduced motion: the ring moves a step a minute, no sweep.
+const CALM = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+const dfmt = clockFormat();
+const dial = { progress: -1, closed: null };
+function renderDial(now, c) {
+  const d = meetDial(now, dfmt);
+  const box = $('hero-status');
+  if (!box) return;
+  $('next-rooms').textContent = d.closed ? c.next : `${c.next} ${c.left}`;
+  $('next-in').textContent = d.closed ? 'Closed' : d.left;
+  $('dial-rooms').textContent = d.rooms.join(' ');
+  if (d.closed !== dial.closed) {
+    box.classList.toggle('closed', d.closed);
+    $('meet-label').textContent = d.closed ? 'Market closed' : 'Next meeting';
+    dial.closed = d.closed;
+  }
+  $('meet-again').textContent = d.closed ? `Meets again ${d.again}` : '';
+  const p = CALM ? Math.floor(d.progress * 15) / 15 : d.progress;
+  if (p === dial.progress) return;
+  // A new quarter hour: the ring empties at once (no sweep backwards) and the dial marks the meeting.
+  const back = p < dial.progress;
+  const fill = $('dial-fill'), head = $('dial-head');
+  fill.classList.toggle('moving', !back && dial.progress >= 0);
+  head.classList.toggle('moving', !back && dial.progress >= 0);
+  fill.style.strokeDashoffset = String(100 - p * 100);
+  head.style.transform = `rotate(${(p * 360).toFixed(2)}deg)`;
+  if (back && !d.closed) { $('dial').classList.remove('met'); void $('dial').offsetWidth; $('dial').classList.add('met'); }
+  dial.progress = p;
 }
-if ($('hero-status')) {
-  tickClock();
-  $('hero-status').hidden = false;
-  // On the second's edge, so the UTC seconds never skip.
-  setTimeout(() => { tickClock(); setInterval(tickClock, 1000); }, 1000 - (Date.now() % 1000));
-}
+if ($('hero-status')) $('hero-status').hidden = false;
+startClock(renderDial);
 
 /* ---------- the minutes ---------- */
 const view = { room: null, open: false, minutes: {}, failed: false };
@@ -138,11 +160,11 @@ const afterLoad = (fn) => {
   if (document.readyState === 'complete') later(); else window.addEventListener('load', later, { once: true });
 };
 
-/* ---------- the live quote (owner 2026-11-20, choice B): TradingView's Single Quote widget, under the status box ---------- */
-// Its own frame from TradingView's widget host (the CSP's one frame-src), so the page runs no TradingView script; the
-// box is shown at once (its space kept, no shift) and the frame comes after the load event. The attribution stays.
+/* ---------- the live quote (owner 2026-11-20: "widget hanya ditempatkan dalam core"): TradingView's Single Quote widget on the core ---------- */
+// Its own frame from TradingView's widget host (the CSP's one frame-src), so the page runs no TradingView script. The
+// lens floats over the scene (nothing shifts) and appears with its frame after the load event; the scene keeps it on
+// the core (site/room/main.js), and without the scene it stays where the core stands. The attribution stays.
 if ($('gold-live')) {
-  $('gold-live').hidden = false;
   afterLoad(() => {
     const f = document.createElement('iframe');
     f.src = tvQuoteSrc(`${location.host}${location.pathname}`);
@@ -151,6 +173,7 @@ if ($('gold-live')) {
     f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox');
     f.referrerPolicy = 'strict-origin-when-cross-origin';
     $('tv-frame').append(f);
+    $('gold-live').hidden = false;
   });
 }
 

@@ -118,9 +118,11 @@ test("TK5 the route without a record: 200 { available: false }, not cached, so t
 
 test("TK6 the pages: Performance before Archive in the nav, aria-current on its own page, built like the home page, the copy through the guardian", () => {
   const home = read("public/index.html"), perf = read("public/performance.html");
-  const nav = (html) => [...html.slice(html.indexOf('<nav aria-label="Main">'), html.indexOf("</nav>")).matchAll(/<a [^>]*>([^<]+)</g)].map((m) => m[1]);
-  assert.deepEqual(nav(home), ["Minutes", "The cast", "How it works", "Performance", "Archive"]);
-  assert.deepEqual(nav(perf), ["Minutes", "The cast", "How it works", "Performance", "Archive"]);
+  // One nav, grouped (owner 2026-11-20): The room, Results (Performance before Archive), Follow; inline when wide.
+  const nav = (html) => { const n = html.slice(html.indexOf('<nav class="nav" aria-label="Main">'), html.indexOf("</nav>", html.indexOf('aria-label="Main"'))); return [...n.matchAll(/<p class="menu-head" id="[^"]+">([^<]+)<\/p>|<a [^>]*>([^<]+)</g)].map((m) => m[1] ? `[${m[1]}]` : m[2]); };
+  const groups = ["[The room]", "Minutes", "The cast", "How it works", "[Results]", "Performance", "Archive", "[Follow]", "Threads"];
+  assert.deepEqual(nav(home), groups);
+  assert.deepEqual(nav(perf), groups);
   assert.match(perf, /<a href="\/performance" aria-current="page">Performance<\/a>/);
   assert.doesNotMatch(home, /aria-current/);
   assert.match(perf, /<h1>Performance<\/h1>/);
@@ -136,8 +138,9 @@ test("TK6 the pages: Performance before Archive in the nav, aria-current on its 
   // Never the internal name; the readings' colours never on the numbers.
   for (const f of ["public/performance.html", "public/performance.js", "public/home.js", "site/home/track.js", "site/performance/performance.js"]) assert.doesNotMatch(read(f), /omega/i, f);
   const css = read("public/home.css");
-  const numbers = css.slice(css.indexOf("/* the status box and the average box"), css.indexOf("/* ---------- the latest post")) + css.slice(css.indexOf("/* ---------- the Performance page"));
-  assert.doesNotMatch(numbers.replace(/\.tick\.(bear|bull)\{background:var\(--(bear|bull)\)\}/g, ""), /--bear|--bull|#F2606E|#3FD08A/i, "red and green only on the reading's tick");
+  const numbers = css.slice(css.indexOf("/* the live gold price"), css.indexOf("/* ---------- the latest post")) + css.slice(css.indexOf("/* ---------- the Performance page"));
+  assert.ok(numbers.includes(".dial-face b{") && numbers.includes(".track td b{"), "the dial's digits and the table's numbers are both checked");
+  assert.doesNotMatch(numbers.replace(/\.tick\.(bear|bull)\{background:var\(--(bear|bull)\)\}/g, ""), /--bear|--bull|#F2606E|#3FD08A/i, "red and green only on the reading's tick (never on the dial or a number)");
   // The guardian over the new copy (the page's words, the table's and the home box's): no order wording, promise,
   // level, account data or internal name. "Exit at TP1" and "Exit at TP2" are the owner's approved column names.
   const words = (html) => html.replace(/<script[\s\S]*?<\/script>|<head>[\s\S]*?<\/head>/g, " ").replace(/<[^>]+>/g, " ").replace(/&minus;/g, "-").replace(/\s+/g, " ");
