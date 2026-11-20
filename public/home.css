@@ -296,6 +296,6 @@ button{font:inherit;color:inherit}
 .avg-strip:hover .avg-label{color:var(--ink);text-decoration:underline}
 .t-pos{color:var(--n-pos)}.t-neg{color:var(--n-neg)}.t-wait{color:var(--n-wait)}.t-pf{color:var(--n-pf)}.t-zero{color:var(--n-zero)}
 @media (max-width:1400px){.avg-strip{display:none}}
-@media (min-width:1401px) and (max-width:1600px){.top{gap:20px}.top nav a{padding:0 9px}.top-end{gap:14px}}
+@media (min-width:1401px) and (max-width:1600px){.top{gap:16px}.top nav a{padding:0 8px}.top-end{gap:12px}.avg-strip{gap:8px;padding-left:12px}.avg-vals{gap:9px}}
 .top .brand,.top nav a,.top .quiet{white-space:nowrap}
 .track td b.t-pos{color:var(--n-pos)}.track td b.t-neg{color:var(--n-neg)}.track td b.t-wait{color:var(--n-wait)}.track td b.t-pf{color:var(--n-pf)}.track td b.t-zero{color:var(--n-zero)}
