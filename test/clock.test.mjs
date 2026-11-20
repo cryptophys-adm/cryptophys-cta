@@ -1,10 +1,12 @@
 // The hero's clock (owner 2026-11-20, "approved all"): gold's trading week copied from the AI Worker, the next meeting
-// with the rooms that meet then, the weekend close and reopen, the UTC and local lines, and the status box on the page.
+// with the rooms that meet then, the weekend close and reopen, the UTC and local lines (the header), and the meeting
+// dial on the hero.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { goldClosedAt, nextGoldChange } from "../site/home/market-hours.js";
-import { roomsAt, meetsAt, nextMeeting, countdown, clockLines, clockFormat, QUARTER_MS } from "../site/home/clock.js";
+import { roomsAt, meetsAt, nextMeeting, countdown, clockLines, clockFormat, meetDial, ROOM_SHORT, QUARTER_MS } from "../site/home/clock.js";
+import { MEETINGS } from "../site/room/data.js";
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 const at = (iso) => Date.parse(iso);
@@ -89,18 +91,61 @@ test("CK5 UTC ticks with seconds; local time with the short zone name, from Intl
   assert.equal(clockLines(at("2026-06-20T02:07:13Z"), clockFormat("America/New_York")).local, "22:07 EDT");
 });
 
-test("CK6 the status box on the home page: the reading, the countdown and the clock, top right; on a phone below the hero buttons; no live region on the ticking rows", () => {
+test("CK6 the clock in the header (UTC with seconds, the local time; UTC only on a phone, the local time in the menu) and the meeting dial bottom right of the hero, over the room's controls; no live region on anything that ticks", () => {
+  for (const f of ["public/index.html", "public/performance.html"]) {
+    const page = read(f);
+    const header = page.slice(page.indexOf("<header"), page.indexOf("</header>"));
+    assert.match(header, /<p class="top-clock"><b id="clock-utc"><\/b><span id="clock-local"><\/span><\/p>/, `${f}: the clock in the header`);
+    assert.match(header, /<p class="menu-time">Your time <b id="menu-local"><\/b><\/p>/, `${f}: the local time in the menu`);
+    assert.doesNotMatch(header, /aria-live/, `${f}: no live region in the header`);
+  }
   const page = read("public/index.html");
-  const side = page.slice(page.indexOf('class="hero-side"'), page.indexOf("</section>", page.indexOf('class="hero-side"')));
-  assert.ok(page.indexOf('class="hero-actions"') < page.indexOf('class="hero-side"'), "after the hero buttons in the page's order");
-  assert.ok(side.indexOf('id="room-status"') < side.indexOf('id="next-in"') && side.indexOf('id="next-in"') < side.indexOf('id="clock-utc"'), "the reading, the countdown, the clock");
-  assert.equal((side.match(/aria-live="off"/g) ?? []).length, 2, "both ticking rows");
-  assert.doesNotMatch(side, /aria-live="(polite|assertive)"/);
-  assert.equal(side.indexOf('id="avg"'), -1, "the average moved to the header (owner 2026-11-20)");
+  const hud = page.slice(page.indexOf('<div class="hud">'), page.indexOf('<div class="hero-copy">'));
+  assert.ok(hud.indexOf('id="hero-status"') >= 0 && hud.indexOf('id="hero-status"') < hud.indexOf('class="room-bar"'), "the dial over the room's controls");
+  assert.ok(hud.indexOf('id="room-status"') < hud.indexOf('id="next-in"'), "the reading beside the dial");
+  for (const id of ["next-in", "dial-rooms", "dial-fill", "dial-head", "next-rooms", "meet-again"]) assert.match(hud, new RegExp(`id="${id}"`), id);
+  assert.doesNotMatch(hud, /aria-live/, "nothing in the hud is a live region");
+  assert.match(hud, /<div class="dial" id="dial" aria-hidden="true">/, "the dial is drawn; its words are in #next-rooms");
+  assert.ok(page.indexOf('class="hud"') < page.indexOf('class="hero-copy"'), "in the page's order the dial and controls come before the copy (a phone: under the scene)");
+  assert.equal(page.indexOf('class="hero-side"'), -1, "the top-right column is gone (owner: \"jangan tempatkan semua di pojok\")");
+  const header = read("site/home/header.js");
+  assert.match(header, /clockLines\(now, fmt\)/);
+  assert.match(header, /1000 - \(Date\.now\(\) % 1000\)/, "on the second's edge");
   const home = read("site/home/home.js");
-  assert.match(home, /clockLines\(Date\.now\(\), fmt\)/);
+  assert.match(home, /startClock\(renderDial\)/, "the dial ticks with the header's clock");
+  assert.match(home, /meetDial\(now, dfmt\)/);
   assert.match(home, /addEventListener\('warroom-status'/, "the scene's status still feeds the reading");
+  assert.match(home, /CALM \? Math\.floor\(d\.progress \* 15\) \/ 15/, "reduced motion: the ring moves a step a minute");
+  assert.match(read("site/performance/performance.js"), /startClock\(\)/, "the Performance page's header ticks too");
   const css = read("public/home.css");
-  assert.match(css, /\.hero-side\{position:absolute;z-index:3;top:24px;right:var\(--gut\)/);
-  assert.match(css, /@media \(max-width:900px\)\{[\s\S]*?\.hero-side\{position:static/, "on a phone it follows the copy");
+  assert.match(css, /\.hud\{position:absolute;z-index:3;right:16px;bottom:16px;display:flex;flex-direction:column/, "bottom right, the dial over the controls");
+  assert.match(css, /@media \(max-width:900px\)\{[\s\S]*?\.hud\{position:relative/, "on a phone under the scene");
+  assert.match(css, /@media \(max-width:600px\)\{[\s\S]*?\.top-clock span\{display:none\}[\s\S]*?\.menu-time\{display:block\}/, "a phone: UTC in the header, the local time in the menu");
+  // The sweep, the electron and the orbits move only without a reduced-motion preference.
+  const moving = css.slice(css.indexOf("@media (prefers-reduced-motion:no-preference){\n  .dial"));
+  assert.match(moving.slice(0, moving.indexOf("\n}\n")), /\.dial \.fill\.moving\{transition[\s\S]*\.dial \.orbits\{animation:precess/);
+  assert.doesNotMatch(css.replace(/@media \(prefers-reduced-motion:no-preference\)\{[\s\S]*?\n\}\n/g, ""), /animation:precess|transition:stroke-dashoffset/, "no sweep or precession outside that block");
+});
+
+test("CK7 the dial: the ring fills over the quarter hour, the rooms as the replay buttons name them, the weekend without a count", () => {
+  const utc = clockFormat("UTC");
+  const d = meetDial(at("2026-11-19T02:07:30Z"), utc);
+  assert.equal(d.closed, false);
+  assert.equal(d.left, "07:30");
+  assert.equal(d.progress, 0.5, "half the quarter hour gone");
+  assert.deepEqual(d.rooms, ["15m"]);
+  assert.equal(meetDial(at("2026-11-19T02:15:00.001Z"), utc).progress < 0.001, true, "a new quarter hour starts empty");
+  assert.equal(meetDial(at("2026-11-19T02:14:59.999Z"), utc).progress > 0.999, true);
+  assert.deepEqual(meetDial(at("2026-11-19T02:50:00Z"), utc).rooms, ["15m", "1h"]);
+  assert.deepEqual(meetDial(at("2026-11-19T21:50:30Z"), utc).rooms, ["15m", "1h", "4h", "1d"]);
+  assert.deepEqual(Object.entries(ROOM_SHORT).map(([id, s]) => [id, s]), Object.entries(MEETINGS).map(([id, m]) => [id, m.short]), "the dial names rooms as the replay buttons under it");
+  const closed = meetDial(at("2026-11-21T09:00:00Z"), clockFormat("Asia/Jakarta"));
+  assert.deepEqual([closed.closed, closed.left, closed.progress, closed.rooms, closed.again], [true, "", 0, [], "Mon 06:15 GMT+7"]);
+  // After the reopen the first quarter hour fills from empty.
+  assert.equal(meetDial(at("2026-11-22T23:00:00Z"), utc).progress, 0);
+  for (let t = at("2026-11-20T20:00:00Z"); t < at("2026-11-23T02:00:00Z"); t += 11 * 60_000) {
+    const x = meetDial(t, utc);
+    assert.ok(x.progress >= 0 && x.progress <= 1, iso(t));
+    assert.equal(x.left, x.closed ? "" : countdown(t, x.at));
+  }
 });

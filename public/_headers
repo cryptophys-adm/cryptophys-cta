@@ -1,7 +1,8 @@
 # The security headers of every static file (the Worker sets the same on what it answers: SECURITY_HEADERS in
-# src/app.mjs; test/room.test.mjs keeps the two equal). Not served itself.
+# src/app.mjs; test/room.test.mjs keeps the two equal). Not served itself. frame-src: the home page's TradingView quote
+# (owner 2026-11-20), its widget frame's host only; the page runs no TradingView script.
 /*
-  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; media-src 'self'; connect-src 'self'; font-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; media-src 'self'; connect-src 'self'; font-src 'self'; frame-src https://www.tradingview-widget.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: DENY

@@ -18,18 +18,22 @@
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M12 2.5v19M2.5 12h19"/><circle cx="12" cy="12" r="3.2"/></svg>
     <span>XAUUSD AI</span><small>Cryptophys</small>
   </a>
-  <nav aria-label="Main">
-    <a href="/#minutes">Minutes</a>
-    <a href="/#cast">The cast</a>
-    <a href="/#how">How it works</a>
-    <a href="/performance" aria-current="page">Performance</a>
-    <a href="/archive">Archive</a>
+  <nav class="nav" aria-label="Main">
+    <button class="menu-btn" id="menu-btn" type="button" aria-expanded="false" aria-controls="menu">Menu<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5L6 8l3.5-3.5"/></svg></button>
+    <div class="menu" id="menu">
+      <p class="menu-time">Your time <b id="menu-local"></b></p>
+      <div class="menu-group"><p class="menu-head" id="mg-room">The room</p><ul aria-labelledby="mg-room"><li><a href="/#minutes">Minutes</a></li><li><a href="/#cast">The cast</a></li><li><a href="/#how">How it works</a></li></ul></div>
+      <div class="menu-group"><p class="menu-head" id="mg-results">Results</p><ul aria-labelledby="mg-results"><li><a href="/performance" aria-current="page">Performance</a></li><li><a href="/archive">Archive</a></li></ul></div>
+      <div class="menu-group menu-follow"><p class="menu-head" id="mg-follow">Follow</p><ul aria-labelledby="mg-follow"><li><a href="https://www.threads.net/@cryptophys.adm" rel="noopener" data-threads>Threads</a></li></ul></div>
+      <div class="menu-group menu-studio"><p class="menu-head" id="mg-studio">Studio</p><ul aria-labelledby="mg-studio"><li><a href="/studio">Studio sign in</a></li></ul></div>
+    </div>
   </nav>
   <a class="avg-strip" id="avg-strip" href="/performance" title="Simulated, the average of the exit scenarios" hidden>
     <span class="avg-vals"></span>
   </a>
+  <p class="top-clock"><b id="clock-utc"></b><span id="clock-local"></span></p>
   <div class="top-end">
-    <a class="quiet" href="/studio">Studio sign in</a>
+    <a class="quiet" href="/studio"><span>Studio<span class="q-long"> sign in</span></span></a>
     <a class="btn gold" href="https://www.threads.net/@cryptophys.adm" rel="noopener" data-threads>Follow on Threads</a>
   </div>
 </header>
@@ -63,9 +67,11 @@
 <footer class="foot">
   <span>XAUUSD AI by Cryptophys</span>
   <nav aria-label="Footer">
-    <a href="/archive">Archive</a>
-    <a href="/performance" aria-current="page">Performance</a>
+    <a href="/#minutes">Minutes</a>
+    <a href="/#cast">The cast</a>
     <a href="/#how">How it works</a>
+    <a href="/performance" aria-current="page">Performance</a>
+    <a href="/archive">Archive</a>
     <a href="/disclaimer">Disclaimer</a>
     <a href="https://www.threads.net/@cryptophys.adm" rel="noopener" data-threads>Threads</a>
     <a class="foot-studio" href="/studio">Studio sign in</a>
