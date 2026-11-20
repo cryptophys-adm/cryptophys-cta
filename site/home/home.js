@@ -3,6 +3,8 @@
 // only where WebGL works. One feed of the rooms serves the minutes and the scene (../room/feed.js).
 import { minutesFromResponse, meetingsFromResponse, statusOf, tallyWords, replyWords, whenOf, latestPost, BIAS_WORD } from '../room/script.js';
 import { startFeed, onScene } from '../room/feed.js';
+import { clockLines, clockFormat } from './clock.js';
+import { averages, TRACK_URL } from './track.js';
 
 const $ = (id) => document.getElementById(id);
 const make = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
@@ -20,6 +22,24 @@ function renderStatus(st) {
   box.hidden = false;
 }
 window.addEventListener('warroom-status', (e) => { sceneOwnsStatus = true; renderStatus(e.detail); });
+
+/* ---------- the clock under the status (owner 2026-11-20): the next meeting, UTC and the visitor's own time ---------- */
+// Written every second; the rows carry no live region, so a screen reader is not interrupted by the count.
+const fmt = clockFormat();
+function tickClock() {
+  const c = clockLines(Date.now(), fmt);
+  $('next-rooms').textContent = c.next;
+  $('next-in').textContent = c.left;
+  $('next-in').hidden = c.closed;
+  $('clock-utc').textContent = c.utc;
+  $('clock-local').textContent = c.local;
+}
+if ($('hero-status')) {
+  tickClock();
+  $('hero-status').hidden = false;
+  // On the second's edge, so the UTC seconds never skip.
+  setTimeout(() => { tickClock(); setInterval(tickClock, 1000); }, 1000 - (Date.now() % 1000));
+}
 
 /* ---------- the minutes ---------- */
 const view = { room: null, open: false, minutes: {}, failed: false };
@@ -96,6 +116,14 @@ startFeed();
 // The latest post on Threads (owner 2026-11-19, "Follow first"): its headline only (a body may carry prices and
 // levels) and when it went out, linked to the channel. X stays hidden; only Threads is shown for now.
 const json = (u) => fetch(u).then((r) => r.json()).catch(() => ({}));
+
+/* ---------- the average box (owner 2026-11-20): the simulated expectancy per plan, the managed exit once it is shown ---------- */
+json(TRACK_URL).then((body) => {
+  const list = averages(body);
+  if (!list.length || !$('avg')) return;
+  $('avg-list').replaceChildren(...list.flatMap((a) => [make('dt', null, a.title), make('dd', null, a.value)]));
+  $('avg').hidden = false;
+});
 Promise.all([json('/api/public/profile'), json('/api/public/archive?limit=30')]).then(([p, a]) => {
   const threads = (p?.links ?? []).find((l) => l.channel === 'threads')?.url;
   if (threads && /^https:\/\/www\.threads\.(net|com)\//.test(threads)) document.querySelectorAll('[data-threads]').forEach((el) => { el.href = threads; });

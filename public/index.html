@@ -22,6 +22,7 @@
     <a href="#minutes">Minutes</a>
     <a href="#cast">The cast</a>
     <a href="#how">How it works</a>
+    <a href="/performance">Performance</a>
     <a href="/archive">Archive</a>
   </nav>
   <div class="top-end">
@@ -35,7 +36,6 @@
     <div class="room" id="room">
       <canvas id="scene" aria-hidden="true"></canvas>
       <div class="room-shade" aria-hidden="true"></div>
-      <p class="room-status" id="room-status" hidden></p>
       <div class="room-tag" id="tag" hidden></div>
       <div class="room-sub" id="sub" aria-live="polite"><b id="sub-name"></b><span id="sub-text"></span></div>
       <div class="room-bar">
@@ -55,6 +55,18 @@
         <a class="btn gold" href="https://www.threads.net/@cryptophys.adm" rel="noopener" data-threads>Follow on Threads</a>
         <a class="btn ghost" href="#minutes">Read the latest minutes</a>
       </div>
+    </div>
+    <div class="hero-side">
+      <div class="hero-status" id="hero-status" role="group" aria-label="The rooms' clock" hidden>
+        <p class="row status-reading" id="room-status" hidden></p>
+        <p class="row next" aria-live="off"><span id="next-rooms">Next meeting in</span><b id="next-in"></b></p>
+        <p class="row clock" aria-live="off"><b id="clock-utc"></b><span id="clock-local"></span></p>
+      </div>
+      <aside class="avg" id="avg" aria-labelledby="avg-title" hidden>
+        <p id="avg-title">Average per plan, simulated</p>
+        <dl id="avg-list"></dl>
+        <a href="/performance">Performance</a>
+      </aside>
     </div>
   </section>
 
@@ -211,6 +223,7 @@
   <span>XAUUSD AI by Cryptophys</span>
   <nav aria-label="Footer">
     <a href="/archive">Archive</a>
+    <a href="/performance">Performance</a>
     <a href="#how">How it works</a>
     <a href="/disclaimer">Disclaimer</a>
     <a href="https://www.threads.net/@cryptophys.adm" rel="noopener" data-threads>Threads</a>

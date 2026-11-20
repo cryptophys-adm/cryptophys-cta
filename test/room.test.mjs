@@ -103,7 +103,7 @@ test("RM5 static files carry the Worker's security headers; the page has no inli
     assert.ok(line, `_headers sets ${k}`);
     assert.equal(line.trim().slice(k.length + 1).trim(), v, k);
   }
-  for (const p of ["public/index.html"]) {
+  for (const p of ["public/index.html", "public/performance.html"]) {
     const html = read(p);
     assert.doesNotMatch(html, /\sstyle=|<style|fonts\.googleapis|<script>(?!<\/script>)|<script(?![^>]*\ssrc=)[^>]*>/i, p);
   }
