@@ -1,7 +1,7 @@
 // Builds the home page's scripts and fonts:
 // - the holo war room: site/room/*.js and three.js into one minified ES module (public/room/room.js);
-// - the page itself: site/home/home.js (the minutes, the status and clock, the average box, the one feed of the rooms)
-//   into public/home.js;
+// - the page itself: site/home/home.js (the minutes, the status and clock, the gold row and the TradingView quote, the
+//   one feed of the rooms) into public/home.js;
 // - the Performance page: site/performance/performance.js (the simulated track record) into public/performance.js;
 // - the cast directory into public/index.html, from site/room/data.js;
 // - the self-hosted fonts (Rajdhani, Newsreader; OFL, latin woff2 only) from @fontsource into public/fonts/;

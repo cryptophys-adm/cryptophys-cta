@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-20 (gold price)
+- feat(home): the live gold price through TradingView's Single Quote widget (owner 2026-11-20: "tambahkan juga harga emas live"; asked to choose after the licence check, "Widget only, core without a price": TradingView licenses its market data for display only and allows public display through its own widgets with their attribution). Its own frame from www.tradingview-widget.com (the CSP's one new `frame-src`; no script host), under the hero's status box (below the hero buttons on a phone), never in the header, added after the load event with its space kept, TradingView's attribution kept. The core shows no price. The privacy page notes the widget's own cookies. The no-price rule's exception covers that element only (test/gold.test.mjs).
+
 ## 2026-11-20 (header strip)
 - fix(site): the home's average box moves into the header as one quiet link after the nav: WR, EXP, NETR and PF (codes only, owner: "gak perlu banyak cosmetics text"; "Simulated" in the title and accessible name), each the mean over the scenarios shown (owner: "cukup pakai kode WR EXP NETR PF"; confirmed: the average of the scenarios), on the home and Performance pages; the hero keeps only the status box. Results use Nexus's colours (owner 2026-11-20: "indikator performance ditempatkan di header aja, supaya tidak terlalu penuh"; "warnanya samakan dengan yang di nexus"): R above zero #34d399, below #fb7185, zero #64748b; win rate from 50 % #34d399, under it #fcd34d; profit factor #a78bfa, in the strip and the Performance table. The strip hides at 1400 px and narrower, where the header has no room (the footer links to Performance).
 

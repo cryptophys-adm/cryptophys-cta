@@ -6,6 +6,7 @@ import { startFeed, onScene } from '../room/feed.js';
 import { clockLines, clockFormat } from './clock.js';
 import { TRACK_URL } from './track.js';
 import { renderAvgStrip } from './avg-strip.js';
+import { tvQuoteSrc } from './gold.js';
 
 const $ = (id) => document.getElementById(id);
 const make = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
@@ -131,6 +132,28 @@ Promise.all([json('/api/public/profile'), json('/api/public/archive?limit=30')])
   $('latest').hidden = false;
 });
 
+/* ---------- after the page's load event: the scene and the TradingView quote, never before first paint ---------- */
+const afterLoad = (fn) => {
+  const later = () => (window.requestIdleCallback ? requestIdleCallback(fn, { timeout: 1500 }) : setTimeout(fn, 200));
+  if (document.readyState === 'complete') later(); else window.addEventListener('load', later, { once: true });
+};
+
+/* ---------- the live quote (owner 2026-11-20, choice B): TradingView's Single Quote widget, under the status box ---------- */
+// Its own frame from TradingView's widget host (the CSP's one frame-src), so the page runs no TradingView script; the
+// box is shown at once (its space kept, no shift) and the frame comes after the load event. The attribution stays.
+if ($('gold-live')) {
+  $('gold-live').hidden = false;
+  afterLoad(() => {
+    const f = document.createElement('iframe');
+    f.src = tvQuoteSrc(`${location.host}${location.pathname}`);
+    f.title = 'XAUUSD live quote by TradingView';
+    f.setAttribute('scrolling', 'no');
+    f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox');
+    f.referrerPolicy = 'strict-origin-when-cross-origin';
+    $('tv-frame').append(f);
+  });
+}
+
 /* ---------- the scene: three.js and the mannequin are this site's own files, fetched once the page has painted ---------- */
 const gl = (() => { try { const c = document.createElement('canvas'); return Boolean(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; } })();
 if (!gl) {
@@ -142,6 +165,5 @@ else {
   // The scene's URL carries its build's hash, so a deploy is never hidden behind the hour browsers keep /room/* (owner
   // 2026-11-20: the live page still showed the blue core from before the deploy).
   const start = () => { $('loading').hidden = false; import(`/room/room.js?v=${__ROOM_VERSION__}`) /* global __ROOM_VERSION__: set by scripts/build-room.mjs */.catch(() => { $('loading').textContent = 'The scene did not load.'; }); };
-  const later = () => (window.requestIdleCallback ? requestIdleCallback(start, { timeout: 1500 }) : setTimeout(start, 200));
-  if (document.readyState === 'complete') later(); else window.addEventListener('load', later, { once: true });
+  afterLoad(start);
 }

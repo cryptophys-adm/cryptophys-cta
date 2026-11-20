@@ -22,8 +22,9 @@ import { sourceOf } from "./warroom-drafts.mjs";
 export const RECAP_CRON = "17 22 * * 2-6";
 export const ANALYSIS_CRON = "9 * * * 1-5";
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" };
+// frame-src: the home page's TradingView quote (owner 2026-11-20), the widget frame's host only; no script host is added.
 export const SECURITY_HEADERS = Object.freeze({
-  "content-security-policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; media-src 'self'; connect-src 'self'; font-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+  "content-security-policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; media-src 'self'; connect-src 'self'; font-src 'self'; frame-src https://www.tradingview-widget.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
   "x-content-type-options": "nosniff",
   "referrer-policy": "strict-origin-when-cross-origin",
   "x-frame-options": "DENY",
