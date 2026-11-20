@@ -120,7 +120,7 @@ test("TK6 the pages: Performance before Archive in the nav, aria-current on its 
   const home = read("public/index.html"), perf = read("public/performance.html");
   // One nav, grouped (owner 2026-11-20): The room, Results (Performance before Archive), Follow; inline when wide.
   const nav = (html) => { const n = html.slice(html.indexOf('<nav class="nav" aria-label="Main">'), html.indexOf("</nav>", html.indexOf('aria-label="Main"'))); return [...n.matchAll(/<p class="menu-head" id="[^"]+">([^<]+)<\/p>|<a [^>]*>([^<]+)</g)].map((m) => m[1] ? `[${m[1]}]` : m[2]); };
-  const groups = ["[The room]", "Minutes", "The cast", "How it works", "[Results]", "Performance", "Archive", "[Follow]", "Threads"];
+  const groups = ["[The room]", "Minutes", "The cast", "How it works", "[Results]", "Performance", "Archive", "[Follow]", "Threads", "[Studio]", "Studio sign in"];
   assert.deepEqual(nav(home), groups);
   assert.deepEqual(nav(perf), groups);
   assert.match(perf, /<a href="\/performance" aria-current="page">Performance<\/a>/);
