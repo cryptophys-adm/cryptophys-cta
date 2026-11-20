@@ -3,10 +3,9 @@
 // numbers only once the data says they are shown. Without a record the page says the numbers are not available yet.
 import { trackModel, TRACK_URL, NOT_YET } from '../home/track.js';
 import { renderAvgStrip } from '../home/avg-strip.js';
-import { startClock, initMenu } from '../home/header.js';
+import { startClock } from '../home/header.js';
 
-// The header as on the home page: the menu and the UTC and local clock.
-initMenu();
+// The header as on the home page: the five links and the UTC and local clock.
 startClock();
 
 const $ = (id) => document.getElementById(id);

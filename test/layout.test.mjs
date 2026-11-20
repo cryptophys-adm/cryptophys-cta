@@ -1,5 +1,5 @@
 // The home page's layout v2 (owner 2026-11-20: "jangan tempatkan semua di pojok ... terlalu penuh"): one type scale,
-// the panels opened one at a time by the URL hash, and the header's menu that folds into grouped links.
+// the panels opened one at a time by the URL hash, and the header's five links, inline at every width.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -54,28 +54,20 @@ test("LY2 the panels: Minutes, The cast and How it works open one at a time unde
   assert.doesNotMatch(page, /aria-current/, "marked by the script, from the hash");
 });
 
-test("LY3 the header's menu: one nav, inline when wide, folded into a Menu button with grouped links when narrow; accessible by keyboard and touch", () => {
+test("LY3 the header's nav: the five links inline at every width, never folded or grouped; where room runs short only the type steps down (owner 2026-11-20: \"jangan digabungkan semua ... disesuaikan ukuran font saja\")", () => {
   for (const f of ["public/index.html", "public/performance.html"]) {
     const page = read(f);
     const header = page.slice(page.indexOf("<header"), page.indexOf("</header>"));
-    assert.match(header, /<nav class="nav" aria-label="Main">\n\s*<button class="menu-btn" id="menu-btn" type="button" aria-expanded="false" aria-controls="menu">Menu</, `${f}: a disclosure button`);
-    assert.match(header, /<div class="menu" id="menu">/);
-    for (const [id, name] of [["mg-room", "The room"], ["mg-results", "Results"], ["mg-follow", "Follow"]]) assert.match(header, new RegExp(`<p class="menu-head" id="${id}">${name}</p><ul aria-labelledby="${id}">`), `${f}: ${name}`);
-    assert.match(header, /<a href="https:\/\/www\.threads\.net\/@cryptophys\.adm" rel="noopener" data-threads>Threads<\/a>/, `${f}: Follow carries Threads`);
-    assert.equal((header.match(/<nav /g) ?? []).length, 1, `${f}: one nav, not two copies`);
+    const nav = header.slice(header.indexOf('<nav class="nav" aria-label="Main">'), header.indexOf("</nav>"));
+    assert.deepEqual([...nav.matchAll(/<a [^>]*>([^<]+)</g)].map((m) => m[1]), ["Minutes", "The cast", "How it works", "Performance", "Archive"], `${f}: the five links, as before`);
+    assert.doesNotMatch(header, /menu-btn|class="menu|menu-head|aria-expanded/, `${f}: no Menu button, no groups`);
+    assert.equal((header.match(/<nav /g) ?? []).length, 1, `${f}: one nav`);
   }
-  const js = read("site/home/header.js");
-  assert.match(js, /e\.key === 'Escape' && isOpen\(\)\) set\(false, true\)/, "Esc closes and gives focus back to the button");
-  assert.match(js, /e\.key !== 'ArrowDown'/, "ArrowDown from the button enters the links");
-  assert.match(js, /'ArrowDown' \? i \+ 1 : e\.key === 'ArrowUp' \? i - 1 : e\.key === 'Home' \? 0 : e\.key === 'End'/);
-  assert.match(js, /addEventListener\('pointerdown'/, "a tap or click outside closes it");
-  assert.match(js, /addEventListener\('focusout'/, "focus leaving closes it");
-  assert.match(js, /setAttribute\('aria-expanded', String\(open\)\)/);
+  assert.match(read("public/index.html"), /<a href="#minutes" data-panel="minutes">Minutes<\/a>/, "the home's links open the panels");
+  assert.doesNotMatch(read("site/home/header.js"), /initMenu/);
   const css = read("public/home.css");
-  assert.match(css, /\.menu\{display:none;position:absolute;[^}]*\}\n\.menu\.open\{display:block\}/, "folded until opened");
-  assert.match(css, /@media \(min-width:1200px\)\{\n\s*\.menu-btn\{display:none\}\n\s*\.menu,\.menu\.open\{position:static;display:flex/, "wide: the links inline, no button");
-  assert.match(css, /\.menu-head\{position:absolute;width:1px/, "wide: the group names stay for screen readers");
-  assert.match(css, /@media \(max-width:600px\)\{[\s\S]*?\.top \.top-end\{display:none\}/, "a phone: Follow lives in the hero and the menu");
-  assert.doesNotMatch(css, /\.top nav,\.top \.quiet\{display:none\}/, "the nav is no longer simply hidden on a phone");
-  assert.match(read("site/performance/performance.js"), /initMenu\(\);/);
+  assert.doesNotMatch(css, /\.nav[^{]*\{[^}]*display:none/, "the nav is never hidden");
+  assert.match(css, /@media \(max-width:1299px\)\{[\s\S]*?\.nav a\{padding:0 7px;font-size:var\(--s-1\)\}/, "narrower: smaller type");
+  assert.match(css, /@media \(max-width:600px\)\{[\s\S]*?\.nav\{order:5;flex:1 0 100%/, "a phone: the links on their own row");
 });
+
