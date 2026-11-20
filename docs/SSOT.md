@@ -121,7 +121,7 @@ rest of the host stays public.
 
 | Channel | Media | Publisher | Secrets |
 |---|---|---|---|
-| Threads (`xauusd-ai-cta`) | text | built | `THREADS_ACCESS_TOKEN`, `THREADS_USER_ID` |
+| Threads (`@cryptophys.adm`; the brand id stays `xauusd-ai-cta`) | text | built | `THREADS_ACCESS_TOKEN`, `THREADS_USER_ID` |
 | Instagram | image: the card (TradingView chart + our overlay + Cryptophys panel), rendered by Browser Run; the caption names TradingView | built | `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_USER_ID` |
 | X | text, 280 characters (short recap) | built (billed per post by X) | `X_ACCESS_TOKEN` |
 | Telegram channel | text | built (Bot API; the bot is a channel admin) | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
