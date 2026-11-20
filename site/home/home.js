@@ -1,10 +1,10 @@
-// The home page (owner 2026-11-19, the homepage redesign): the header's clock and menu, the panels, the hero's meeting
+// The home page (owner 2026-11-19, the homepage redesign): the header's clock, the panels, the hero's meeting
 // dial, the minutes of each room's last meeting, the Threads link and the disclaimer from the public profile, and the
 // holo war room, loaded after first paint and only where WebGL works. One feed of the rooms serves the minutes and the scene (../room/feed.js).
 import { minutesFromResponse, meetingsFromResponse, statusOf, tallyWords, replyWords, whenOf, latestPost, BIAS_WORD } from '../room/script.js';
 import { startFeed, onScene } from '../room/feed.js';
 import { clockFormat, meetDial } from './clock.js';
-import { startClock, initMenu } from './header.js';
+import { startClock } from './header.js';
 import { initPanels } from './panels.js';
 import { TRACK_URL } from './track.js';
 import { renderAvgStrip } from './avg-strip.js';
@@ -27,8 +27,7 @@ function renderStatus(st) {
 }
 window.addEventListener('warroom-status', (e) => { sceneOwnsStatus = true; renderStatus(e.detail); });
 
-/* ---------- the header: the clock and the menu; the panels under the hero ---------- */
-initMenu();
+/* ---------- the header: the clock; the panels under the hero ---------- */
 initPanels();
 
 /* ---------- the meeting dial (owner 2026-11-20: the countdown as an "atomic clock" over the Sound button) ---------- */

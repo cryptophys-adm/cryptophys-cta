@@ -69,34 +69,21 @@ ul{margin:0;padding:0;list-style:none}
 .top-clock span{font-size:var(--s-1);font-weight:500;color:var(--slate)}
 .top-clock b:empty,.top-clock span:empty{display:none}
 
-/* the menu: one nav. Wide, its links stand inline with a rule between the groups; narrower, they fold into the Menu
-   button's panel, grouped under their headings (owner 2026-11-20: "menu navigator drop ... dengan pengelompokan menu") */
-.menu-btn{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 14px;border:1px solid rgba(143,216,255,.32);border-radius:3px;background:transparent;color:var(--ink);font:600 var(--s0)/1 var(--display);letter-spacing:.02em;cursor:pointer}
-.menu-btn:hover{border-color:var(--holo)}
-.menu-btn svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.6;transition:transform .2s}
-.menu-btn[aria-expanded="true"]{border-color:var(--holo);color:var(--holo)}
-.menu-btn[aria-expanded="true"] svg{transform:rotate(180deg)}
-.menu{display:none;position:absolute;z-index:40;top:calc(100% + 11px);left:0;width:280px;padding:8px 0 12px;background:var(--deck);border:1px solid var(--rule);border-radius:3px;box-shadow:0 18px 48px rgba(0,0,0,.55)}
-.menu.open{display:block}
-.menu-head{padding:14px 20px 4px;font:600 var(--s-1)/1.2 var(--display);color:var(--slate);letter-spacing:.02em}
-.menu-group+.menu-group{margin-top:4px;border-top:1px solid var(--rule)}
-.menu a{display:flex;align-items:center;min-height:44px;padding:0 20px;color:var(--ink);text-decoration:none;font:600 var(--s1)/1 var(--display)}
-.menu a:hover{background:rgba(143,216,255,.06);color:var(--holo)}
-.menu a[aria-current]{color:var(--holo);box-shadow:inset 3px 0 var(--holo)}
-.menu-follow a{color:var(--gold)}
-.menu-time{display:none;padding:10px 20px 8px;font:500 var(--s0)/1.2 var(--display);color:var(--slate);font-variant-numeric:tabular-nums}
-.menu-time b{font-weight:600;color:var(--ink)}
-@media (prefers-reduced-motion:reduce){.menu-btn svg{transition:none}}
-@media (min-width:1200px){
-  .menu-btn{display:none}
-  .menu,.menu.open{position:static;display:flex;align-items:center;width:auto;padding:0;background:none;border:0;box-shadow:none}
-  .menu-head{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;padding:0}
-  .menu-group ul{display:flex;gap:2px}
-  .menu-group+.menu-group{margin:0 0 0 10px;padding-left:10px;border-top:0;border-left:1px solid var(--rule)}
-  .menu-follow,.menu-studio{display:none}
-  .menu a{min-height:44px;padding:0 10px;color:var(--slate);font-size:var(--s0);border-radius:3px}
-  .menu a:hover{background:none;color:var(--ink)}
-  .menu a[aria-current]{color:var(--ink);box-shadow:inset 0 -2px var(--holo);border-radius:0}
+/* the nav (owner 2026-11-20: "jangan digabungkan semua ... kalau space tidak cukup disesuaikan ukuran font saja"): the five
+   links always stand inline, as before; where the header runs short of room their type and spacing step down, never
+   the links themselves */
+.nav{display:flex;align-items:center;gap:2px;margin-right:auto;min-width:0}
+.nav a{display:inline-flex;align-items:center;min-height:44px;padding:0 10px;color:var(--slate);text-decoration:none;font:600 var(--s0)/1 var(--display);white-space:nowrap}
+.nav a:hover{color:var(--ink)}
+.nav a[aria-current]{color:var(--ink);box-shadow:inset 0 -2px var(--holo)}
+@media (max-width:1599px){.nav a{padding:0 8px}}
+@media (max-width:1299px){
+  .top{gap:14px}
+  .top-end{gap:14px}
+  .nav a{padding:0 7px;font-size:var(--s-1)}
+  .top .quiet,.top .btn{font-size:var(--s-1)}
+  .top .btn{padding:0 14px}
+  .top-clock{padding-left:12px}
 }
 @media (min-width:1200px) and (max-width:1399px){.brand small{display:none}}
 
@@ -210,10 +197,11 @@ ul{margin:0;padding:0;list-style:none}
 .latest-time{grid-column:2;color:var(--slate);font:500 var(--s0)/1.2 var(--display)}
 .latest .btn{grid-column:3;grid-row:1/span 2}
 
-/* ---------- the panels (owner 2026-11-20: "per tab panel klik jangan continuous halaman"): one at a time under the
-   hero, the one the URL hash names (#minutes, #cast, #how), else Minutes. A browser without :has shows all three. ---------- */
-.panels:has(>.panel:target)>.panel:not(:target),
-.panels:not(:has(>.panel:target))>.panel:not(#minutes){display:none}
+/* ---------- the panels (owner 2026-11-20: "per tab panel klik jangan continuous halaman"): The cast and How it works
+   open one at a time from the header, under the minutes, the one the URL hash names (#cast, #how). The minutes are no
+   panel: they follow the hero as the page scrolls, as before (owner: "minutes jangan di header tapi ikut ke home page
+   scroll bawah seperti sebelumnya"). ---------- */
+.panels>.panel:not(:target){display:none}
 @media (prefers-reduced-motion:no-preference){.panel:target{animation:panel-in .3s ease-out}@keyframes panel-in{from{opacity:0}to{opacity:1}}}
 
 /* ---------- the minutes ---------- */
@@ -291,6 +279,7 @@ ul{margin:0;padding:0;list-style:none}
 /* ---------- the header's steps: where the averages need the room, Studio sign in shortens to "Studio" (the owner's
    way in stays visible on a desktop); narrower, it is in the Menu and the footer ---------- */
 @media (min-width:1401px) and (max-width:1599px){.brand small,.top .q-long{display:none}}
+@media (max-width:1199px){.brand small,.top .q-long{display:none}}
 
 /* ---------- small screens: the room first at 4:3, the dial and controls under it, then the copy ---------- */
 @media (max-width:900px){
@@ -329,16 +318,16 @@ ul{margin:0;padding:0;list-style:none}
   .steps li::before{font-size:var(--s4)}
   .steps li::after{display:none}
 }
-/* a phone: the header keeps the brand, the menu and the UTC clock; the visitor's own time moves into the menu, and
-   Follow on Threads stays in the hero and the menu */
+/* a phone: the header takes two rows, the brand and the UTC clock over the five links in smaller type; Follow on
+   Threads stays in the hero, Studio sign in in the footer */
 @media (max-width:600px){
-  :root{--lens:208px;--lens-k:.76}
+  :root{--lens:208px;--lens-k:.76;--top:100px}
+  .top{flex-wrap:wrap;height:auto;row-gap:0;padding-top:6px;padding-bottom:2px}
   .top .top-end{display:none}
-  .top-clock{min-width:0;padding-left:12px}
+  .top-clock{min-width:0;padding-left:12px;margin-left:auto}
   .top-clock span{display:none}
-  .nav{position:static}
-  .menu{left:8px;right:8px;width:auto;top:100%}
-  .menu-time{display:block}
+  .nav{order:5;flex:1 0 100%;justify-content:space-between;margin:0;gap:0}
+  .nav a{padding:0 4px;min-height:40px;font-size:var(--s-1)}
   .brand small{display:none}
   .hero h1{font-size:var(--s4)}
   .lede{font-size:var(--s0)}
@@ -353,7 +342,7 @@ ul{margin:0;padding:0;list-style:none}
   .top{gap:8px;padding:0 14px}
   .brand{gap:7px}
   .brand span{font-size:var(--s0)}
-  .menu-btn{padding:0 10px;gap:6px}
+  .nav a{padding:0 2px}
   .top-clock{padding-left:8px}
 }
 @media (prefers-reduced-motion:reduce){.room-sub{transition:none}}

@@ -91,12 +91,11 @@ test("CK5 UTC ticks with seconds; local time with the short zone name, from Intl
   assert.equal(clockLines(at("2026-06-20T02:07:13Z"), clockFormat("America/New_York")).local, "22:07 EDT");
 });
 
-test("CK6 the clock in the header (UTC with seconds, the local time; UTC only on a phone, the local time in the menu) and the meeting dial bottom right of the hero, over the room's controls; no live region on anything that ticks", () => {
+test("CK6 the clock in the header (UTC with seconds, the local time; UTC only on a phone) and the meeting dial bottom right of the hero, over the room's controls; no live region on anything that ticks", () => {
   for (const f of ["public/index.html", "public/performance.html"]) {
     const page = read(f);
     const header = page.slice(page.indexOf("<header"), page.indexOf("</header>"));
     assert.match(header, /<p class="top-clock"><b id="clock-utc"><\/b><span id="clock-local"><\/span><\/p>/, `${f}: the clock in the header`);
-    assert.match(header, /<p class="menu-time">Your time <b id="menu-local"><\/b><\/p>/, `${f}: the local time in the menu`);
     assert.doesNotMatch(header, /aria-live/, `${f}: no live region in the header`);
   }
   const page = read("public/index.html");
@@ -120,7 +119,7 @@ test("CK6 the clock in the header (UTC with seconds, the local time; UTC only on
   const css = read("public/home.css");
   assert.match(css, /\.hud\{position:absolute;z-index:3;right:16px;bottom:16px;display:flex;flex-direction:column/, "bottom right, the dial over the controls");
   assert.match(css, /@media \(max-width:900px\)\{[\s\S]*?\.hud\{position:relative/, "on a phone under the scene");
-  assert.match(css, /@media \(max-width:600px\)\{[\s\S]*?\.top-clock span\{display:none\}[\s\S]*?\.menu-time\{display:block\}/, "a phone: UTC in the header, the local time in the menu");
+  assert.match(css, /@media \(max-width:600px\)\{[\s\S]*?\.top-clock span\{display:none\}/, "a phone: UTC only in the header");
   // The sweep, the electron and the orbits move only without a reduced-motion preference.
   const moving = css.slice(css.indexOf("@media (prefers-reduced-motion:no-preference){\n  .dial"));
   assert.match(moving.slice(0, moving.indexOf("\n}\n")), /\.dial \.fill\.moving\{transition[\s\S]*\.dial \.orbits\{animation:precess/);
