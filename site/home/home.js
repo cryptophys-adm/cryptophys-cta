@@ -4,7 +4,8 @@
 import { minutesFromResponse, meetingsFromResponse, statusOf, tallyWords, replyWords, whenOf, latestPost, BIAS_WORD } from '../room/script.js';
 import { startFeed, onScene } from '../room/feed.js';
 import { clockLines, clockFormat } from './clock.js';
-import { averages, TRACK_URL } from './track.js';
+import { TRACK_URL } from './track.js';
+import { renderAvgStrip } from './avg-strip.js';
 
 const $ = (id) => document.getElementById(id);
 const make = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
@@ -117,13 +118,8 @@ startFeed();
 // levels) and when it went out, linked to the channel. X stays hidden; only Threads is shown for now.
 const json = (u) => fetch(u).then((r) => r.json()).catch(() => ({}));
 
-/* ---------- the average box (owner 2026-11-20): the simulated expectancy per plan, the managed exit once it is shown ---------- */
-json(TRACK_URL).then((body) => {
-  const list = averages(body);
-  if (!list.length || !$('avg')) return;
-  $('avg-list').replaceChildren(...list.flatMap((a) => [make('dt', null, a.title), make('dd', null, a.value)]));
-  $('avg').hidden = false;
-});
+/* ---------- the header's average strip (owner 2026-11-20: in the header, Nexus colours) ---------- */
+json(TRACK_URL).then((body) => renderAvgStrip(body));
 Promise.all([json('/api/public/profile'), json('/api/public/archive?limit=30')]).then(([p, a]) => {
   const threads = (p?.links ?? []).find((l) => l.channel === 'threads')?.url;
   if (threads && /^https:\/\/www\.threads\.(net|com)\//.test(threads)) document.querySelectorAll('[data-threads]').forEach((el) => { el.href = threads; });

@@ -18,6 +18,8 @@
   --slate:#8A97AB;   /* who, when, and notes */
   /* readings (owner 2026-11-20): bearish red, bullish green, neutral (undecided) amber */
   --bear:#F2606E;--bull:#3FD08A;--flat:#E0A458;
+  /* Nexus's colours for results (owner 2026-11-20: "warnanya samakan dengan yang di nexus") */
+  --n-pos:#34d399;--n-neg:#fb7185;--n-wait:#fcd34d;--n-pf:#a78bfa;--n-zero:#64748b;
   --display:Rajdhani,"Arial Narrow",sans-serif;
   --read:Newsreader,Georgia,"Times New Roman",serif;
   --s-1:13.6px;--s0:17px;--s1:21.25px;--s2:26.5px;--s3:33px;--s4:41.5px;--s5:52px;--s6:65px;
@@ -96,12 +98,6 @@ button{font:inherit;color:inherit}
 .hero-status .next span{color:var(--slate);font-weight:500}
 .hero-status .next b,.hero-status .clock b{font-weight:600;letter-spacing:.02em;white-space:nowrap}
 .hero-status .clock span{color:var(--slate);font-weight:500;white-space:nowrap}
-.avg{width:220px;font-family:var(--display);color:var(--slate);background:rgba(6,10,18,.35);border:1px solid rgba(27,40,64,.8);border-radius:3px;padding:10px 14px}
-.avg p{font-size:var(--s-1);font-weight:500;line-height:1.25;margin-bottom:6px}
-.avg dl{display:grid;grid-template-columns:auto auto;gap:2px 16px;margin:0;font-size:15px;font-weight:500}
-.avg dd{margin:0;text-align:right;color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
-.avg a{display:inline-flex;align-items:center;min-height:32px;margin-top:2px;font-size:var(--s-1);font-weight:600;text-decoration:none}
-.avg a:hover{text-decoration:underline}
 .room-tag{position:absolute;z-index:3;left:0;top:0;pointer-events:none;white-space:nowrap;padding:3px 10px;border:1px solid rgba(143,216,255,.38);background:rgba(6,10,18,.84);font:600 15px/1.3 var(--display);border-radius:2px}
 .room-sub{position:absolute;z-index:3;left:44%;right:var(--gut);bottom:84px;opacity:0;transition:opacity .35s;pointer-events:none;text-shadow:0 2px 12px #000,0 0 3px #000}
 .room-sub.on{opacity:1}
@@ -218,7 +214,6 @@ button{font:inherit;color:inherit}
   .hero-copy{padding:20px var(--gut) 48px;pointer-events:auto}
   .hero-copy>*{max-width:none}
   .hero-side{position:static;width:auto;margin:-24px var(--gut) 40px;align-items:stretch}
-  .avg{width:auto;background:transparent}
   .room-sub{left:12px;right:12px;bottom:60px;text-align:center}
   .room-sub b{font-size:15px}.room-sub span{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-size:15px;line-height:1.35}
   .room-bar{left:8px;right:8px;bottom:8px;gap:6px}
@@ -290,3 +285,17 @@ button{font:inherit;color:inherit}
   .track td.pending::before{font:500 15px/1.2 var(--display);font-style:normal}
   .terms{grid-template-columns:1fr}
 }
+
+/* the header's average strip (owner 2026-11-20): one quiet link after the nav, Nexus colours on the values only */
+.avg-strip{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 0 0 14px;border-left:1px solid var(--rule);color:var(--slate);text-decoration:none;font-family:var(--display);white-space:nowrap}
+.avg-strip[hidden]{display:none}
+.avg-label{font-size:var(--s-1);font-weight:500}
+.avg-vals{display:flex;gap:11px}
+.avg-item{display:inline-flex;align-items:baseline;gap:4px;font-size:15px;font-weight:500}
+.avg-item b{font-weight:600;font-variant-numeric:tabular-nums}
+.avg-strip:hover .avg-label{color:var(--ink);text-decoration:underline}
+.t-pos{color:var(--n-pos)}.t-neg{color:var(--n-neg)}.t-wait{color:var(--n-wait)}.t-pf{color:var(--n-pf)}.t-zero{color:var(--n-zero)}
+@media (max-width:1400px){.avg-strip{display:none}}
+@media (min-width:1401px) and (max-width:1600px){.top{gap:16px}.top nav a{padding:0 8px}.top-end{gap:12px}.avg-strip{gap:8px;padding-left:12px}.avg-vals{gap:9px}}
+.top .brand,.top nav a,.top .quiet{white-space:nowrap}
+.track td b.t-pos{color:var(--n-pos)}.track td b.t-neg{color:var(--n-neg)}.track td b.t-wait{color:var(--n-wait)}.track td b.t-pf{color:var(--n-pf)}.track td b.t-zero{color:var(--n-zero)}

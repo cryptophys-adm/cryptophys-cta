@@ -64,7 +64,7 @@ test("TK3 no record yet: the page says the numbers are not available, the home b
   assert.match(NOT_YET, /not available yet/);
   const page = read("site/performance/performance.js");
   assert.match(page, /NOT_YET/);
-  assert.match(read("public/index.html"), /id="avg"[^>]*hidden/, "hidden until there are numbers");
+  assert.match(read("public/index.html"), /id="avg-strip"[^>]*hidden/, "hidden until there are numbers");
 });
 
 test("TK4 GET /api/public/track-record: the documented fields from PROJECTION.trackRecord, R only, cached 10 minutes at the edge", async () => {
@@ -145,4 +145,33 @@ test("TK6 the pages: Performance before Archive in the nav, aria-current on its 
     ...trackModel(record()).rows.flatMap((r) => [r.label, ...r.cells.map((c) => `${c.value} ${c.note}`)]), ...trackModel(record()).columns.map((c) => `${c.title} ${c.sub}`)].join("\n");
   const g = checkContentDraft({ text: copy.replace(/Exit at TP[12]/g, "Exit") });
   assert.deepEqual(g.failures.filter((f) => !["capacity", "disclaimer"].includes(f.check)), [], "a page is not a post: only the post-only capacity and disclaimer lines are not asked");
+});
+
+test("TK-N the header strip and the table use Nexus's colours (owner 2026-11-20)", async () => {
+  const { toneR, toneWin, trackModel, averages } = await import("../site/home/track.js");
+  assert.deepEqual([toneR(0.21), toneR(-0.4), toneR(0), toneR(null)], ["pos", "neg", "zero", ""]);
+  assert.deepEqual([toneWin(0.5), toneWin(0.43)], ["pos", "wait"]);
+  const rows = trackModel(record()).rows;
+  assert.deepEqual(rows.map((r) => r.cells[0].tone), [toneWin(record().scenarios[0].win_rate), toneR(record().scenarios[0].expectancy_r), toneR(record().scenarios[0].net_r), "pf"]);
+  assert.deepEqual(averages(record()).map((a) => [a.short, a.tone]), [["TP1", "pos"], ["TP2", "pos"], ["Managed exit", "pos"]]);
+});
+
+test("TK-S the strip sits in the header of both pages; the hero has no average box", async () => {
+  const { readFileSync } = await import("node:fs");
+  for (const f of ["public/index.html", "public/performance.html"]) {
+    const html = readFileSync(f, "utf8");
+    const header = html.slice(html.indexOf("<header"), html.indexOf("</header>"));
+    assert.match(header, /id="avg-strip" href="\/performance" title="Simulated, the average of the exit scenarios" hidden/, f);
+  }
+  assert.doesNotMatch(readFileSync("public/index.html", "utf8"), /class="avg" id="avg"/);
+});
+
+test("TK-H the header's four codes: the mean over the scenarios shown, with Nexus tones", async () => {
+  const { headline } = await import("../site/home/track.js");
+  const body = { available: true, unit: "R", replay_check: { status: "insufficient", shown: false }, scenarios: [
+    { id: "first", shown: true, count: 72, win_rate: 0.431, expectancy_r: 0.21, net_r: 14.92, profit_factor: 1.79 },
+    { id: "second", shown: true, count: 62, win_rate: 0.242, expectancy_r: 0.32, net_r: 19.56, profit_factor: 2.4 },
+    { id: "managed", shown: false, note: "x" }] };
+  assert.deepEqual(headline(body).map((h) => [h.code, h.value, h.tone]), [["WR", "34%", "wait"], ["EXP", "+0.27R", "pos"], ["NETR", "+17.2R", "pos"], ["PF", "2.09", "pf"]]);
+  assert.deepEqual(headline({ available: false }), []);
 });
