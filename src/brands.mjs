@@ -10,7 +10,8 @@ export const BRANDS = Object.freeze({
     // The analysis source: the xauusd AI Worker's PublicProjection (recaps after 24 hours; real-time analysis).
     source: "xauusd",
     // Public handles (not secrets). The numeric ids and tokens are Worker secrets.
-    handles: Object.freeze({ threads: "xauusd-ai-cta" }),
+    // Threads: the account the Threads token posts as (owner 2026-11-20: "@cryptophys.adm"; there is no @xauusd-ai-cta).
+    handles: Object.freeze({ threads: "cryptophys.adm" }),
     capacity: "education",
     disclaimer: "This content is education and analysis from the Cryptophys system. It is not an invitation to buy or sell and not financial advice. Trading decisions and their risks are entirely your own.",
     chart_attribution: "Chart by TradingView",

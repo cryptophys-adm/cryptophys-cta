@@ -83,7 +83,7 @@ test("the public face: health, the brand's profile and links, the empty archive,
   const p = await (await handle(req("/api/public/profile"), e, opts)).json();
   assert.equal(p.brand.id, "xauusd-ai-cta");
   assert.match(p.brand.disclaimer, /not an invitation to buy or sell and not financial advice/);
-  assert.deepEqual(p.links, [{ channel: "threads", label: "Threads", url: "https://www.threads.net/@xauusd-ai-cta" }]);
+  assert.deepEqual(p.links, [{ channel: "threads", label: "Threads", url: "https://www.threads.net/@cryptophys.adm" }], "the account the token posts as (owner 2026-11-20)");
   assert.deepEqual(await (await handle(req("/api/public/archive"), e, opts)).json(), { posts: [] });
   const page = await handle(req("/"), e, opts);
   assert.equal(await page.text(), "asset /index.html");

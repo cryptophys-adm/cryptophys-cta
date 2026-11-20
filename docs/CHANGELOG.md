@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-20
+- fix(brand): the public Threads link is `@cryptophys.adm`, the account the Threads token posts as (owner 2026-11-20). `@xauusd-ai-cta` does not exist on Threads; the profile link, the home page's Follow, Latest and footer links now point to `https://www.threads.net/@cryptophys.adm`. The brand id `xauusd-ai-cta` is unchanged.
+
 ## 2026-11-19
 - feat(home): the homepage redesign (owner "lanjutkan frontend", relayed with the orchestrator's mockup; scope confirmed by the owner in the session). The page's own dark look and stylesheet, self-hosted Rajdhani and Newsreader (OFL, `public/fonts/`), the live room as the hero with the copy on its left, **Minutes** of each room's last meeting (tabs, reading, tally, the Moderator's conclusion, who said what and whom they answered), the newest Threads post's headline (headline only, filtered; X hidden), the cast as a directory with a distinct role per agent, "From a closed candle to a post" in six steps, and a phone layout (the room first at 4:3). One feed of the rooms for the minutes and the scene (`site/room/feed.js`; no read in a hidden tab). Readings in red (bearish), green (bullish) and amber (undecided) on the page and in the 3D scene (owner 2026-11-20). No Worker or API change; the public scene's fields are unchanged.
 - fix(home): the war room scene no longer freezes in a visitor's browser. A copy from the edge cache came back with the zone's browser TTL (`max-age=14400`, found live by the orchestrator at 02:48 UTC), so a browser could reuse it for 4 hours and the minute's poll never saw a new room. The Worker sets the headers again on a cache hit (`max-age=60`), and the page polls with `cache: "no-store"`. The other public reads were already `no-store`. Test RM7 extended.
