@@ -218,7 +218,11 @@ test("RM9 the cast reads as a directory: a distinct role for every agent, indica
 test("RM10 the latest post on Threads: the headline only, filtered like the rooms; the feed rests in a hidden tab; the reading colours", () => {
   assert.equal(postHeadline("Education · XAUUSD 1D War Room reading\n\nBias on the daily chart: Bearish"), "XAUUSD 1D War Room reading");
   assert.equal(postHeadline("Education · Pattern breakout · XAUUSD D1\nFalling Wedge"), "Pattern breakout, XAUUSD D1", "the post's dots read as commas");
+  assert.equal(postHeadline("Education · XAUUSD key-level map · Friday, 20 November 2026 12:03 AM UTC\nlevels"), "XAUUSD key-level map", "the date part goes (the page shows the post's time); a year is no price");
+  assert.equal(postHeadline("Education · Daily recap · 19 Nov 2026"), "Daily recap");
+  assert.equal(postHeadline("Education · Session open · 08:00 UTC"), "Session open");
   assert.equal(postHeadline("Education · Gold tests 3740 after the open\nmore"), "", "a price in the headline: not shown");
+  assert.equal(postHeadline("Education · Gold near 3740 · Friday, 20 November 2026"), "", "the date goes, the price still drops it");
   assert.equal(postHeadline("Sell the rally into resistance"), "", "an order word: not shown");
   assert.equal(postHeadline(""), "");
   const posts = [

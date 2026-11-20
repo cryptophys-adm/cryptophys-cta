@@ -133,9 +133,13 @@ export function statusOf(meetings, playing = null) {
  * commas, through the same filter as the rooms. Only the headline: a post's body may carry prices and levels.
  * Empty when the line does not pass.
  */
+// A segment of the first line that is only a date or a clock time ("Friday, 20 November 2026 12:03 AM UTC"): the page
+// shows the post's own time beside it, and a year or a time must not read as a price to the filter.
+const DATE_PART = /^(?:(?:mon|tues|wednes|thurs|fri|satur|sun)day,?\s*)?(?:\d{1,2}\s+)?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:\s+\d{1,2})?,?(?:\s+\d{4})?(?:,?\s+\d{1,2}:\d{2}(?:\s*[ap]m)?)?(?:\s*utc|\s*wib)?$|^\d{1,2}:\d{2}(?:\s*[ap]m)?(?:\s*(?:utc|wib))?$/i;
 export function postHeadline(text) {
   const first = String(text ?? '').split('\n').map((l) => l.trim()).find(Boolean) ?? '';
-  return safeLine(first.replace(/^Education\s*·\s*/i, '').replace(/\s*·\s*/g, ', '));
+  const parts = first.replace(/^Education\s*·\s*/i, '').split(/\s*·\s*/).filter((x) => x && !DATE_PART.test(x));
+  return safeLine(parts.join(', '));
 }
 
 /** Pure: the newest published post of a channel from GET /api/public/archive, or null. */
