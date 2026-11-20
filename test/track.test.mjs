@@ -161,7 +161,17 @@ test("TK-S the strip sits in the header of both pages; the hero has no average b
   for (const f of ["public/index.html", "public/performance.html"]) {
     const html = readFileSync(f, "utf8");
     const header = html.slice(html.indexOf("<header"), html.indexOf("</header>"));
-    assert.match(header, /id="avg-strip" href="\/performance" title="Average per plan, simulated" hidden/, f);
+    assert.match(header, /id="avg-strip" href="\/performance" title="Simulated, the average of the exit scenarios" hidden/, f);
   }
   assert.doesNotMatch(readFileSync("public/index.html", "utf8"), /class="avg" id="avg"/);
+});
+
+test("TK-H the header's four codes: the mean over the scenarios shown, with Nexus tones", async () => {
+  const { headline } = await import("../site/home/track.js");
+  const body = { available: true, unit: "R", replay_check: { status: "insufficient", shown: false }, scenarios: [
+    { id: "first", shown: true, count: 72, win_rate: 0.431, expectancy_r: 0.21, net_r: 14.92, profit_factor: 1.79 },
+    { id: "second", shown: true, count: 62, win_rate: 0.242, expectancy_r: 0.32, net_r: 19.56, profit_factor: 2.4 },
+    { id: "managed", shown: false, note: "x" }] };
+  assert.deepEqual(headline(body).map((h) => [h.code, h.value, h.tone]), [["WR", "34%", "wait"], ["EXP", "+0.27R", "pos"], ["NETR", "+17.2R", "pos"], ["PF", "2.09", "pf"]]);
+  assert.deepEqual(headline({ available: false }), []);
 });

@@ -89,3 +89,21 @@ export function averages(body) {
   if (!trackAvailable(body)) return [];
   return COLUMNS.map((c) => ({ c, s: shownScenario(body, c.id) })).filter(({ s }) => s && finite(s.expectancy_r)).map(({ c, s }) => ({ id: c.id, title: c.title, short: c.title.replace(/^Exit at /, ''), value: signedR(s.expectancy_r, 2), tone: toneR(s.expectancy_r) }));
 }
+
+/**
+ * Pure: the header strip's four codes (owner 2026-11-20: "yg ditampilkan avg winrate, expectancy, net r dan pf cukup
+ * pakai kode WR EXP NETR PF"; confirmed: the average of the scenarios shown): each metric's mean over the scenarios
+ * that show numbers (TP1 and TP2; the managed exit once shown), with its Nexus tone. [] without a record.
+ */
+export function headline(body) {
+  if (!trackAvailable(body)) return [];
+  const shown = COLUMNS.map((c) => shownScenario(body, c.id)).filter(Boolean);
+  const mean = (k) => { const v = shown.map((s) => s[k]).filter(finite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  const wr = mean('win_rate'), exp = mean('expectancy_r'), net = mean('net_r'), pf = mean('profit_factor');
+  return [
+    finite(wr) && { code: 'WR', name: 'win rate', value: `${Math.round(wr * 100)}%`, tone: toneWin(wr) },
+    finite(exp) && { code: 'EXP', name: 'expectancy per plan', value: signedR(exp, 2), tone: toneR(exp) },
+    finite(net) && { code: 'NETR', name: 'net R', value: signedR(net, 1), tone: toneR(net) },
+    finite(pf) && { code: 'PF', name: 'profit factor', value: pf.toFixed(2), tone: 'pf' }
+  ].filter(Boolean);
+}
