@@ -96,7 +96,7 @@ test("CK6 the status box on the home page: the reading, the countdown and the cl
   assert.ok(side.indexOf('id="room-status"') < side.indexOf('id="next-in"') && side.indexOf('id="next-in"') < side.indexOf('id="clock-utc"'), "the reading, the countdown, the clock");
   assert.equal((side.match(/aria-live="off"/g) ?? []).length, 2, "both ticking rows");
   assert.doesNotMatch(side, /aria-live="(polite|assertive)"/);
-  assert.ok(side.indexOf('id="hero-status"') < side.indexOf('id="avg"'), "the average box under the status box");
+  assert.equal(side.indexOf('id="avg"'), -1, "the average moved to the header (owner 2026-11-20)");
   const home = read("site/home/home.js");
   assert.match(home, /clockLines\(Date\.now\(\), fmt\)/);
   assert.match(home, /addEventListener\('warroom-status'/, "the scene's status still feeds the reading");

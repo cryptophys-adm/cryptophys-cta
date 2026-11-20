@@ -2,6 +2,7 @@
 // drawn from trackModel (site/home/track.js): one table, each column with its own count and start, the managed exit's
 // numbers only once the data says they are shown. Without a record the page says the numbers are not available yet.
 import { trackModel, TRACK_URL, NOT_YET } from '../home/track.js';
+import { renderAvgStrip } from '../home/avg-strip.js';
 
 const $ = (id) => document.getElementById(id);
 const make = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
@@ -29,7 +30,7 @@ function draw(body) {
       td.dataset.col = cell.col;
       if (cell.rowspan) td.rowSpan = cell.rowspan;
       if (cell.pending) td.textContent = cell.note;
-      else { td.append(make('b', null, cell.value)); if (cell.note) td.append(make('span', null, cell.note)); }
+      else { td.append(make('b', cell.tone ? `t-${cell.tone}` : null, cell.value)); if (cell.note) td.append(make('span', null, cell.note)); }
       tr.append(td);
     }
     return tr;
@@ -40,4 +41,4 @@ function draw(body) {
 fetch(TRACK_URL, { headers: { accept: 'application/json' } })
   .then((r) => (r.ok ? r.json() : null))
   .catch(() => null)
-  .then(draw);
+  .then((body) => { draw(body); renderAvgStrip(body); });

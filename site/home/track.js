@@ -38,16 +38,23 @@ export function shownScenario(body, id) {
 /** Pure: true when the record has numbers to show (in R). */
 export const trackAvailable = (body) => body?.available !== false && body?.unit === 'R' && COLUMNS.some((c) => shownScenario(body, c.id));
 
+/**
+ * Pure: the Nexus colour of a value (owner 2026-11-20: "warnanya samakan dengan yang di nexus"): R above zero "pos",
+ * below "neg", zero "zero"; a win rate of 50 % or more "pos", under it "wait"; the profit factor "pf".
+ */
+export const toneR = (x) => (!finite(x) ? '' : x > 0 ? 'pos' : x < 0 ? 'neg' : 'zero');
+export const toneWin = (x) => (!finite(x) ? '' : x >= 0.5 ? 'pos' : 'wait');
+
 const count = (c, n) => `${n} ${n === 1 ? c.one : c.many}`;
 function cells(c, s) {
   const none = { value: 'None yet', note: '', empty: true };
   const won = [`${s.won ?? 0} won`, `${s.lost ?? 0} lost`, ...(s.even ? [`${s.even} even`] : [])].join(', ');
   const avg = [finite(s.avg_win_r) ? `average win ${signedR(s.avg_win_r, 2, true)}` : '', finite(s.avg_loss_r) ? `loss ${signedR(s.avg_loss_r, 2, true)}` : ''].filter(Boolean).join(', ');
   return [
-    finite(s.win_rate) ? { value: `${Math.round(s.win_rate * 100)}%`, note: won } : none,
-    finite(s.expectancy_r) ? { value: signedR(s.expectancy_r, 2), note: `per ${c.one}` } : none,
-    finite(s.net_r) && s.count > 0 ? { value: signedR(s.net_r, 1), note: avg } : none,
-    finite(s.profit_factor) ? { value: s.profit_factor.toFixed(2), note: '' } : s.count > 0 && !s.lost ? { value: 'No losses', note: '', empty: true } : none
+    finite(s.win_rate) ? { value: `${Math.round(s.win_rate * 100)}%`, note: won, tone: toneWin(s.win_rate) } : none,
+    finite(s.expectancy_r) ? { value: signedR(s.expectancy_r, 2), note: `per ${c.one}`, tone: toneR(s.expectancy_r) } : none,
+    finite(s.net_r) && s.count > 0 ? { value: signedR(s.net_r, 1), note: avg, tone: toneR(s.net_r) } : none,
+    finite(s.profit_factor) ? { value: s.profit_factor.toFixed(2), note: '', tone: 'pf' } : s.count > 0 && !s.lost ? { value: 'No losses', note: '', empty: true } : none
   ];
 }
 
@@ -77,8 +84,8 @@ export function trackModel(body) {
   };
 }
 
-/** Pure: the home's average box: each column's expectancy per plan, the managed exit only once it is shown. */
+/** Pure: the header's average strip: each column's expectancy per plan with its Nexus tone, the managed exit only once it is shown. */
 export function averages(body) {
   if (!trackAvailable(body)) return [];
-  return COLUMNS.map((c) => ({ c, s: shownScenario(body, c.id) })).filter(({ s }) => s && finite(s.expectancy_r)).map(({ c, s }) => ({ id: c.id, title: c.title, value: signedR(s.expectancy_r, 2) }));
+  return COLUMNS.map((c) => ({ c, s: shownScenario(body, c.id) })).filter(({ s }) => s && finite(s.expectancy_r)).map(({ c, s }) => ({ id: c.id, title: c.title, short: c.title.replace(/^Exit at /, ''), value: signedR(s.expectancy_r, 2), tone: toneR(s.expectancy_r) }));
 }
