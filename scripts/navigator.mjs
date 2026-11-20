@@ -5,10 +5,10 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { PEOPLE, DEPTS } from "../site/room/data.js";
 
-/** The hash of the page's sources (site/room/*.js and site/home/*.js), recorded in public/room/build.json. No dependency. */
+/** The hash of the pages' sources (site/room, site/home and site/performance *.js), recorded in public/room/build.json. No dependency. */
 export function sourceHash() {
   const h = createHash("sha256");
-  for (const sub of ["room", "home"]) {
+  for (const sub of ["room", "home", "performance"]) {
     const dir = new URL(`../site/${sub}/`, import.meta.url);
     for (const f of readdirSync(dir).filter((n) => n.endsWith(".js")).sort()) h.update(`${sub}/${f}`).update("\0").update(readFileSync(new URL(f, dir))).update("\0");
   }

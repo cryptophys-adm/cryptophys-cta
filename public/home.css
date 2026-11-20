@@ -82,10 +82,26 @@ button{font:inherit;color:inherit}
 }
 
 /* the scene's own parts: the status, the speaker's caption, the hover tag, the controls, the profile card */
-.room-status{position:absolute;z-index:3;top:24px;right:var(--gut);display:flex;align-items:center;gap:10px;font:600 var(--s0)/1.2 var(--display);color:var(--ink);background:rgba(6,10,18,.72);padding:10px 14px;border:1px solid var(--rule);border-radius:3px}
-.room-status .tick{width:22px;height:3px;border-radius:2px;background:var(--flat)}
-.room-status .tick.bear{background:var(--bear)}.room-status .tick.bull{background:var(--bull)}
-.room-status small{color:var(--slate);font-weight:500;font-size:var(--s0)}
+/* the status box and the average box (owner 2026-11-20): one column top right, away from the copy and the caption */
+.hero-side{position:absolute;z-index:3;top:24px;right:var(--gut);display:flex;flex-direction:column;align-items:flex-end;gap:10px;width:340px}
+.hero-status{width:100%;font:600 var(--s0)/1.25 var(--display);color:var(--ink);background:rgba(6,10,18,.72);border:1px solid var(--rule);border-radius:3px}
+.hero-status .row{display:flex;align-items:center;gap:10px;padding:10px 14px}
+.hero-status .row+.row{border-top:1px solid var(--rule)}
+.hero-status .tick{flex:none;width:22px;height:3px;border-radius:2px;background:var(--flat)}
+.hero-status .tick.bear{background:var(--bear)}.hero-status .tick.bull{background:var(--bull)}
+.hero-status .status-reading{flex-wrap:wrap;row-gap:2px}
+.status-reading span{flex:1 1 0;min-width:0}
+.status-reading small{flex-basis:100%;padding-left:32px;color:var(--slate);font-weight:500;font-size:var(--s-1)}
+.hero-status .next,.hero-status .clock{justify-content:space-between;font-variant-numeric:tabular-nums}
+.hero-status .next span{color:var(--slate);font-weight:500}
+.hero-status .next b,.hero-status .clock b{font-weight:600;letter-spacing:.02em;white-space:nowrap}
+.hero-status .clock span{color:var(--slate);font-weight:500;white-space:nowrap}
+.avg{width:220px;font-family:var(--display);color:var(--slate);background:rgba(6,10,18,.35);border:1px solid rgba(27,40,64,.8);border-radius:3px;padding:10px 14px}
+.avg p{font-size:var(--s-1);font-weight:500;line-height:1.25;margin-bottom:6px}
+.avg dl{display:grid;grid-template-columns:auto auto;gap:2px 16px;margin:0;font-size:15px;font-weight:500}
+.avg dd{margin:0;text-align:right;color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.avg a{display:inline-flex;align-items:center;min-height:32px;margin-top:2px;font-size:var(--s-1);font-weight:600;text-decoration:none}
+.avg a:hover{text-decoration:underline}
 .room-tag{position:absolute;z-index:3;left:0;top:0;pointer-events:none;white-space:nowrap;padding:3px 10px;border:1px solid rgba(143,216,255,.38);background:rgba(6,10,18,.84);font:600 15px/1.3 var(--display);border-radius:2px}
 .room-sub{position:absolute;z-index:3;left:44%;right:var(--gut);bottom:84px;opacity:0;transition:opacity .35s;pointer-events:none;text-shadow:0 2px 12px #000,0 0 3px #000}
 .room-sub.on{opacity:1}
@@ -201,8 +217,8 @@ button{font:inherit;color:inherit}
   .room-shade{background:linear-gradient(0deg,var(--vault) 0%,rgba(6,10,18,0) 34%)}
   .hero-copy{padding:20px var(--gut) 48px;pointer-events:auto}
   .hero-copy>*{max-width:none}
-  .room-status{top:10px;left:10px;right:auto;padding:8px 10px;font-size:15px;gap:8px}
-  .room-status small{font-size:14px}
+  .hero-side{position:static;width:auto;margin:-24px var(--gut) 40px;align-items:stretch}
+  .avg{width:auto;background:transparent}
   .room-sub{left:12px;right:12px;bottom:60px;text-align:center}
   .room-sub b{font-size:15px}.room-sub span{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-size:15px;line-height:1.35}
   .room-bar{left:8px;right:8px;bottom:8px;gap:6px}
@@ -226,8 +242,51 @@ button{font:inherit;color:inherit}
 @media (max-width:520px){
   .brand small{display:none}
   .top .btn{padding:0 14px;font-size:15px}
-  .room-status small{display:none}
+  .status-reading small{display:none}
   .conclusion blockquote{font-size:var(--s1)}
   .minutes-head h2,.cast h2,.how h2{font-size:var(--s3)}
 }
 @media (prefers-reduced-motion:reduce){.room-sub{transition:none}}
+
+/* ---------- the Performance page (owner 2026-11-20): the simulated record, quiet; numbers in Rajdhani, words in Newsreader ---------- */
+.top nav a[aria-current="page"]{color:var(--ink)}
+.page{max-width:var(--wrap);margin:0 auto;padding:72px var(--gut) 88px}
+.page h1{font-size:var(--s4);font-weight:600}
+.page .lede{margin-top:14px;font-size:19px;max-width:34em;color:#C9D4E4}
+.page .basis{margin-top:10px;font:500 var(--s0)/1.4 var(--display);color:var(--slate)}
+.page .empty{margin-top:40px;color:var(--slate);font-style:italic}
+.track{width:100%;margin-top:40px;border-collapse:collapse;font-family:var(--display)}
+.track th,.track td{text-align:left;padding:16px 16px 16px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.track thead th{font-weight:600;font-size:var(--s0);color:var(--slate);padding-top:0}
+.track thead th small{display:block;margin-top:4px;font-weight:500;font-size:14.5px}
+.track tbody th{font-weight:600;font-size:var(--s0);color:var(--ink);width:24%}
+.track td b{display:block;font-weight:600;font-size:24px;line-height:1;color:var(--ink);font-variant-numeric:tabular-nums}
+.track td span{display:block;margin-top:5px;font-weight:500;font-size:14.5px;color:var(--slate)}
+.track td.none b{font-size:var(--s0);font-weight:500;color:var(--slate)}
+.track td.pending{vertical-align:middle;font:400 16px/1.5 var(--read);font-style:italic;color:var(--slate)}
+.track .sr,.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.bases{display:none;list-style:none;margin:28px 0 0;padding:0;font:500 15px/1.5 var(--display);color:var(--slate)}
+.bases b{font-weight:600;color:var(--ink)}
+.page .sets{margin-top:14px;font-size:15.5px;color:var(--slate);max-width:52em}
+.terms{margin:48px 0 0;display:grid;grid-template-columns:repeat(2,1fr);gap:18px 48px;max-width:60em}
+.terms dt{font:600 var(--s0)/1.2 var(--display)}
+.terms dd{margin:4px 0 0;font-size:16px;color:var(--slate)}
+.page .fine{margin-top:40px;font-style:italic;font-size:15.5px;color:var(--slate);max-width:62em;padding-top:20px;border-top:1px solid var(--rule)}
+/* a phone: the table becomes label and value rows */
+@media (max-width:760px){
+  .page{padding-top:48px}
+  .track thead{display:none}
+  .bases{display:block}
+  .track{margin-top:16px}
+  .track,.track tbody,.track tr,.track th,.track td{display:block;width:auto}
+  .track tr{padding:14px 0;border-bottom:1px solid var(--rule)}
+  .track th,.track td{border:0;padding:4px 0}
+  .track tbody th{width:auto;margin-bottom:4px}
+  .track td{display:flex;justify-content:space-between;align-items:baseline;gap:16px}
+  .track td::before{content:attr(data-col);flex:none;font-size:15px;color:var(--slate);font-weight:500}
+  .track td b{font-size:20px;text-align:right}
+  .track td span{display:none}
+  .track td.pending{font-size:15px;text-align:right}
+  .track td.pending::before{font:500 15px/1.2 var(--display);font-style:normal}
+  .terms{grid-template-columns:1fr}
+}

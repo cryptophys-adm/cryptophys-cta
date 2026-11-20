@@ -495,6 +495,8 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
   // The holo war room (the home page): the rooms' latest public scenes, cached at the edge for a minute, so visitors
   // never reach the AI Worker more than once a minute per data centre. No per-visitor AI call.
   if (route === "GET /api/public/warroom-scene") return warroomScene(env, request, cache);
+  // The simulated track record (the Performance page and the home's average box): aggregates in R, cached 10 minutes.
+  if (route === "GET /api/public/track-record") return trackRecord(env, request, cache);
   if (route === "GET /api/public/archive") {
     return rpc(async () => ({ posts: await desk(env).archive(Number(url.searchParams.get("limit")) || 30) }), "archive_failed");
   }
@@ -908,6 +910,61 @@ export async function warroomScene(env, request, cache) {
   }
   const res = new Response(JSON.stringify(body), { status: ok ? 200 : 502, headers: sceneHeaders(ok) });
   if (ok && cache) await cache.put(key, res.clone()).catch(() => {});
+  return res;
+}
+
+/** How long the edge and the browser keep the track record (the AI Worker updates it daily, a day behind). */
+export const TRACK_TTL_S = 600;
+const TRACK_IDS = ["first", "second", "managed"];
+const TRACK_NUMBERS = ["count", "won", "lost", "even", "win_rate", "expectancy_r", "net_r", "avg_win_r", "avg_loss_r", "profit_factor"];
+const TRACK_NOTICE = "Simulated, in R. Not advice and not an invitation to trade.";
+const trackHeaders = (cacheable) => ({ "content-type": "application/json; charset=utf-8", "cache-control": cacheable ? `public, max-age=${TRACK_TTL_S}` : "no-store", "x-content-type-options": "nosniff" });
+const num = (x) => (typeof x === "number" && Number.isFinite(x) ? x : null);
+// A string passed on: short, and never an internal name.
+const word = (x, max = 120) => (typeof x === "string" && !/\b(nexus|omega)/i.test(x) ? x.slice(0, max) : null);
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+/**
+ * Pure: the track record as the page reads it, from PublicProjection.trackRecord (xauusd-ai-trading-assistant #499):
+ * only the documented fields, numbers only as finite numbers, R only. The managed exit carries numbers only when both
+ * the replay check and its own `shown` say so; otherwise `{ id, label, shown: false, note }`. Null when there is no
+ * record to show (no method yet, the AI Worker's "unavailable", another unit).
+ */
+export function publicTrackRecord(raw) {
+  if (!raw || typeof raw !== "object" || raw.status === "unavailable" || raw.unit !== "R" || !Array.isArray(raw.scenarios)) return null;
+  const replayShown = raw.replay_check?.shown === true;
+  const scenarios = TRACK_IDS.map((id) => {
+    const s = raw.scenarios.find((x) => x?.id === id);
+    if (!s) return null;
+    const label = word(s.label);
+    if (s.shown !== true || (id === "managed" && !replayShown) || num(s.count) === null) return { id, label, shown: false, note: word(s.note) ?? "Shown once the replay matches the live account." };
+    return { id, label, shown: true, since: DAY.test(s.since) ? s.since : null, ...Object.fromEntries(TRACK_NUMBERS.map((k) => [k, num(s[k])])) };
+  }).filter(Boolean);
+  if (!scenarios.some((s) => s.shown)) return null;
+  return {
+    available: true, version: word(raw.version), unit: "R", simulated: true,
+    delay_hours: num(raw.delay_hours) ?? 24, updated_at: word(raw.updated_at, 40), count: num(raw.count), since: DAY.test(raw.since) ? raw.since : null,
+    replay_check: { status: word(raw.replay_check?.status, 40), shown: replayShown },
+    scenarios, notice: TRACK_NOTICE
+  };
+}
+/**
+ * GET /api/public/track-record: PublicProjection.trackRecord() through publicTrackRecord, cached TRACK_TTL_S at the edge
+ * (Cache API) and in the browser. Without a record (an AI Worker without the method, a failure, nothing shown yet) it
+ * answers 200 `{ available: false }`, not cached, so the page says the numbers are not available yet.
+ */
+export async function trackRecord(env, request, cache) {
+  const key = new Request(new URL("/api/public/track-record", request.url).toString(), { method: "GET" });
+  const hit = await cache?.match(key).catch(() => null);
+  if (hit) return new Response(hit.body, { status: hit.status, headers: trackHeaders(true) });
+  let body = null;
+  try {
+    if (typeof env.PROJECTION?.trackRecord !== "function") throw new Error("the AI Worker has no track record yet");
+    body = publicTrackRecord(await env.PROJECTION.trackRecord());
+  } catch (error) {
+    console.error("track_record_failed", String(error?.message ?? error).slice(0, 160));
+  }
+  const res = new Response(JSON.stringify(body ?? { available: false, unit: "R", simulated: true, scenarios: [], notice: TRACK_NOTICE }), { status: 200, headers: trackHeaders(Boolean(body)) });
+  if (body && cache) await cache.put(key, res.clone()).catch(() => {});
   return res;
 }
 
