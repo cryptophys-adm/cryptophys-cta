@@ -1,77 +1,233 @@
-/* The home page: the holo war room (owner 2026-11-19). A dark, cinematic scene under the site's white top bar; the
-   rest of the page keeps the light look of cta.css. No web font and no inline style (CSP): the scene sets positions
-   through the CSSOM only. */
-.home{--holo:#8fd0ff;--holo-line:rgba(140,200,255,.38);--deep:#04060a;--glass:rgba(6,12,22,.84)}
-.home .topbar .follow{margin-left:4px}
+/* The home page (owner 2026-11-19, the homepage redesign): the room's own light. The page stands alone (no cta.css).
+   Fonts are self-hosted from @fontsource (OFL; the CSP allows font-src 'self' only). No inline style: the scripts set
+   positions and widths through the CSSOM only. */
+@font-face{font-family:Rajdhani;src:url(/fonts/rajdhani-latin-500-normal.woff2) format("woff2");font-weight:500;font-display:swap}
+@font-face{font-family:Rajdhani;src:url(/fonts/rajdhani-latin-600-normal.woff2) format("woff2");font-weight:600;font-display:swap}
+@font-face{font-family:Rajdhani;src:url(/fonts/rajdhani-latin-700-normal.woff2) format("woff2");font-weight:700;font-display:swap}
+@font-face{font-family:Newsreader;src:url(/fonts/newsreader-latin-400-normal.woff2) format("woff2");font-weight:400;font-display:swap}
+@font-face{font-family:Newsreader;src:url(/fonts/newsreader-latin-500-normal.woff2) format("woff2");font-weight:500;font-display:swap}
+@font-face{font-family:Newsreader;src:url(/fonts/newsreader-latin-400-italic.woff2) format("woff2");font-weight:400;font-style:italic;font-display:swap}
 
-.room{position:relative;height:calc(100svh - var(--top));min-height:520px;max-height:1000px;overflow:hidden;background:var(--deep);color:#e6f2ff;isolation:isolate}
+:root{
+  --vault:#060A12;   /* the floor of the room: the page */
+  --deck:#0C1424;    /* the table: raised surfaces */
+  --rule:#1B2840;    /* grid lines on the deck */
+  --holo:#8FD8FF;    /* projector light: anything you can act on */
+  --gold:#D4A537;    /* fine gold: the brand and the one main action */
+  --ink:#E6EDF7;     /* spoken words */
+  --slate:#8A97AB;   /* who, when, and notes */
+  /* readings (owner 2026-11-20): bearish red, bullish green, neutral (undecided) amber */
+  --bear:#F2606E;--bull:#3FD08A;--flat:#E0A458;
+  --display:Rajdhani,"Arial Narrow",sans-serif;
+  --read:Newsreader,Georgia,"Times New Roman",serif;
+  --s-1:13.6px;--s0:17px;--s1:21.25px;--s2:26.5px;--s3:33px;--s4:41.5px;--s5:52px;--s6:65px;
+  --wrap:1180px;--gut:clamp(20px,4vw,48px);--top:64px;
+}
+*{box-sizing:border-box}
+html{background:var(--vault);color:var(--ink);scroll-behavior:smooth;scroll-padding-top:calc(var(--top) + 12px)}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;font:400 18px/1.6 var(--read);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+h1,h2,h3{font-family:var(--display);font-weight:600;margin:0;line-height:1.05;letter-spacing:.005em}
+p{margin:0}
+a{color:var(--holo);text-underline-offset:3px}
+button{font:inherit;color:inherit}
+[hidden]{display:none !important}
+:focus-visible{outline:2px solid var(--holo);outline-offset:3px;border-radius:2px}
+.skip{position:absolute;left:-999px;top:8px;display:inline-flex;align-items:center;min-height:44px;background:var(--gold);color:#140E02;padding:0 16px;font:700 var(--s0)/1 var(--display);z-index:50;text-decoration:none}
+.skip:focus{left:8px}
+
+/* ---------- controls ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 20px;border-radius:3px;font:700 var(--s0)/1 var(--display);letter-spacing:.02em;text-decoration:none;cursor:pointer;border:1px solid transparent;white-space:nowrap}
+.btn.gold{background:var(--gold);color:#140E02}
+.btn.gold:hover{background:#E2B64A}
+.btn.ghost{background:transparent;color:var(--holo);border-color:rgba(143,216,255,.38)}
+.btn.ghost:hover{border-color:var(--holo);background:rgba(143,216,255,.06)}
+
+/* ---------- the top bar: it sits on the room, not above it ---------- */
+.top{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:32px;height:var(--top);padding:0 var(--gut);background:rgba(6,10,18,.86);backdrop-filter:blur(10px);border-bottom:1px solid var(--rule)}
+.brand{display:flex;align-items:baseline;gap:10px;color:var(--ink);text-decoration:none;font-family:var(--display);min-height:44px;align-items:center}
+.brand svg{width:22px;height:22px;fill:none;stroke:var(--gold);stroke-width:1.4}
+.brand span{font-weight:700;font-size:var(--s1);letter-spacing:.03em}
+.brand small{font-weight:500;font-size:var(--s0);color:var(--slate)}
+.top nav{display:flex;gap:4px}
+.top nav a{display:inline-flex;align-items:center;min-height:44px;color:var(--slate);text-decoration:none;font:600 var(--s0)/1 var(--display);padding:0 12px;border-radius:3px}
+.top nav a:hover{color:var(--ink)}
+.top-end{margin-left:auto;display:flex;align-items:center;gap:20px}
+.quiet{display:inline-flex;align-items:center;min-height:44px;color:var(--slate);font:500 var(--s0)/1 var(--display);text-decoration:none}
+.quiet:hover{color:var(--ink)}
+
+/* ---------- the hero: the live room itself, the copy on its left ---------- */
+.hero{position:relative;min-height:min(86vh,780px);display:flex;align-items:flex-end;overflow:hidden;border-bottom:1px solid var(--rule);isolation:isolate}
+.room{position:absolute;inset:0;background:var(--vault);color:var(--ink)}
 .room canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab}
 .room.touch canvas{touch-action:pan-y}
-.room-shade{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 45%,transparent 45%,rgba(0,0,0,.72) 100%)}
-.room button{font:inherit;color:inherit;cursor:pointer}
-.room :focus-visible{outline:2px solid var(--holo);outline-offset:2px}
+/* On a wide screen the room sits right of the copy, under a dark left-to-right gradient. */
+@media (min-width:901px){.room{left:22%}}
+.room-shade{position:absolute;inset:0;pointer-events:none;background:
+  linear-gradient(90deg,var(--vault) 0%,rgba(6,10,18,.92) 24%,rgba(6,10,18,.5) 40%,rgba(6,10,18,0) 54%),
+  linear-gradient(0deg,var(--vault) 0%,rgba(6,10,18,0) 26%)}
+.room button{cursor:pointer}
+.hero-copy{position:relative;z-index:2;max-width:var(--wrap);width:100%;margin:0 auto;padding:0 var(--gut) clamp(56px,10vh,104px);pointer-events:none}
+.hero-copy>*{max-width:min(36rem,46vw)}
+.hero-copy a{pointer-events:auto}
+.hero h1{font-size:clamp(44px,5.6vw,var(--s6));font-weight:700;max-width:11.5ch;line-height:.95;letter-spacing:-.005em}
+.lede{margin-top:24px;font-size:var(--s1);line-height:1.55;color:#C9D4E4}
+.caveat{margin-top:14px;font-style:italic;color:var(--slate)}
+.hero-actions{margin-top:32px;display:flex;flex-wrap:wrap;gap:12px}
+@media (prefers-reduced-motion:no-preference){
+  .hero-copy>*{opacity:0;transform:translateY(8px);animation:rise .7s cubic-bezier(.2,.7,.2,1) forwards}
+  .hero-copy>:nth-child(1){animation-delay:.15s}.hero-copy>:nth-child(2){animation-delay:.3s}
+  .hero-copy>:nth-child(3){animation-delay:.42s}.hero-copy>:nth-child(4){animation-delay:.54s}
+  @keyframes rise{to{opacity:1;transform:none}}
+}
 
-.room-head{position:absolute;left:20px;top:16px;right:20px;pointer-events:none;text-shadow:0 2px 10px #000}
-.room-head h1{font-size:15px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#fff}
-.room-note{margin:4px 0 0;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:rgba(230,242,255,.66)}
-.room-status{margin:10px 0 0;font-size:13px;font-weight:600;letter-spacing:.06em;color:var(--holo);min-height:1.4em}
-
-.room-tag{position:absolute;left:0;top:0;pointer-events:none;white-space:nowrap;padding:2px 10px;border:1px solid var(--holo-line);background:rgba(4,10,18,.82);font-weight:600;letter-spacing:.04em;font-size:13px}
-.room-sub{position:absolute;left:50%;bottom:86px;transform:translateX(-50%);width:min(760px,90%);text-align:center;opacity:0;transition:opacity .35s;pointer-events:none;text-shadow:0 2px 12px #000,0 0 3px #000}
+/* the scene's own parts: the status, the speaker's caption, the hover tag, the controls, the profile card */
+.room-status{position:absolute;z-index:3;top:24px;right:var(--gut);display:flex;align-items:center;gap:10px;font:600 var(--s0)/1.2 var(--display);color:var(--ink);background:rgba(6,10,18,.72);padding:10px 14px;border:1px solid var(--rule);border-radius:3px}
+.room-status .tick{width:22px;height:3px;border-radius:2px;background:var(--flat)}
+.room-status .tick.bear{background:var(--bear)}.room-status .tick.bull{background:var(--bull)}
+.room-status small{color:var(--slate);font-weight:500;font-size:var(--s0)}
+.room-tag{position:absolute;z-index:3;left:0;top:0;pointer-events:none;white-space:nowrap;padding:3px 10px;border:1px solid rgba(143,216,255,.38);background:rgba(6,10,18,.84);font:600 15px/1.3 var(--display);border-radius:2px}
+.room-sub{position:absolute;z-index:3;left:44%;right:var(--gut);bottom:84px;opacity:0;transition:opacity .35s;pointer-events:none;text-shadow:0 2px 12px #000,0 0 3px #000}
 .room-sub.on{opacity:1}
-.room-sub b{display:block;font-size:13px;font-weight:700;letter-spacing:.12em;color:var(--holo);margin-bottom:4px}
-.room-sub span{font-size:19px;font-weight:600;line-height:1.35}
-
-.room-bar{position:absolute;left:16px;right:16px;bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.room-sub b{display:block;font:600 var(--s0)/1.2 var(--display);color:var(--holo);margin-bottom:4px}
+.room-sub span{font:400 var(--s1)/1.4 var(--read);color:var(--ink)}
+.room-bar{position:absolute;z-index:3;right:16px;bottom:16px;display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 .room-bar nav{display:flex;gap:6px}
-.chip{display:inline-flex;align-items:center;justify-content:center;min-width:52px;min-height:44px;padding:0 12px;color:#e6f2ff;text-decoration:none;border:1px solid var(--holo-line);background:rgba(8,16,28,.62);font-weight:700;letter-spacing:.08em;font-size:14px;border-radius:4px}
-.chip:hover{border-color:var(--holo);text-decoration:none}
-.chip[aria-pressed="true"]{background:var(--holo);color:#04101c;border-color:var(--holo)}
-.chip:disabled{opacity:.4;cursor:default}
-.chip.text{letter-spacing:.04em;font-weight:600}
-.room .btn.primary{height:44px;padding:0 22px;font-size:15px}
-
-.room-card{position:absolute;right:16px;top:16px;width:340px;max-height:calc(100% - 100px);overflow:auto;padding:18px;border:1px solid var(--holo-line);background:var(--glass);border-radius:6px}
-.room-card .kind,.room-card .k{font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--holo)}
+.chip{display:inline-flex;align-items:center;justify-content:center;min-width:48px;min-height:44px;padding:0 12px;color:var(--ink);text-decoration:none;border:1px solid rgba(143,216,255,.32);background:rgba(6,10,18,.66);font:600 var(--s0)/1 var(--display);letter-spacing:.02em;border-radius:3px}
+.chip:hover{border-color:var(--holo)}
+.chip[aria-pressed="true"]{background:var(--holo);color:#04101C;border-color:var(--holo)}
+.chip:disabled{opacity:.45;cursor:default}
+.room-card{position:absolute;z-index:4;right:16px;top:84px;width:340px;max-height:calc(100% - 168px);overflow:auto;padding:18px;border:1px solid var(--rule);background:rgba(12,20,36,.94);border-radius:3px}
+.room-card .kind,.room-card .k{font:600 var(--s-1)/1.2 var(--display);color:var(--holo);letter-spacing:.02em}
 .room-card .k{margin:14px 0 4px}
-.room-card h2{margin:2px 44px 2px 0;font-size:24px;line-height:1.1;color:#fff}
-.room-card .title{color:rgba(230,242,255,.7);font-size:13px;margin-bottom:8px}
+.room-card h2{margin:2px 44px 2px 0;font-size:var(--s2);line-height:1.1}
+.room-card .title{color:var(--slate);font:500 var(--s0)/1.3 var(--display);margin-bottom:8px}
+.room-card #card-role{font-size:16px;line-height:1.5;color:#C9D4E4}
 .room-card ul{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:5px}
-.room-card li{padding:2px 9px;border:1px solid var(--holo-line);border-radius:3px;font-size:13px}
-.room-card blockquote{margin:0;padding:8px 12px;border-left:2px solid var(--holo);background:rgba(140,200,255,.08);font-size:15px}
-.room-card .close{position:absolute;right:6px;top:6px;width:44px;height:44px;border:0;background:transparent;font-size:22px}
-.room-msg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(520px,86%);text-align:center;letter-spacing:.14em;text-transform:uppercase;font-weight:700;font-size:13px;color:rgba(230,242,255,.8)}
+.room-card li{padding:2px 9px;border:1px solid var(--rule);border-radius:3px;font:500 15px/1.4 var(--display)}
+.room-card blockquote{margin:0;padding:8px 12px;border-left:2px solid var(--holo);background:rgba(143,216,255,.06);font-size:16px}
+.room-card .close{position:absolute;right:4px;top:4px;width:44px;height:44px;border:0;background:transparent;font-size:24px;color:var(--slate)}
+.room-msg{position:absolute;z-index:3;left:60%;top:42%;transform:translate(-50%,-50%);width:min(420px,60%);text-align:center;font:600 var(--s0)/1.4 var(--display);color:var(--slate)}
 
-/* the navigator: every agent and its role (also the scene's text equivalent for screen readers) */
-.agents .group{margin:22px 0 8px;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
-.agents ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px}
-.agents li{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px}
-.agents li button{all:unset;cursor:pointer;display:block;width:100%}
-.agents li button:focus-visible{outline:2px solid var(--blue);outline-offset:4px;border-radius:2px}
-.agents li b{font-size:15px}
-.agents li .t{color:var(--muted);font-size:12px;margin-left:6px}
-.agents li p{margin:4px 0 0;color:var(--muted);font-size:13px}
+/* ---------- the latest post: a quiet band between the room and the minutes ---------- */
+.latest{border-bottom:1px solid var(--rule);background:var(--deck)}
+.latest-in{max-width:var(--wrap);margin:0 auto;padding:28px var(--gut);display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px 32px}
+.latest h2{font-size:var(--s0);font-weight:600;color:var(--gold);letter-spacing:.02em}
+.latest-headline{font:400 var(--s1)/1.35 var(--read);color:var(--ink);min-width:0}
+.latest-time{grid-column:2;color:var(--slate);font:500 var(--s0)/1.2 var(--display)}
+.latest .btn{grid-column:3;grid-row:1/span 2}
 
-/* Follow: every channel and its latest post */
-.follow-dlg{width:min(560px,calc(100% - 24px));max-height:calc(100% - 48px);padding:0;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
-.follow-dlg::backdrop{background:rgba(4,6,10,.6)}
-.follow-dlg .hd{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid var(--line2)}
-.follow-dlg .hd h2{font-size:18px}
-.follow-dlg .bd{padding:12px 18px 18px;display:grid;gap:10px}
-.follow-dlg .x{width:44px;height:44px;border:0;background:transparent;font-size:22px;cursor:pointer;margin:-8px -10px -8px 0}
-.chan-row{display:grid;grid-template-columns:40px 1fr auto;gap:12px;align-items:start;padding:12px;border:1px solid var(--line);border-radius:var(--radius)}
-.chan-row .ic{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--blue-soft);color:var(--blue);font-weight:700}
-.chan-row .last{margin:2px 0 0;color:var(--muted);font-size:13px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-.chan-row .when{color:var(--faint);font-size:12px}
+/* ---------- the minutes ---------- */
+.minutes{max-width:var(--wrap);margin:0 auto;padding:96px var(--gut) 80px}
+.minutes-head{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:24px;padding-bottom:20px;border-bottom:1px solid var(--rule)}
+.minutes-head h2{font-size:var(--s4)}
+.rooms{display:flex;flex-wrap:wrap;gap:2px}
+.rooms button{background:none;border:0;border-bottom:2px solid transparent;color:var(--slate);font:600 var(--s0)/1 var(--display);min-height:44px;padding:0 14px;cursor:pointer;letter-spacing:.02em}
+.rooms button:hover{color:var(--ink)}
+.rooms button[aria-selected="true"]{color:var(--holo);border-bottom-color:var(--holo)}
+.minutes-panel:focus-visible{outline-offset:8px}
+.m-empty{padding-top:40px;color:var(--slate);font-style:italic}
+.minutes-body{display:grid;grid-template-columns:240px 1fr;gap:clamp(32px,6vw,80px);padding-top:40px}
+.ledger{position:sticky;top:96px;align-self:start;font-family:var(--display)}
+.ledger-room{font-size:var(--s3);font-weight:700;line-height:1}
+.ledger-time{margin-top:8px;color:var(--slate);font-size:var(--s0);font-weight:500}
+.reading{margin-top:28px;font-size:var(--s1);font-weight:600}
+.reading span{display:block;color:var(--slate);font-size:var(--s0);font-weight:500;margin-bottom:2px}
+.tally{display:flex;gap:2px;height:6px;margin-top:16px}
+.tally b{display:block;border-radius:1px;flex-basis:0}
+.tally-words{margin-top:10px;color:var(--slate);font-size:var(--s0);font-weight:500;line-height:1.35}
+.bear{color:var(--bear)}.bull{color:var(--bull)}.flat{color:var(--flat)}
+.tally .bear{background:var(--bear)}.tally .bull{background:var(--bull)}.tally .flat{background:var(--flat)}
+.conclusion{margin:0}
+.conclusion figcaption{font:600 var(--s0)/1 var(--display);color:var(--gold);letter-spacing:.02em}
+.conclusion blockquote{margin:16px 0 0;font:400 var(--s2)/1.42 var(--read);color:var(--ink);max-width:30em}
+.conclusion blockquote p+p{margin-top:.55em}
+.said{margin-top:64px;font-size:var(--s1);color:var(--slate);font-weight:600}
+.speakers{list-style:none;margin:16px 0 0;padding:0}
+.speakers li{display:grid;grid-template-columns:190px 1fr;gap:24px;padding:22px 0;border-top:1px solid var(--rule)}
+.speakers li:last-child{border-bottom:1px solid var(--rule)}
+.who{font-family:var(--display)}
+.who b{display:block;font-size:var(--s1);font-weight:600;line-height:1.1}
+.who span{display:block;margin-top:4px;font-size:var(--s0);font-weight:500}
+.words p{max-width:36em}
+.words .reply{margin-top:12px;padding-left:18px;border-left:1px solid var(--rule);font-style:italic;color:#AEB9CB}
+.words .reply em{font-style:normal;font-family:var(--display);font-weight:600;color:var(--slate);display:block;font-size:var(--s0);margin-bottom:2px}
+.more{margin-top:24px}
 
-@media (max-width:760px){
-  .home .topbar #studio-link{display:none}
-  .room{height:calc(100svh - 100px);min-height:480px}
-  .room-head h1{font-size:13px}.room-status{font-size:12px}
-  .room-sub{bottom:128px}.room-sub b{font-size:12px}.room-sub span{font-size:15px;line-height:1.3}
-  .room-card{left:12px;right:12px;width:auto;top:auto;bottom:128px;max-height:42%}
-  .room-bar{left:12px;right:12px;bottom:12px}
-  .room-bar .grow{display:none}
-  .room .btn.primary{flex:1}
+/* ---------- the cast: a directory, not a card grid ---------- */
+.cast{background:var(--deck);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.cast-in{max-width:var(--wrap);margin:0 auto;padding:88px var(--gut)}
+.cast h2{font-size:var(--s4)}
+.cast-count{margin-top:12px;color:var(--slate);font-size:var(--s0)}
+.cast-groups{margin-top:16px}
+.group{display:grid;grid-template-columns:200px 1fr;gap:clamp(24px,5vw,64px);padding:36px 0;border-bottom:1px solid var(--rule)}
+.group:last-child{border-bottom:0}
+.group h3{font-size:var(--s2);font-weight:600}
+.group h3 small{display:block;margin-top:6px;font-size:var(--s0);font-weight:500;color:var(--slate)}
+.people{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px 40px;margin:0}
+.people div{min-width:0}
+.people dt{font:600 var(--s1)/1.15 var(--display)}
+.people dt button{display:inline-flex;align-items:center;min-height:44px;margin:-6px 0;padding:0;border:0;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:4px}
+.people dt button:hover{color:var(--holo);text-decoration-color:rgba(143,216,255,.5)}
+.people dd{margin:4px 0 0;font-size:16px;line-height:1.5;color:var(--slate)}
+
+/* ---------- how it works: a real sequence, so it is numbered ---------- */
+.how{max-width:var(--wrap);margin:0 auto;padding:96px var(--gut) 72px}
+.how h2{font-size:var(--s4);max-width:14ch}
+.steps{list-style:none;counter-reset:step;margin:48px 0 0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:48px 40px}
+.steps li{counter-increment:step;position:relative;padding-top:56px}
+.steps li::before{content:counter(step);position:absolute;top:0;left:0;font:700 var(--s5)/1 var(--display);color:var(--gold)}
+.steps li:not(:nth-child(3n))::after{content:"";position:absolute;top:26px;left:48px;right:-28px;height:1px;background:var(--rule)}
+.steps h3{font-size:var(--s1)}
+.steps p{margin-top:8px;font-size:17px;color:#B7C2D3;max-width:28em}
+
+.notice{max-width:var(--wrap);margin:0 auto;padding:28px var(--gut) 64px}
+.notice p{max-width:62em;font-style:italic;font-size:16px;color:var(--slate);padding-top:24px;border-top:1px solid var(--rule)}
+
+.foot{display:flex;flex-wrap:wrap;gap:8px 32px;justify-content:space-between;align-items:center;padding:20px var(--gut) 28px;border-top:1px solid var(--rule);font:500 var(--s0)/1 var(--display);color:var(--slate)}
+.foot nav{display:flex;flex-wrap:wrap;column-gap:20px}
+.foot a{display:inline-flex;align-items:center;min-height:44px;color:var(--slate);text-decoration:none}
+.foot a:hover{color:var(--ink)}
+.foot .foot-small{width:100%;font-size:var(--s-1)}
+.foot-studio{display:none !important}
+
+/* ---------- small screens: the room first at 4:3, the copy below it ---------- */
+@media (max-width:900px){
+  .top nav,.top .quiet{display:none}
+  .top{gap:12px}
+  .foot-studio{display:inline-flex !important}
+  .hero{min-height:0;display:block}
+  .room{position:relative;aspect-ratio:4/3;max-height:78svh}
+  .room-shade{background:linear-gradient(0deg,var(--vault) 0%,rgba(6,10,18,0) 34%)}
+  .hero-copy{padding:20px var(--gut) 48px;pointer-events:auto}
+  .hero-copy>*{max-width:none}
+  .room-status{top:10px;left:10px;right:auto;padding:8px 10px;font-size:15px;gap:8px}
+  .room-status small{font-size:14px}
+  .room-sub{left:12px;right:12px;bottom:60px;text-align:center}
+  .room-sub b{font-size:15px}.room-sub span{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-size:15px;line-height:1.35}
+  .room-bar{left:8px;right:8px;bottom:8px;gap:6px}
+  .room-bar nav{gap:4px}
+  .chip{min-width:44px;padding:0 9px;font-size:15px}
+  .room-card{left:8px;right:8px;top:8px;width:auto;max-height:calc(100% - 16px)}
+  .room-msg{left:50%;width:84%}
+  .latest-in{grid-template-columns:1fr;gap:6px}
+  .latest-time,.latest .btn{grid-column:auto;grid-row:auto}
+  .latest .btn{justify-self:start;margin-top:10px}
+  .minutes{padding-top:64px}
+  .minutes-body{grid-template-columns:1fr}
+  .ledger{position:static}
+  .ledger-room{font-size:var(--s2)}
+  .ledger .reading{margin-top:16px}
+  .speakers li{grid-template-columns:1fr;gap:8px}
+  .group{grid-template-columns:1fr;gap:16px}
+  .steps{grid-template-columns:1fr}
+  .steps li::after{display:none}
+}
+@media (max-width:520px){
+  .brand small{display:none}
+  .top .btn{padding:0 14px;font-size:15px}
+  .room-status small{display:none}
+  .conclusion blockquote{font-size:var(--s1)}
+  .minutes-head h2,.cast h2,.how h2{font-size:var(--s3)}
 }
 @media (prefers-reduced-motion:reduce){.room-sub{transition:none}}

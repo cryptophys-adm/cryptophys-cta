@@ -3,149 +3,227 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>XAUUSD AI · Cryptophys</title>
-<meta name="description" content="Gold (XAUUSD) analysis from the Cryptophys AI system: watch its analysts meet in the holographic war room. Education, not an invitation to trade.">
-<link rel="stylesheet" href="/cta.css">
+<title>XAUUSD AI by Cryptophys</title>
+<meta name="description" content="Gold (XAUUSD) argued every fifteen minutes: sixteen AI analysts meet when a candle closes, and a moderator writes down what the room concluded. Analysis, not a signal.">
+<meta name="theme-color" content="#060A12">
+<link rel="preload" href="/fonts/rajdhani-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/newsreader-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/home.css">
 </head>
-<body class="public home">
-<header class="topbar">
-  <div class="in narrow">
-    <a class="brand" href="/" aria-label="Cryptophys home">
-      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path fill="#c8961e" d="M16 1.5 28.6 8.75v14.5L16 30.5 3.4 23.25V8.75z"/><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" d="M20.6 11.6a6.4 6.4 0 1 0 0 8.8"/></svg>
-      Cryptophys
-    </a>
-    <nav aria-label="Pages">
-      <a href="/" class="on" aria-current="page">Home</a>
-      <a href="/archive">Archive</a>
-      <a href="/about">How it works</a>
-      <a href="/disclaimer">Disclaimer</a>
-    </nav>
-    <span class="grow"></span>
-    <a class="btn outline sm" href="/studio" id="studio-link">Studio sign in</a>
-    <button class="btn primary sm follow" type="button" data-follow>Follow</button>
+<body>
+<a class="skip" href="#minutes">Skip to the minutes</a>
+
+<header class="top">
+  <a class="brand" href="/" aria-label="XAUUSD AI by Cryptophys, home">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M12 2.5v19M2.5 12h19"/><circle cx="12" cy="12" r="3.2"/></svg>
+    <span>XAUUSD AI</span><small>Cryptophys</small>
+  </a>
+  <nav aria-label="Main">
+    <a href="#minutes">Minutes</a>
+    <a href="#cast">The cast</a>
+    <a href="#how">How it works</a>
+    <a href="/archive">Archive</a>
+  </nav>
+  <div class="top-end">
+    <a class="quiet" href="/studio">Studio sign in</a>
+    <a class="btn gold" href="https://www.threads.net/@xauusd-ai-cta" rel="noopener" data-threads>Follow on Threads</a>
   </div>
 </header>
+
 <main>
-  <section class="room" id="room" aria-labelledby="name">
-    <canvas id="scene" aria-hidden="true"></canvas>
-    <div class="room-shade"></div>
-    <div class="room-head">
-      <h1 id="name">XAUUSD AI · Cryptophys</h1>
-      <p class="room-note">Analysis, not a signal</p>
-      <p class="room-status" id="room-status" aria-live="polite"></p>
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="room" id="room">
+      <canvas id="scene" aria-hidden="true"></canvas>
+      <div class="room-shade" aria-hidden="true"></div>
+      <p class="room-status" id="room-status" hidden></p>
+      <div class="room-tag" id="tag" hidden></div>
+      <div class="room-sub" id="sub" aria-live="polite"><b id="sub-name"></b><span id="sub-text"></span></div>
+      <div class="room-bar">
+        <nav id="meets" aria-label="Replay a room's latest meeting"></nav>
+        <a class="chip" href="#cast" id="nav-open">Agents</a>
+        <button class="chip" type="button" id="sound" aria-pressed="false" hidden>Sound off</button>
+      </div>
+      <aside class="room-card" id="card" hidden aria-live="polite"><button class="close" id="card-close" type="button" aria-label="Close">×</button><div class="kind" id="card-kind"></div><h2 id="card-name"></h2><div class="title" id="card-title"></div><div id="card-role"></div><div id="card-rows"></div></aside>
+      <p class="room-msg" id="loading" hidden>Loading the war room</p>
+      <p class="room-msg" id="nogl" hidden>This device cannot draw the 3D room. Every agent and its role are listed below.</p>
     </div>
-    <div class="room-tag" id="tag" hidden></div>
-    <div class="room-sub" id="sub" aria-live="polite"><b id="sub-name"></b><span id="sub-text"></span></div>
-    <div class="room-bar">
-      <nav id="meets" aria-label="Replay a room's latest meeting"></nav>
-      <span class="grow"></span>
-      <a class="chip text" href="#agents" id="nav-open">Agents</a>
-      <button class="chip text" type="button" id="sound" aria-pressed="false" hidden>Sound off</button>
-      <button class="btn primary" type="button" data-follow>Follow</button>
+    <div class="hero-copy">
+      <h1 id="hero-title">Gold, argued every fifteen minutes.</h1>
+      <p class="lede">When a 15-minute, hourly, 4-hour or daily candle closes, sixteen AI analysts meet around this table. Each reads one indicator, answers the others, and a moderator writes down what the room concluded.</p>
+      <p class="caveat">Analysis, not a signal. Nothing here tells you to buy or sell.</p>
+      <div class="hero-actions">
+        <a class="btn gold" href="https://www.threads.net/@xauusd-ai-cta" rel="noopener" data-threads>Follow on Threads</a>
+        <a class="btn ghost" href="#minutes">Read the latest minutes</a>
+      </div>
     </div>
-    <aside class="room-card" id="card" hidden aria-live="polite"><button class="close" id="card-close" type="button" aria-label="Close">×</button><div class="kind" id="card-kind"></div><h2 id="card-name"></h2><div class="title" id="card-title"></div><div id="card-role"></div><div id="card-rows"></div></aside>
-    <div class="room-msg" id="loading" hidden>Loading the war room</div>
-    <div class="room-msg" id="nogl" hidden>This device cannot draw the 3D scene. Every agent and its role are listed below.</div>
   </section>
 
-  <section class="section agents" id="agents" aria-labelledby="agents-h">
-    <div class="head"><div><h2 id="agents-h">Who is in the room</h2><p>The AI analysts behind the analysis, and what each one does. Select one to see it in the room.</p></div></div>
+  <section class="latest" id="latest" aria-labelledby="latest-title" hidden>
+    <div class="latest-in">
+      <h2 id="latest-title">Latest on Threads</h2>
+      <p class="latest-headline" id="latest-headline"></p>
+      <p class="latest-time" id="latest-time"></p>
+      <a class="btn ghost" href="https://www.threads.net/@xauusd-ai-cta" rel="noopener" data-threads>Read it on Threads</a>
+    </div>
+  </section>
+
+  <section class="minutes" id="minutes" aria-labelledby="minutes-title">
+    <div class="minutes-head">
+      <h2 id="minutes-title">Minutes of the last meeting</h2>
+      <div class="rooms" role="tablist" aria-label="Choose a meeting">
+        <button role="tab" type="button" id="tab-m15" data-room="m15" aria-controls="minutes-panel" aria-selected="true">15 minutes</button>
+        <button role="tab" type="button" id="tab-h1" data-room="h1" aria-controls="minutes-panel" aria-selected="false" tabindex="-1">1 hour</button>
+        <button role="tab" type="button" id="tab-h4" data-room="h4" aria-controls="minutes-panel" aria-selected="false" tabindex="-1">4 hours</button>
+        <button role="tab" type="button" id="tab-d1" data-room="d1" aria-controls="minutes-panel" aria-selected="false" tabindex="-1">1 day</button>
+      </div>
+    </div>
+    <div class="minutes-panel" role="tabpanel" id="minutes-panel" aria-labelledby="tab-m15" tabindex="0">
+      <p class="m-empty" id="m-empty">Loading the minutes.</p>
+      <div class="minutes-body" id="m-body" hidden>
+        <aside class="ledger" aria-label="The meeting">
+          <p class="ledger-room" id="m-room"></p>
+          <p class="ledger-time" id="m-time"></p>
+          <p class="reading" id="m-reading"></p>
+          <div class="tally" id="m-tally" aria-hidden="true"></div>
+          <p class="tally-words" id="m-tally-words"></p>
+        </aside>
+        <div class="record">
+          <figure class="conclusion" id="m-conclusion-fig">
+            <figcaption>The Moderator's conclusion</figcaption>
+            <blockquote id="m-conclusion"></blockquote>
+          </figure>
+          <h3 class="said" id="m-said">What was said at the table</h3>
+          <ol class="speakers" id="m-speakers"></ol>
+          <button class="btn ghost more" id="m-more" type="button" aria-controls="m-speakers" hidden></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cast" id="cast" aria-labelledby="cast-title">
+    <div class="cast-in">
+    <h2 id="cast-title">Who is in the room</h2>
     <!-- agents:start (written by scripts/build-room.mjs from site/room/data.js) -->
-    <h3 class="group" id="g-hall">At the table</h3>
-    <ul aria-labelledby="g-hall">
-      <li><button type="button" data-agent="news"><b>news</b><span class="t">News Analyst</span></button><p>The fundamental news of the last 24 hours and the headlines behind its reading.</p></li>
-      <li><button type="button" data-agent="technical"><b>technical</b><span class="t">Technical Analyst</span></button><p>Price action only: the closed candles of the chart under discussion.</p></li>
-      <li><button type="button" data-agent="risk"><b>risk</b><span class="t">Risk Manager</span></button><p>Risk only: volatility, confirmation and what would invalidate a move.</p></li>
-      <li><button type="button" data-agent="projection"><b>projection</b><span class="t">Projection Agent</span></button><p>Where a move projects: the probability cone, trendlines and chart patterns.</p></li>
-      <li><button type="button" data-agent="prophet"><b>prophet</b><span class="t">Prophet</span></button><p>Indicator analyst: reads one indicator panel and argues only from its metrics.</p></li>
-      <li><button type="button" data-agent="trade_management"><b>tradeMgmt</b><span class="t">Trade Management</span></button><p>Indicator analyst: reads one indicator panel and argues only from its metrics.</p></li>
-      <li><button type="button" data-agent="interstellar_eyes"><b>interstellar</b><span class="t">The Interstellar Eyes</span></button><p>Indicator analyst: reads one indicator panel and argues only from its metrics.</p></li>
-      <li><button type="button" data-agent="kinetic_engine"><b>kinetic</b><span class="t">Kinetic Engine</span></button><p>Indicator analyst: reads one indicator panel and argues only from its metrics.</p></li>
-      <li><button type="button" data-agent="fabio_amt"><b>fabioAMT</b><span class="t">Fabio AMT Sensors</span></button><p>Indicator analyst: reads one indicator panel and argues only from its metrics.</p></li>
-      <li><button type="button" data-agent="chronos_matrix"><b>chronos</b><span class="t">Chronos Matrix</span></button><p>Indicator analyst: reads one indicator panel and argues only from its metrics.</p></li>
-      <li><button type="button" data-agent="tactical_muscles"><b>tactical</b><span class="t">Tactical Muscles</span></button><p>Indicator analyst: reads one indicator panel and argues only from its metrics.</p></li>
-      <li><button type="button" data-agent="macro_aether"><b>macroAether</b><span class="t">Macro &amp; Aether Sensors</span></button><p>Indicator analyst: reads one indicator panel and argues only from its metrics.</p></li>
-      <li><button type="button" data-agent="decision_matrix"><b>matrix</b><span class="t">Matrix Analyst</span></button><p>Indicator analyst: reads one indicator panel and argues only from its metrics.</p></li>
-      <li><button type="button" data-agent="supertrend"><b>supertrend</b><span class="t">Supertrend</span></button><p>Indicator analyst: reads one indicator panel and argues only from its metrics.</p></li>
-      <li><button type="button" data-agent="aegis_footprint"><b>aegis</b><span class="t">Aegis Footprint Matrix</span></button><p>Indicator analyst: reads one indicator panel and argues only from its metrics.</p></li>
-      <li><button type="button" data-agent="order_blocks"><b>orderBlocks</b><span class="t">Order Blocks</span></button><p>Indicator analyst: reads one indicator panel and argues only from its metrics.</p></li>
-    </ul>
-    <h3 class="group" id="g-lead">Leaders</h3>
-    <ul aria-labelledby="g-lead">
-      <li><button type="button" data-agent="m15"><b>lead15m</b><span class="t">15m Lead</span></button><p>Timeframe leader: brings this timeframe's closed candle to the table and leads its meeting.</p></li>
-      <li><button type="button" data-agent="h1"><b>lead1H</b><span class="t">1H Lead</span></button><p>Timeframe leader: brings this timeframe's closed candle to the table and leads its meeting.</p></li>
-      <li><button type="button" data-agent="h4"><b>lead4H</b><span class="t">4H Lead</span></button><p>Timeframe leader: brings this timeframe's closed candle to the table and leads its meeting.</p></li>
-      <li><button type="button" data-agent="d1"><b>lead1D</b><span class="t">1D Lead</span></button><p>Timeframe leader: brings this timeframe's closed candle to the table and leads its meeting.</p></li>
-      <li><button type="button" data-agent="moderator"><b>moderator</b><span class="t">Moderator</span></button><p>Facilitates every meeting and writes its conclusion.</p></li>
-    </ul>
-    <h3 class="group" id="g-research">Research</h3>
-    <ul aria-labelledby="g-research">
-      <li><button type="button" data-agent="calendar"><b>calendar</b><span class="t">Calendar Agent</span></button><p>The scheduled US events and their projected effect on gold.</p></li>
-      <li><button type="button" data-agent="dollar"><b>dollar</b><span class="t">Dollar Analyst</span></button><p>The US Dollar Index: its recent move and how tightly it has moved against gold.</p></li>
-      <li><button type="button" data-agent="rates"><b>rates</b><span class="t">Rates Analyst</span></button><p>The US 10-year yield and what it means for the cost of holding gold.</p></li>
-      <li><button type="button" data-agent="silver"><b>metals</b><span class="t">Metals Analyst</span></button><p>Silver: whether it confirms or contradicts gold's move.</p></li>
-      <li><button type="button" data-agent="oil"><b>oil</b><span class="t">Oil Analyst</span></button><p>WTI crude oil and the geopolitical headlines.</p></li>
-      <li><button type="button" data-agent="correlation"><b>correlation</b><span class="t">Correlation Analyst</span></button><p>Whether the usual links between gold, the dollar, yields, silver and oil hold now.</p></li>
-      <li><button type="button" data-agent="syn_analyst"><b>analyst</b><span class="t">Analyst</span></button><p>First reader of the news thread.</p></li>
-      <li><button type="button" data-agent="syn_counselor"><b>counselor</b><span class="t">Counselor</span></button><p>Challenges the Analyst in the news thread.</p></li>
-      <li><button type="button" data-agent="syn_reasoner"><b>reasoner</b><span class="t">Reasoner</span></button><p>Writes the synthesis from the Analyst and the Counselor.</p></li>
-    </ul>
-    <h3 class="group" id="g-content">Content studio</h3>
-    <ul aria-labelledby="g-content">
-      <li><button type="button" data-agent="cta_editor"><b>ctaEditor</b><span class="t">CTA Editor</span></button><p>Drafts the public posts from the analysis.</p></li>
-      <li><button type="button" data-agent="cta_guardian"><b>ctaGuardian</b><span class="t">CTA Content Guardian</span></button><p>Checks every post against the content rules before a person approves it.</p></li>
-    </ul>
-    <h3 class="group" id="g-knowledge">Knowledge</h3>
-    <ul aria-labelledby="g-knowledge">
-      <li><button type="button" data-agent="ae_auditor"><b>aetherAuditor</b><span class="t">Aether Auditor</span></button><p>Reviews past readings and finds repeated mistakes.</p></li>
-      <li><button type="button" data-agent="ae_calibrator"><b>calibrator</b><span class="t">Aether Calibrator</span></button><p>Proposes parameter candidates within reviewed ranges.</p></li>
-      <li><button type="button" data-agent="ae_curator"><b>curator</b><span class="t">Aether Curator</span></button><p>Keeps the ledger of what was learned.</p></li>
-      <li><button type="button" data-agent="ae_guardian"><b>aetherGuardian</b><span class="t">Aether Guardian</span></button><p>Checks what each agent said against its role and the doctrine.</p></li>
-      <li><button type="button" data-agent="ae_council"><b>council</b><span class="t">Knowledge Council</span></button><p>Meets daily and compares the doctrine with what was learned.</p></li>
-    </ul>
-    <h3 class="group" id="g-ops">Platform</h3>
-    <ul aria-labelledby="g-ops">
-      <li><button type="button" data-agent="supervisor"><b>supervisor</b><span class="t">Platform Supervisor</span></button><p>Watches the platform and proposes recovery plans for a person to approve.</p></li>
-      <li><button type="button" data-agent="auditor"><b>auditor</b><span class="t">Platform Auditor</span></button><p>Verifies the audit trail every hour.</p></li>
-      <li><button type="button" data-agent="signal_analyst"><b>digest</b><span class="t">Digest Analyst</span></button><p>Reads the rooms and the macro context every hour and writes a digest.</p></li>
-      <li><button type="button" data-agent="adr_steward"><b>steward</b><span class="t">Records Steward</span></button><p>Keeps the design records in step with what runs.</p></li>
-      <li><button type="button" data-agent="evolver"><b>evolver</b><span class="t">Evolver</span></button><p>Turns approved proposals into change requests.</p></li>
-      <li><button type="button" data-agent="audit_ledger"><b>ledger</b><span class="t">Audit Ledger</span></button><p>Summarizes the audit trail.</p></li>
-      <li><button type="button" data-agent="orchestrator"><b>orchestrator</b><span class="t">Release Orchestrator</span></button><p>Summarizes release readiness.</p></li>
-      <li><button type="button" data-agent="drift"><b>drift</b><span class="t">Drift Detector</span></button><p>Compares what should run with what runs.</p></li>
-      <li><button type="button" data-agent="platform_api"><b>api</b><span class="t">Platform API</span></button><p>Summarizes the control plane.</p></li>
-      <li><button type="button" data-agent="registry"><b>registry</b><span class="t">Service Registry</span></button><p>Keeps the list of services.</p></li>
-      <li><button type="button" data-agent="policy"><b>policy</b><span class="t">Policy Engine</span></button><p>Explains why a policy allowed or refused something.</p></li>
-      <li><button type="button" data-agent="recovery"><b>recovery</b><span class="t">Recovery Manager</span></button><p>Summarizes recovery plans and their approvals.</p></li>
-    </ul>
+    <p class="cast-count">49 agents. Sixteen argue at the table; the rest lead, research, write, learn and keep the platform running.</p>
+    <div class="cast-groups">
+      <section class="group" aria-labelledby="g-hall">
+        <h3 id="g-hall">At the table<small>16 agents</small></h3>
+        <dl class="people">
+          <div><dt><button type="button" data-agent="news">News Analyst</button></dt><dd>The fundamental news of the last 24 hours and the headlines behind its reading.</dd></div>
+          <div><dt><button type="button" data-agent="technical">Technical Analyst</button></dt><dd>Price action only: the closed candles of the chart under discussion.</dd></div>
+          <div><dt><button type="button" data-agent="risk">Risk Manager</button></dt><dd>Risk only: volatility, confirmation and what would invalidate a move.</dd></div>
+          <div><dt><button type="button" data-agent="projection">Projection Agent</button></dt><dd>Where a move projects: the probability cone, trendlines and chart patterns.</dd></div>
+          <div><dt><button type="button" data-agent="prophet">Prophet</button></dt><dd>Reads Prophet structure, Prophet cycles and fast oscillator.</dd></div>
+          <div><dt><button type="button" data-agent="trade_management">Trade Management</button></dt><dd>Reads Prophet cycles, price z-score and order-block filter.</dd></div>
+          <div><dt><button type="button" data-agent="interstellar_eyes">The Interstellar Eyes</button></dt><dd>Reads daily Camarilla levels and weekly Camarilla levels.</dd></div>
+          <div><dt><button type="button" data-agent="kinetic_engine">Kinetic Engine</button></dt><dd>Reads adaptive channel angle, market entropy and trend angle.</dd></div>
+          <div><dt><button type="button" data-agent="fabio_amt">Fabio AMT Sensors</button></dt><dd>Reads value area range and footprint order flow.</dd></div>
+          <div><dt><button type="button" data-agent="chronos_matrix">Chronos Matrix</button></dt><dd>Reads daily pivot central range and weekly pivot central range.</dd></div>
+          <div><dt><button type="button" data-agent="tactical_muscles">Tactical Muscles</button></dt><dd>Reads momentum percentile rank.</dd></div>
+          <div><dt><button type="button" data-agent="macro_aether">Macro &amp; Aether Sensors</button></dt><dd>Reads multi-timeframe z-score and weighted Hurst exponent.</dd></div>
+          <div><dt><button type="button" data-agent="decision_matrix">Matrix Analyst</button></dt><dd>Reads Prophet, GMI and volume profile.</dd></div>
+          <div><dt><button type="button" data-agent="supertrend">Supertrend</button></dt><dd>Reads Supertrend and average true range.</dd></div>
+          <div><dt><button type="button" data-agent="aegis_footprint">Aegis Footprint Matrix</button></dt><dd>Reads footprint order flow, price action structure and momentum alignment.</dd></div>
+          <div><dt><button type="button" data-agent="order_blocks">Order Blocks</button></dt><dd>Reads active order blocks, order-block filter and mitigation zones.</dd></div>
+        </dl>
+      </section>
+      <section class="group" aria-labelledby="g-lead">
+        <h3 id="g-lead">Leaders<small>5 agents</small></h3>
+        <dl class="people">
+          <div><dt><button type="button" data-agent="m15">15m Lead</button></dt><dd>Brings the 15-minute candle to the table and leads that meeting.</dd></div>
+          <div><dt><button type="button" data-agent="h1">1H Lead</button></dt><dd>Brings the hourly candle to the table and leads that meeting.</dd></div>
+          <div><dt><button type="button" data-agent="h4">4H Lead</button></dt><dd>Brings the 4-hour candle to the table and leads that meeting.</dd></div>
+          <div><dt><button type="button" data-agent="d1">1D Lead</button></dt><dd>Brings the daily candle to the table and leads that meeting.</dd></div>
+          <div><dt><button type="button" data-agent="moderator">Moderator</button></dt><dd>Facilitates every meeting and writes its conclusion.</dd></div>
+        </dl>
+      </section>
+      <section class="group" aria-labelledby="g-research">
+        <h3 id="g-research">Research<small>9 agents</small></h3>
+        <dl class="people">
+          <div><dt><button type="button" data-agent="calendar">Calendar Agent</button></dt><dd>The scheduled US events and their projected effect on gold.</dd></div>
+          <div><dt><button type="button" data-agent="dollar">Dollar Analyst</button></dt><dd>The US Dollar Index: its recent move and how tightly it has moved against gold.</dd></div>
+          <div><dt><button type="button" data-agent="rates">Rates Analyst</button></dt><dd>The US 10-year yield and what it means for the cost of holding gold.</dd></div>
+          <div><dt><button type="button" data-agent="silver">Metals Analyst</button></dt><dd>Silver: whether it confirms or contradicts gold's move.</dd></div>
+          <div><dt><button type="button" data-agent="oil">Oil Analyst</button></dt><dd>WTI crude oil and the geopolitical headlines.</dd></div>
+          <div><dt><button type="button" data-agent="correlation">Correlation Analyst</button></dt><dd>Whether the usual links between gold, the dollar, yields, silver and oil hold now.</dd></div>
+          <div><dt><button type="button" data-agent="syn_analyst">Analyst</button></dt><dd>First reader of the news thread.</dd></div>
+          <div><dt><button type="button" data-agent="syn_counselor">Counselor</button></dt><dd>Challenges the Analyst in the news thread.</dd></div>
+          <div><dt><button type="button" data-agent="syn_reasoner">Reasoner</button></dt><dd>Writes the synthesis from the Analyst and the Counselor.</dd></div>
+        </dl>
+      </section>
+      <section class="group" aria-labelledby="g-content">
+        <h3 id="g-content">Content studio<small>2 agents</small></h3>
+        <dl class="people">
+          <div><dt><button type="button" data-agent="cta_editor">CTA Editor</button></dt><dd>Drafts the public posts from the analysis.</dd></div>
+          <div><dt><button type="button" data-agent="cta_guardian">CTA Content Guardian</button></dt><dd>Checks every post against the content rules before a person approves it.</dd></div>
+        </dl>
+      </section>
+      <section class="group" aria-labelledby="g-knowledge">
+        <h3 id="g-knowledge">Knowledge<small>5 agents</small></h3>
+        <dl class="people">
+          <div><dt><button type="button" data-agent="ae_auditor">Aether Auditor</button></dt><dd>Reviews past readings and finds repeated mistakes.</dd></div>
+          <div><dt><button type="button" data-agent="ae_calibrator">Aether Calibrator</button></dt><dd>Proposes parameter candidates within reviewed ranges.</dd></div>
+          <div><dt><button type="button" data-agent="ae_curator">Aether Curator</button></dt><dd>Keeps the ledger of what was learned.</dd></div>
+          <div><dt><button type="button" data-agent="ae_guardian">Aether Guardian</button></dt><dd>Checks what each agent said against its role and the doctrine.</dd></div>
+          <div><dt><button type="button" data-agent="ae_council">Knowledge Council</button></dt><dd>Meets daily and compares the doctrine with what was learned.</dd></div>
+        </dl>
+      </section>
+      <section class="group" aria-labelledby="g-ops">
+        <h3 id="g-ops">Platform<small>12 agents</small></h3>
+        <dl class="people">
+          <div><dt><button type="button" data-agent="supervisor">Platform Supervisor</button></dt><dd>Watches the platform and proposes recovery plans for a person to approve.</dd></div>
+          <div><dt><button type="button" data-agent="auditor">Platform Auditor</button></dt><dd>Verifies the audit trail every hour.</dd></div>
+          <div><dt><button type="button" data-agent="signal_analyst">Digest Analyst</button></dt><dd>Reads the rooms and the macro context every hour and writes a digest.</dd></div>
+          <div><dt><button type="button" data-agent="adr_steward">Records Steward</button></dt><dd>Keeps the design records in step with what runs.</dd></div>
+          <div><dt><button type="button" data-agent="evolver">Evolver</button></dt><dd>Turns approved proposals into change requests.</dd></div>
+          <div><dt><button type="button" data-agent="audit_ledger">Audit Ledger</button></dt><dd>Summarizes the audit trail.</dd></div>
+          <div><dt><button type="button" data-agent="orchestrator">Release Orchestrator</button></dt><dd>Summarizes release readiness.</dd></div>
+          <div><dt><button type="button" data-agent="drift">Drift Detector</button></dt><dd>Compares what should run with what runs.</dd></div>
+          <div><dt><button type="button" data-agent="platform_api">Platform API</button></dt><dd>Summarizes the control plane.</dd></div>
+          <div><dt><button type="button" data-agent="registry">Service Registry</button></dt><dd>Keeps the list of services.</dd></div>
+          <div><dt><button type="button" data-agent="policy">Policy Engine</button></dt><dd>Explains why a policy allowed or refused something.</dd></div>
+          <div><dt><button type="button" data-agent="recovery">Recovery Manager</button></dt><dd>Summarizes recovery plans and their approvals.</dd></div>
+        </dl>
+      </section>
+    </div>
     <!-- agents:end -->
+    </div>
   </section>
 
-  <div class="disclaimer">
-    <div class="notice info" role="note">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2zm0-8h-2V7h2z"/></svg>
-      <div><b>Education, not financial advice</b><span id="disclaimer">This content is education and analysis. It is not an invitation to buy or sell and not financial advice.</span> <a href="/disclaimer">Read the full disclaimer</a></div>
-    </div>
-  </div>
+  <section class="how" id="how" aria-labelledby="how-title">
+    <h2 id="how-title">From a closed candle to a post</h2>
+    <ol class="steps">
+      <li><h3>A candle closes</h3><p>The 15-minute room meets four times an hour. The hourly, 4-hour and daily rooms meet when their candle closes.</p></li>
+      <li><h3>The leader brings it to the table</h3><p>Each timeframe has a leader. Sixteen analysts each argue from their own indicator panel, and only from it.</p></li>
+      <li><h3>They answer each other</h3><p>Analysts who disagree say so. The Moderator weighs the exchange and writes the conclusion you read above.</p></li>
+      <li><h3>Research adds the wider picture</h3><p>The dollar, US yields, silver, oil and the economic calendar are read by their own desk.</p></li>
+      <li><h3>A post is drafted and checked</h3><p>The CTA Editor drafts it, the Content Guardian checks it against the rules, and a person approves it.</p></li>
+      <li><h3>It is posted on Threads</h3><p>No prices, no levels and no calls to trade go out. What the system did with a meeting is shared only as a recap, a day later.</p></li>
+    </ol>
+  </section>
+
+  <aside class="notice" id="disclaimer" aria-label="Disclaimer">
+    <p id="disclaimer-text">This content is education and analysis from the Cryptophys system. It is not an invitation to buy or sell and not financial advice. Trading decisions and their risks are entirely your own.</p>
+  </aside>
 </main>
-<dialog class="follow-dlg" id="follow" aria-labelledby="follow-h">
-  <div class="hd"><h2 id="follow-h">Follow the analysis</h2><span class="grow"></span><button class="x" type="button" id="follow-close" aria-label="Close">×</button></div>
-  <div class="bd" id="follow-list"><p class="meta">Loading channels…</p></div>
-</dialog>
-<footer class="site-foot">
-  <div class="in">
-    <span class="brand"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path fill="#c8961e" d="M16 1.5 28.6 8.75v14.5L16 30.5 3.4 23.25V8.75z"/><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" d="M20.6 11.6a6.4 6.4 0 1 0 0 8.8"/></svg>Cryptophys</span>
+
+<footer class="foot">
+  <span>XAUUSD AI by Cryptophys</span>
+  <nav aria-label="Footer">
     <a href="/archive">Archive</a>
-    <a href="/about">How it works</a>
+    <a href="#how">How it works</a>
     <a href="/disclaimer">Disclaimer</a>
+    <a href="https://www.threads.net/@xauusd-ai-cta" rel="noopener" data-threads>Threads</a>
+    <a class="foot-studio" href="/studio">Studio sign in</a>
+  </nav>
+  <nav class="foot-small" aria-label="Legal">
     <a href="/privacy">Privacy</a>
+    <a href="/about">About the system</a>
     <a href="/terms">Terms</a>
     <a href="/room/CREDITS.txt">3D credits</a>
-    <span class="grow"></span>
-    <span>© Cryptophys · Education, not financial advice</span>
-  </div>
+    <a href="/fonts/OFL.txt">Font licences</a>
+  </nav>
 </footer>
-<script src="/home.js"></script>
+<script type="module" src="/home.js"></script>
 </body>
 </html>
