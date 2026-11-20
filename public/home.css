@@ -126,13 +126,12 @@ ul{margin:0;padding:0;list-style:none}
   @keyframes rise{to{opacity:1;transform:none}}
 }
 
-/* the live gold price (owner 2026-11-20: "widget hanya ditempatkan dalam core"): TradingView's quote as a lens on the
-   core. The scene centres it on the core's place on screen; before the scene, or without it, it waits where the core
-   stands. A dark glass behind it keeps the quote readable over the core's glow; its attribution under it. */
-.gold-live{position:absolute;z-index:2;left:50%;top:42%;width:var(--lens);transform:translate(-50%,-50%);background:rgba(4,8,14,.7);border:1px solid rgba(143,216,255,.2);border-radius:6px;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);box-shadow:0 0 0 1px rgba(4,8,14,.35),0 8px 28px rgba(0,0,0,.45);overflow:hidden}
-.gold-live.off-core{visibility:hidden}
-/* the widget's frame is 101px tall with its quote in the top 60: the lens shows the top 62. A phone's core is small, so
-   the frame keeps its width and is drawn smaller (--lens-k), not squeezed (a squeezed quote cuts its symbol) */
+/* the live gold price (owner 2026-11-20: "widget taruh di kiri atas saja, jelek kalau di core"): TradingView's quote at
+   the hero's top left, on the copy's left edge, over the room and above the headline. A dark glass behind it keeps the
+   quote readable over the scene; its attribution under it. On a phone it sits at the top left of the scene. */
+.gold-live{position:absolute;z-index:3;left:calc(max(0px, (100% - var(--wrap)) / 2) + var(--gut));top:clamp(16px,3vh,32px);width:var(--lens);background:rgba(4,8,14,.7);border:1px solid rgba(143,216,255,.2);border-radius:6px;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);box-shadow:0 0 0 1px rgba(4,8,14,.35),0 8px 28px rgba(0,0,0,.45);overflow:hidden}
+/* the widget's frame is 101px tall with its quote in the top 60: the lens shows the top 62. On a phone the
+   frame keeps its width and is drawn smaller (--lens-k), not squeezed (a squeezed quote cuts its symbol) */
 .tv-frame{height:calc(62px * var(--lens-k));overflow:hidden}
 .tv-frame iframe{display:block;width:calc(var(--lens) / var(--lens-k));height:101px;border:0;color-scheme:normal;transform:scale(var(--lens-k));transform-origin:0 0}
 .tradingview-widget-copyright{margin:0;padding:0 10px 4px;text-align:right;font:500 var(--s-1)/1 var(--display)}

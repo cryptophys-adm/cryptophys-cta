@@ -27,15 +27,17 @@ const without = (html, ids) => ids.reduce((h, id) => { const s = elementSpan(h, 
 const words = (html, except = []) => without(html, except).replace(/<head>[\s\S]*?<\/head>|<script[\s\S]*?<\/script>/g, " ").replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/g, " ").replace(/\s+/g, " ");
 const priceIn = (text) => checkContentDraft({ text }).failures.find((f) => f.check === "price_level")?.detail ?? null;
 
-test("GD5 the TradingView quote: on the core only (outside the header and the hud), its frame added after the load event, its attribution kept", () => {
+test("GD5 the TradingView quote: at the hero's top left only (outside the header, the room and the hud), its frame added after the load event, its attribution kept", () => {
   const page = read("public/index.html");
   const header = page.slice(page.indexOf("<header"), page.indexOf("</header>"));
   for (const id of GOLD_PRICE_IDS) assert.equal(header.indexOf(`id="${id}"`), -1, `${id} is never in the header`);
   assert.doesNotMatch(header.replace(/XAUUSD AI/g, ""), /tradingview|XAUUSD|OANDA|gold-|core-gold/i, "nothing of the gold price in the header (the brand is XAUUSD AI)");
-  // Owner 2026-11-20: "widget hanya ditempatkan dalam core": inside the room, over the scene, not in the hud's corner.
-  const room = page.slice(page.indexOf('<div class="room" id="room">'), page.indexOf('<div class="hud">'));
-  assert.match(room, /<div class="gold-live" id="gold-live" role="group" aria-label="Live gold price from TradingView" hidden>/);
-  assert.match(room, /<p class="tradingview-widget-copyright"><a href="https:\/\/www\.tradingview\.com\/symbols\/XAUUSD\/\?exchange=OANDA" rel="noopener nofollow" target="_blank">[^<]*<span class="blue-text">XAUUSD quote<\/span><span class="trademark"> by TradingView<\/span><\/a><\/p>/, "TradingView's attribution link, with the quote");
+  // Owner 2026-11-20: "widget taruh di kiri atas saja, jelek kalau di core": in the hero, after the room, before the hud.
+  const room = page.slice(page.indexOf('<div class="room" id="room">'), page.indexOf('<div class="gold-live"'));
+  assert.doesNotMatch(room, /gold-live|tradingview/i, "not inside the room (not on the core)");
+  const lens = page.slice(page.indexOf('<div class="gold-live"'), page.indexOf('<div class="hud">'));
+  assert.match(lens, /<div class="gold-live" id="gold-live" role="group" aria-label="Live gold price from TradingView" hidden>/);
+  assert.match(lens, /<p class="tradingview-widget-copyright"><a href="https:\/\/www\.tradingview\.com\/symbols\/XAUUSD\/\?exchange=OANDA" rel="noopener nofollow" target="_blank">[^<]*<span class="blue-text">XAUUSD quote<\/span><span class="trademark"> by TradingView<\/span><\/a><\/p>/, "TradingView's attribution link, with the quote");
   const hud = page.slice(page.indexOf('<div class="hud">'), page.indexOf('<div class="hero-copy">'));
   assert.doesNotMatch(hud + page.slice(page.indexOf("</section>")), /gold-live|tradingview/i, "nowhere else: not under the dial, not below the hero");
   assert.doesNotMatch(page, /<iframe|tradingview\.com\/external-embedding|s3\.tradingview/i, "no frame and no TradingView script in the page itself");
@@ -45,13 +47,10 @@ test("GD5 the TradingView quote: on the core only (outside the header and the hu
   assert.match(home, /\$\('tv-frame'\)\.append\(f\);\n\s*\$\('gold-live'\)\.hidden = false;/, "the lens appears with its frame");
   assert.match(home, /afterLoad\(start\)/, "the scene the same way");
   assert.doesNotMatch(home, /createElement\('script'\)/, "no third-party script");
-  // The scene keeps it on the core: the core's projection, written only when it changes, hidden when off screen.
-  const scene = read("site/room/main.js");
-  assert.match(scene, /tmpV\.copy\(CORE\)\.project\(camera\)/, "projected from the core, as the labels are");
-  assert.match(scene, /if \(at === gold\.at\) return;/, "the page's element moves only when the place changes");
-  assert.match(scene, /classList\.toggle\('off-core', off\)/);
+  // The scene does not move it: the core carries no quote.
+  assert.doesNotMatch(read("site/room/main.js"), /gold-live|placeGold/, "the scene never places the quote");
   const css = read("public/home.css");
-  assert.match(css, /\.gold-live\{position:absolute;z-index:2;left:50%;top:42%;[^}]*transform:translate\(-50%,-50%\)/, "an overlay (it shifts nothing); without the scene it waits where the core stands");
+  assert.match(css, /\.gold-live\{position:absolute;z-index:3;left:calc\(max\(0px, \(100% - var\(--wrap\)\) \/ 2\) \+ var\(--gut\)\);top:clamp\(16px,3vh,32px\);/, "an overlay (it shifts nothing) at the hero's top left, on the copy's left edge");
   assert.match(css, /\.tv-frame\{height:calc\(62px \* var\(--lens-k\)\);overflow:hidden\}/, "the quote's rows only");
   // The URL TradingView's own embed script gives its frame: OANDA:XAUUSD, dark, transparent, English.
   const u = new URL(tvQuoteSrc("cta.cryptophys.work/"));
