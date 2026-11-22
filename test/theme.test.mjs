@@ -1,8 +1,8 @@
-// One look for every public page (the one-theme backlog, PR 1 and PR 2): each page in the theme stands on home.css
+// One look for every public page (the one-theme backlog, PR 1 to PR 4): each page in the theme stands on home.css
 // alone, with the Performance page's header and the same footer, marks only its own links, and keeps the head's theme
 // colour, font preloads and skip link. The pages that name a versioned file are the build's VERSIONED_PAGES; only the
-// home page carries the war room and TradingView's quote. About, Disclaimer, Privacy and Terms keep every word they had
-// (public content is final). Node built-ins only: CI runs the tests before npm ci.
+// home page carries the war room and TradingView's quote. About, Disclaimer, Privacy, Terms and Sign in keep every word
+// they had (public content is final). Node built-ins only: CI runs the tests before npm ci.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -13,10 +13,11 @@ import { ANSWERS, layoutHash, fromRuns } from "../scripts/track-heights.mjs";
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 const THEME_PAGES = VERSIONED_PAGES;
-const PATH = { "index.html": "/", "performance.html": "/performance", "archive.html": "/archive", "about.html": "/about", "disclaimer.html": "/disclaimer", "privacy.html": "/privacy", "terms.html": "/terms" };
-// The pages ported from cta.css: the three legal pages (PR 1, prose) and About (PR 2, its own rules).
+const PATH = { "index.html": "/", "performance.html": "/performance", "archive.html": "/archive", "about.html": "/about", "disclaimer.html": "/disclaimer", "privacy.html": "/privacy", "terms.html": "/terms", "signin.html": "/signin" };
+// The pages ported from cta.css: the three legal pages (PR 1, prose), About (PR 2, its own rules) and Sign in (PR 4,
+// also the studio's 403 page).
 const LEGAL = ["disclaimer.html", "privacy.html", "terms.html"];
-const PORTED = [...LEGAL, "about.html"];
+const PORTED = [...LEGAL, "about.html", "signin.html"];
 const FOOT_NOTE = '<p class="foot-note"><span>Chart by TradingView</span><span>© Cryptophys · Education, not financial advice</span></p>';
 const page = (f) => read(`public/${f}`);
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -96,7 +97,7 @@ test("TH3 the Footer and Legal navs carry the same links on every page ('3D cred
   }
 });
 
-test("TH4 aria-current marks only the page's own links: the footer's on every page but the home, the header's where the header names the page", () => {
+test("TH4 aria-current marks only the page's own links: the footer's on every page but the home, the header's where the header names the page; nothing where no nav names the page (Sign in)", () => {
   for (const f of THEME_PAGES) {
     const html = page(f), own = PATH[f];
     const marks = current(html);
@@ -104,6 +105,9 @@ test("TH4 aria-current marks only the page's own links: the footer's on every pa
     for (const m of html.matchAll(/aria-current="([^"]*)"/g)) assert.equal(m[1], "page", `${f}: aria-current="page"`);
     if (f === "index.html") { assert.deepEqual(marks, [], "the home page is marked by its script, from the hash"); continue; }
     const inNav = links(navOf(headerOf(html), "Main")).some(([href]) => href === own);
+    const foot = block(html, '<footer class="foot">', "</footer>");
+    const inFoot = [...links(navOf(foot, "Footer")), ...links(navOf(foot, "Legal"))].some(([href]) => href === own);
+    if (!inNav && !inFoot) { assert.deepEqual(marks, [], `${f}: no nav names ${own}, so no link is marked`); continue; }
     assert.equal(marks.length, inNav ? 2 : 1, `${f}: the header (where it names the page) and the footer`);
     assert.deepEqual(current(block(html, '<footer class="foot">', "</footer>")), [own], `${f}: the footer marks it`);
   }
@@ -150,7 +154,7 @@ test("TH7 the war room and TradingView's quote are the home page's only: no #gol
   for (const f of PORTED) assert.doesNotMatch(page(f), /<iframe|tradingview\.com|gold-live|home\.js|\/room\//, f);
 });
 
-test("TH8 About, Disclaimer, Privacy and Terms keep every word: <main> and the title equal the PR base, word for word", () => {
+test("TH8 About, Disclaimer, Privacy, Terms and Sign in keep every word: <main> and the title equal the PR base, word for word", () => {
   const base = JSON.parse(read("test/fixtures/legal-words.json"));
   assert.deepEqual(Object.keys(base.pages).sort(), [...PORTED].sort());
   assert.deepEqual(Object.keys(base.titles).sort(), [...PORTED].sort());
@@ -456,4 +460,244 @@ test("TH20 the record draws at the room held for it (review of #69): pending and
     // no record: one line, so the page below moves up once (the shrink the review accepts, rather than a screen of blank)
     assert.ok(none.get(w) < 100, `${w} px: no record is one line (${none.get(w)})`);
   }
+});
+
+// ---------- PR 4 (D1, owner decision 4: Sign in in the dark look; E2's sign-in rules leave cta.css) ----------
+const CTA_RULE_CLASSES = (css) => new Set([...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{/g)].map((m) => m[1].trim()).filter((s) => !s.startsWith("@")).flatMap((s) => [...s.matchAll(/\.([a-zA-Z][\w-]*)/g)].map((m) => m[1])));
+// The rules of a stylesheet with their @-contexts ("@media (max-width:600px)"), comments removed: [context, selector, body].
+const rulesOf = (text) => { const out = [], ctx = []; let buf = ""; for (const ch of text.replace(/\/\*[\s\S]*?\*\//g, "")) { if (ch === "{") { ctx.push(buf.trim()); buf = ""; } else if (ch === "}") { const sel = ctx.pop(); if (buf.trim()) out.push([ctx.join(" "), sel, buf.trim()]); buf = ""; } else buf += ch; } return out; };
+// A page's elements (review of #70): enough of an HTML parser for our own pages, to ask which CSS rules can match an element.
+const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);
+const domOf = (html) => {
+  const root = { tag: "#root", attrs: {}, classes: [], children: [], parent: null };
+  let cur = root;
+  for (const m of html.replace(/<!--[\s\S]*?-->/g, "").matchAll(/<(\/?)([a-zA-Z][\w-]*)((?:\s+[^\s=>/]+(?:="[^"]*")?)*)\s*(\/?)>/g)) {
+    const tag = m[2].toLowerCase();
+    if (m[1]) { let n = cur; while (n && n.tag !== tag) n = n.parent; assert.ok(n, `</${tag}> closes nothing`); cur = n.parent; continue; }
+    const attrs = Object.fromEntries([...m[3].matchAll(/([^\s=]+)(?:="([^"]*)")?/g)].map((a) => [a[1], a[2] ?? ""]));
+    const el = { tag, attrs, classes: (attrs.class ?? "").split(/\s+/).filter(Boolean), children: [], parent: cur };
+    cur.children.push(el);
+    if (!m[4] && !VOID.has(tag)) cur = el;
+  }
+  return root;
+};
+const allOf = (n) => [n, ...n.children.flatMap(allOf)];
+const splitTop = (s, sep) => { const out = []; let depth = 0, buf = ""; for (const ch of s) { if (ch === "(" || ch === "[") depth++; if (ch === ")" || ch === "]") depth--; if (ch === sep && depth === 0) { out.push(buf.trim()); buf = ""; } else buf += ch; } out.push(buf.trim()); return out; };
+// A selector as compounds and the combinators between them: ".page .gate>p" -> [".page", " ", ".gate", ">", "p"].
+const stepsOf = (sel) => {
+  const out = []; let depth = 0, buf = "", comb = null;
+  for (const ch of sel.trim()) {
+    if (depth === 0 && /[\s>+~]/.test(ch)) { if (buf) { out.push(buf); buf = ""; comb = " "; } if (!/\s/.test(ch)) comb = ch; continue; }
+    if (ch === "(" || ch === "[") depth++;
+    if (ch === ")" || ch === "]") depth--;
+    if (comb) { out.push(comb); comb = null; }
+    buf += ch;
+  }
+  out.push(buf);
+  return out;
+};
+// The interactive or runtime states an element can be in (a rule with one can match it at some moment).
+const STATES = new Set(["hover", "focus", "focus-visible", "focus-within", "active", "visited", "link", "any-link", "target"]);
+const PSEUDO_EL = new Set(["before", "after", "marker", "placeholder", "selection", "first-line", "first-letter"]);
+/** Whether a compound selector can match the element (mode "can"), or must (mode "must", for what :not() excludes). */
+const compoundMatches = (c, el, mode) => {
+  const parts = [...c.matchAll(/(\*|[a-zA-Z][\w-]*)|#([\w-]+)|\.([\w-]+)|\[([\w-]+)(?:([~^$*|]?=)"?([^"\]]*)"?)?\]|::?([\w-]+)(\((?:[^()]|\([^()]*\))*\))?/g)];
+  assert.equal(parts.map((p) => p[0]).join(""), c, `${c}: a selector the test can read`);
+  return parts.every(([whole, tag, id, cls, attr, op, val, pseudo, arg]) => {
+    if (tag) return tag === "*" || el.tag === tag.toLowerCase();
+    if (id) return el.attrs.id === id;
+    if (cls) return el.classes.includes(cls);
+    if (attr) { const v = el.attrs[attr]; if (v === undefined) return false; if (!op) return true; return { "=": v === val, "~=": v.split(/\s+/).includes(val), "^=": v.startsWith(val), "$=": v.endsWith(val), "*=": v.includes(val), "|=": v === val || v.startsWith(`${val}-`) }[op]; }
+    if (whole.startsWith("::") || PSEUDO_EL.has(pseudo)) return true; // a pseudo-element draws on (or in) its element
+    if (STATES.has(pseudo)) return mode === "can";
+    if (pseudo === "root") return el.tag === "html";
+    const sibs = el.parent?.children ?? [el];
+    if (pseudo === "first-child") return sibs[0] === el;
+    if (pseudo === "last-child") return sibs.at(-1) === el;
+    if (pseudo === "only-child") return sibs.length === 1;
+    if (pseudo === "empty") return el.children.length === 0 ? mode === "can" : false;
+    if (/^nth-/.test(pseudo)) return mode === "can";
+    if (pseudo === "not") return !splitTop(arg.slice(1, -1), ",").some((s) => selectorMatches(s, el, mode === "can" ? "must" : "can"));
+    if (pseudo === "is" || pseudo === "where") return splitTop(arg.slice(1, -1), ",").some((s) => selectorMatches(s, el, mode));
+    assert.fail(`${c}: :${pseudo} is not known to the test`);
+  });
+};
+const selectorMatches = (sel, el, mode = "can") => {
+  const steps = stepsOf(sel);
+  const at = (i, node) => {
+    if (!node || node.tag === "#root" || !compoundMatches(steps[i], node, mode)) return false;
+    if (i === 0) return true;
+    const comb = steps[i - 1], sibs = node.parent.children, k = sibs.indexOf(node);
+    if (comb === ">") return at(i - 2, node.parent);
+    if (comb === "+") return at(i - 2, sibs[k - 1]);
+    if (comb === "~") return sibs.slice(0, k).some((s) => at(i - 2, s));
+    for (let p = node.parent; p && p.tag !== "#root"; p = p.parent) if (at(i - 2, p)) return true;
+    return false;
+  };
+  return at(steps.length - 1, el);
+};
+/** Every rule of a stylesheet (any @media, any state) that can match one of the elements: [context, selector, body]. */
+const rulesFor = (css, els) => rulesOf(css).filter(([ctx, sel]) => !/@(font-face|keyframes|page)/.test(`${ctx} ${sel}`))
+  .flatMap(([ctx, sel, body]) => splitTop(sel, ",").filter((s) => els.some((el) => selectorMatches(s, el))).map((s) => [ctx, s, body]));
+const declsOf = (body) => splitTop(body, ";").filter(Boolean).map((d) => { const i = d.indexOf(":"); return [d.slice(0, i).trim().toLowerCase(), d.slice(i + 1).trim().replace(/\s*!important$/, "")]; });
+const ITALIC = ([p, v]) => (p === "font-style" || p === "font") && /\b(italic|oblique)\b/.test(v);
+const FILL = ([p, v]) => /^background(-color|-image)?$/.test(p) && !/^(none|transparent)$/i.test(v);
+const SHADOW = ([p, v]) => ((p === "box-shadow" || p === "text-shadow") && v !== "none") || (p === "filter" && /drop-shadow/.test(v));
+/** Sign in's card as the browser sees it: main.page, section.gate, the note, its b and p, and the note's ancestors. */
+const gateElements = () => {
+  const all = allOf(domOf(page("signin.html")));
+  const main = all.find((e) => e.tag === "main"), section = all.find((e) => e.tag === "section"), note = all.find((e) => e.classes.includes("gate-note"));
+  assert.deepEqual([main?.classes, section?.classes, note?.tag], [["page"], ["gate"], "div"], "the card's elements");
+  const b = note.children.find((e) => e.tag === "b"), p = note.children.find((e) => e.tag === "p");
+  assert.ok(b && p, "the note's b and p");
+  const ancestors = []; for (let n = main.parent; n && n.tag !== "#root"; n = n.parent) ancestors.push(n);
+  assert.deepEqual(ancestors.map((n) => n.tag), ["body", "html"]);
+  return { main, section, note, b, p, panel: [main, section, note, b, p], ancestors };
+};
+
+test("TH21 Sign in stays out of search: one noindex in the head, no canonical, Open Graph or Twitter tags; robots.txt keeps /signin out, the sitemap never names it", () => {
+  const html = page("signin.html"), head = html.slice(0, html.indexOf("</head>"));
+  assert.equal((head.match(/<meta name="robots" content="noindex">/g) ?? []).length, 1, "noindex, in the head");
+  assert.equal((html.match(/name="robots"/g) ?? []).length, 1, "one robots tag");
+  assert.doesNotMatch(html, /rel="canonical"|property="og:|name="twitter:/, "not a page to share or index");
+  assert.equal(head.match(/<meta name="description" content="([^"]*)">/)[1], "Sign in to the Cryptophys CTA Studio.", "the description as before");
+  assert.match(read("public/robots.txt"), /^Disallow: \/signin$/m);
+  assert.doesNotMatch(read("public/sitemap.xml"), /signin|studio/);
+});
+
+test("TH22 Sign in's card: a narrow panel without a fill, its one action a ghost button (Follow on Threads the page's only gold), the note in slate; every word kept, part by part", () => {
+  const html = page("signin.html"), base = JSON.parse(read("test/fixtures/legal-words.json"));
+  const main = block(html, "<main", "</main>");
+  const m = main.match(/^<main class="page" id="text">\n {2}<section class="gate" aria-labelledby="gate-title">\n {4}<h1 id="gate-title">([^<]+)<\/h1>\n {4}<p class="lede">([^<]+)<\/p>\n {4}<p class="gate-go"><a class="btn ghost" href="\/studio">([^<]+)<\/a><\/p>\n {4}<div class="gate-note" role="note">\n {6}<b>([^<]+)<\/b>\n {6}<p>([^<]+)<\/p>\n {4}<\/div>\n {4}<p class="gate-back"><a href="\/">([^<]+)<\/a><\/p>\n {2}<\/section>\n<\/main>$/);
+  assert.ok(m, "the card: title, lede, the ghost button, the note, the way back");
+  assert.equal(m.slice(1).join(" "), base.pages["signin.html"], "the card's words, part by part");
+  assert.deepEqual([m[3], m[4]], ["Sign in with Cloudflare Access", "Not signed in"]);
+  assert.equal(html.match(/<title>([^<]*)<\/title>/)[1], "Sign in · CTA Studio · Cryptophys");
+  assert.ok(block(html, '<footer class="foot">', "</footer>").includes("<span>© Cryptophys · Education, not financial advice</span>"), "the © line");
+  // one gold action, the header's Follow on Threads; the card's action is a ghost
+  const btns = [...html.matchAll(/<a class="btn ([^"]+)"[^>]*>([^<]+)<\/a>/g)].map((x) => [x[1], x[2]]);
+  assert.deepEqual(btns, [["gold", "Follow on Threads"], ["ghost", "Sign in with Cloudflare Access"]]);
+  assert.match(headerOf(html), /<a class="btn gold" [^>]*data-threads>Follow on Threads<\/a>/);
+  const css = read("public/home.css"), rules = cssRules(css);
+  assert.match(rules.find(([s]) => s === ".btn.ghost")[1], /background:transparent/, "a ghost has no fill");
+  // the panel and its parts: ruled, never filled or shadowed, no gold, amber or reading colour; the note in slate
+  const gate = rules.filter(([s]) => /\.gate\b|\.gate-|\.gated\b/.test(s));
+  assert.ok(gate.length >= 8, "Sign in's rules");
+  for (const [sel, body] of gate) {
+    assert.match(sel, /^(\.gated|\.page \.gate)/, `${sel}: Sign in's own classes`);
+    assert.doesNotMatch(body, /background|box-shadow|--gold|--flat|--bear|--bull|#E0A458|#9a6700|amber/i, `${sel}: no fill, no gold, no warning colour`);
+  }
+  const panel = rules.find(([s]) => s === ".page .gate")[1];
+  assert.match(panel, /border:1px solid var\(--rule\)/, "a panel ruled on the vault");
+  assert.ok(Number(panel.match(/max-width:(\d+)em/)[1]) <= 32, "narrow");
+  assert.match(rules.find(([s]) => s === ".page .gate-note")[1], /color:var\(--slate\)/, "the note in slate");
+  // Review of #70: every rule that can match the card's own boxes (main.page, section.gate, the note, its b and p), however
+  // it is written (.page section, .gated main, .page .gate p, p, *), at any width, in any state, in forced colours: no
+  // fill (a background other than none or transparent) and no shadow. Read from home.css against the page's elements.
+  const card = gateElements(), onCard = rulesFor(css, card.panel);
+  for (const want of [".page", ".gated>main", ".page .gate", ".page .gate-note", ".page .gate-note b", ".page .gate-note p"]) assert.ok(onCard.some(([, s]) => s === want), `${want}: read as a rule on the card`);
+  for (const [ctx, sel, body] of onCard) for (const d of declsOf(body)) assert.ok(!FILL(d) && !SHADOW(d), `${ctx ? `${ctx} ` : ""}${sel}{${d.join(":")}}: no fill or shadow on the card`);
+  // the ghost's edge on the vault (review of #70): .btn.ghost's .38 is 2.64:1; on this page alone .5, 3.79:1 (WCAG 1.4.11
+  // asks 3:1 of a control's edge); its hover keeps the full holo edge, which the page's rule would otherwise outrank
+  assert.equal(rules.find(([s]) => s === ".page .gate .btn.ghost")?.[1], "border-color:rgba(143,216,255,.5)");
+  assert.equal(rules.find(([s]) => s === ".page .gate .btn.ghost:hover")?.[1], "border-color:var(--holo)");
+  assert.match(rules.find(([s]) => s === ".btn.ghost")[1], /border-color:rgba\(143,216,255,\.38\)/, "every other ghost as before");
+  const hex = css.match(/--vault:#([0-9A-F]{6})/i)[1], vault = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const [r, g, b, a] = rules.find(([s]) => s === ".page .gate .btn.ghost")[1].match(/rgba\(([\d.]+),([\d.]+),([\d.]+),([\d.]+)\)/).slice(1).map(Number);
+  const lum = (rgb) => rgb.map((c) => c / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)).reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0);
+  const edge = [r, g, b].map((c, i) => c * a + vault[i] * (1 - a));
+  assert.equal(((lum(edge) + 0.05) / (lum(vault) + 0.05)).toFixed(2), "3.79", "the ghost's edge on the vault");
+  // none of cta.css's sign-in look: the old classes, the blue, the old mark and its icon
+  const classes = new Set([...html.matchAll(/class="([^"]*)"/g)].flatMap((x) => x[1].split(/\s+/)));
+  for (const c of ["signin", "signin-card", "card", "notice", "warn", "meta", "logo", "big", "primary", "lg", "outline", "sm", "section", "topbar", "site-foot", "public", "in", "narrow", "grow"]) assert.ok(!classes.has(c), `no class "${c}"`);
+  assert.doesNotMatch(html, /#0866FF|#c8961e|id="studio-link"/i);
+});
+
+test("TH23 the studio's 403 page is Sign in, themed: /studio without a valid Access JWT answers 403 with signin.html, not cached; the API keeps its JSON", async () => {
+  const { handle } = await import("../src/app.mjs");
+  const served = [];
+  const ASSETS = { fetch: async (r) => { const p = new URL(r.url).pathname; served.push(p); return p === "/signin" ? new Response(r.method === "HEAD" ? null : page("signin.html"), { status: 200, headers: { "content-type": "text/html; charset=utf-8" } }) : new Response("not found", { status: 404 }); } };
+  const env = { ACCESS_TEAM_DOMAIN: "cryptophys.cloudflareaccess.com", ACCESS_AUD: "a".repeat(64), ASSETS };
+  const opts = { fetchImpl: async () => { throw new Error("no network in the test"); } };
+  const get = (path, headers = {}, method = "GET") => handle(new Request(`https://cta.cryptophys.work${path}`, { method, headers }), env, opts);
+  for (const [path, headers] of [["/studio", {}], ["/studio/", {}], ["/studio/studio.js", {}], ["/studio/a/b/c", {}], ["/studio?x=1", {}], ["/studio", { "cf-access-jwt-assertion": "a.b.c" }]]) {
+    const res = await get(path, headers);
+    assert.equal(res.status, 403, `${path}: still 403`);
+    const body = await res.text();
+    assert.equal(body, page("signin.html"), `${path}: the Sign in page`);
+    assert.match(body, /<link rel="stylesheet" href="\/home\.css\?v=[0-9a-f]{12}">/, `${path}: the one theme`);
+    assert.match(body, /<script type="module" src="\/page\.js\?v=[0-9a-f]{12}"><\/script>/);
+    assert.doesNotMatch(body, /cta\.(css|js)/, `${path}: not the old look`);
+    assert.match(body, /<meta name="robots" content="noindex">/);
+    assert.equal(res.headers.get("cache-control"), "no-store", `${path}: never cached`);
+    assert.match(res.headers.get("content-security-policy"), /script-src 'self'/);
+  }
+  // HEAD: the same refusal and the same headers, no body (review of #70)
+  const head = await get("/studio", {}, "HEAD");
+  assert.equal(head.status, 403);
+  assert.equal(head.headers.get("cache-control"), "no-store", "HEAD: never cached");
+  assert.match(head.headers.get("content-security-policy"), /script-src 'self'/, "HEAD: the CSP");
+  assert.equal(head.headers.get("content-security-policy"), (await get("/studio")).headers.get("content-security-policy"), "HEAD: the GET's CSP");
+  assert.equal(await head.text(), "", "HEAD: no body");
+  assert.ok(served.length >= 8 && served.every((p) => p === "/signin"), "only the Sign in page is served, never the studio's");
+  const api = await get("/api/studio/status");
+  assert.equal(api.status, 403);
+  assert.equal((await api.json()).error, "access_denied", "the API keeps its JSON refusal");
+  // served at /studio and /studio/<anything>, so every URL the page names is absolute (or a fragment)
+  for (const u of page("signin.html").matchAll(/(?:href|src)="([^"]*)"/g)) assert.match(u[1], /^(\/|#|https:\/\/)/, u[1]);
+});
+
+test("TH24 cta.css loses only Sign in's rules (E2): no .signin, .signin-card or .logo.big; every class the studio uses keeps its rules; the studio stays on cta.css", () => {
+  const css = read("public/cta.css");
+  const selectors = [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{/g)].map((m) => m[1].trim());
+  for (const s of selectors) assert.doesNotMatch(s, /\.signin\b|\.signin-card\b|\.logo\.big\b/, `${s}: Sign in's rule`);
+  assert.match(css, /\n\.brand \.logo\{width:28px;height:28px;flex:none\}\n/, "the studio's mark keeps its rule");
+  // the classes the studio names (its markup, and every word in studio.js's strings: a superset), that cta.css has rules for
+  const studio = page("studio/index.html"), js = page("studio/studio.js");
+  const used = new Set([
+    ...[...studio.matchAll(/class="([^"]*)"/g)].flatMap((m) => m[1].split(/\s+/)),
+    ...[...js.matchAll(/"([^"\\\n]*)"|'([^'\\\n]*)'|`([^`]*)`/g)].flatMap((m) => (m[1] ?? m[2] ?? m[3]).split(/[^a-zA-Z0-9-]+/))
+  ].filter((t) => /^[a-z][a-z0-9-]*$/.test(t)));
+  for (const c of ["signin", "signin-card", "big"]) assert.ok(!used.has(c), `the studio never names "${c}"`);
+  // every rule the studio can match (each selector whose classes are all ones the studio names), media and body included:
+  // the same 256 rules as at the PR base (357668f, #69 on main), byte for byte. A deliberate change to the studio's look updates this.
+  const studioRules = rulesOf(css).flatMap(([media, sel, body]) => sel.split(",").map((x) => x.trim()).filter((x) => [...x.matchAll(/\.([a-zA-Z][\w-]*)/g)].every((m) => used.has(m[1]))).map((x) => `${media}|${x}{${body}}`)).sort();
+  assert.equal(studioRules.length, 256, "the rules the studio can match");
+  assert.equal(createHash("sha256").update(studioRules.join("\n")).digest("hex").slice(0, 16), "afc834f4ab493f6a", "the studio's rules are unchanged");
+  for (const c of ["list", "notice", "warn", "badge", "sidenav", "draft", "tab", "logo"]) assert.ok(CTA_RULE_CLASSES(css).has(c) && used.has(c), `.${c}: the studio's, kept`);
+  assert.match(studio, /<link rel="stylesheet" href="\/cta\.css">/, "the studio stays on cta.css (the owner's light look)");
+  assert.doesNotMatch(studio, /home\.css/);
+  assert.ok(read("public/cta.js").length > 0, "cta.js stays until PR 5 (E1)");
+});
+
+test("TH25 Sign in fits: nothing wider than a 320 px window (the button's words wrap, the panel can shrink, long words break) and the footer meets the bottom of a tall window", () => {
+  const css = read("public/home.css"), rules = cssRules(css);
+  const rule = (sel) => rules.find(([s]) => s === sel)?.[1] ?? "";
+  // 320 px before: 357 px wide (the button kept its words on one line inside a 480 px card's padding)
+  const btn = rule(".page .gate .btn");
+  assert.match(btn, /white-space:normal/, "the button's words wrap (.btn is nowrap)");
+  assert.match(btn, /max-width:100%/, "never wider than the panel");
+  assert.match(rule(".btn"), /white-space:nowrap/, "(the nowrap it undoes)");
+  const panel = rule(".page .gate");
+  assert.match(panel, /min-width:0/);
+  assert.doesNotMatch(panel, /(^|;)width:\d|min-width:[1-9]/, "no fixed width");
+  assert.match(css, /\.page\{overflow-wrap:break-word\}/, "a long word breaks");
+  assert.match(css, /\n@media \(max-width:600px\)\{\.page \.gate\{padding:24px 20px\}\}\n/, "a phone's narrower padding");
+  // the footer gap (51 px at 1440 before): the body is a column at least the window's height, the main grows
+  assert.match(rule(".gated"), /^display:flex;flex-direction:column;min-height:100vh;min-height:100dvh$/);
+  assert.match(rule(".gated>main"), /flex:1 0 auto;width:100%/, "the main grows (and keeps its width in the column)");
+  assert.match(page("signin.html"), /<body class="gated">\n<a class="skip"/);
+  // the page is short, so the footer is in view on load: its weight (Rajdhani 500) is the display weight preloaded. In the
+  // note only the sentence is in the preloaded reading face (Newsreader 400, not italic); "Not signed in" above it is
+  // Rajdhani 600, which is not preloaded (review of #70)
+  assert.deepEqual([...page("signin.html").matchAll(/<link rel="preload" href="\/fonts\/([^"]+)"/g)].map((m) => m[1]), ["rajdhani-latin-500-normal.woff2", "newsreader-latin-400-normal.woff2"]);
+  assert.match(rule(".foot"), /font:500 /, "(the footer's weight)");
+  assert.doesNotMatch(rule(".page .gate-note p") + rule(".page .gate-note"), /italic/);
+  assert.match(rule(".page .gate-note b"), /font:600 [^;]*var\(--display\)/, '"Not signed in": Rajdhani 600');
+  assert.match(rule("body"), /font:400 [^;]*var\(--read\)/, "the sentence: Newsreader 400, the body's");
+  // Review of #70: no rule that can match the card's boxes (main.page, section.gate, the note, its b and p), or the
+  // body and html they inherit from, sets italic, however it is written (.page .gate p, .page .gate-note b, .gated, p, *)
+  const card = gateElements(), onCard = rulesFor(css, [...card.panel, ...card.ancestors]);
+  assert.ok(onCard.some(([, s]) => s === ".page .gate-note b") && onCard.some(([, s]) => s === ".gated"), "read as rules on the card");
+  for (const [ctx, sel, body] of onCard) for (const d of declsOf(body)) assert.ok(!ITALIC(d), `${ctx ? `${ctx} ` : ""}${sel}{${d.join(":")}}: no italic on the card`);
 });

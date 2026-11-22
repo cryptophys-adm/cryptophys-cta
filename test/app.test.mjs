@@ -353,22 +353,26 @@ test("the bridge deploy workflow: main or by hand, no Worker secret, no delete, 
 
 test("the pages: no inline script or style (CSP 'self'), the studio's four views, and no other company's name", () => {
   const read = (p) => readFileSync(new URL(`../public/${p}`, import.meta.url), "utf8");
-  for (const page of ["index.html", "archive.html", "about.html", "disclaimer.html", "privacy.html", "terms.html", "signin.html", "studio/index.html"]) {
+  for (const page of ["index.html", "performance.html", "archive.html", "about.html", "disclaimer.html", "privacy.html", "terms.html", "signin.html", "studio/index.html"]) {
     const html = read(page);
     assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)[^>]*>|<style\b|\sstyle=|\son[a-z]+=/i, `${page}: inline script, style or handler`);
   }
   const studio = read("studio/index.html");
   for (const v of ["dashboard", "queue", "performance", "channels"]) assert.match(studio, new RegExp(`id="view-${v}"`));
   for (const id of ["publish", "who", "tabs", "queue", "channels", "perf", "draftnow", "rendernow", "insightsnow", "err"]) assert.match(studio, new RegExp(`id="${id}"`), id);
-  const publicPages = ["index.html", "archive.html", "about.html", "disclaimer.html", "privacy.html", "terms.html"];
+  // Every public page, Sign in (also the studio's 403 page) and Performance included (review of #70): the whole file, head
+  // and footer too, never names Nexus or Omega and gives no advice. Performance carries its own disclaimer in <main>
+  // ("Not advice and not an invitation to trade"; no © line in its footer, owner decision 2).
+  const publicPages = ["index.html", "performance.html", "archive.html", "about.html", "disclaimer.html", "privacy.html", "terms.html", "signin.html"];
+  const disclaimer = { "performance.html": /\bnot advice and not an invitation to trade\b/i };
   for (const page of publicPages) {
     const html = read(page);
     for (const href of ["/", "/archive", "/about", "/disclaimer", "/privacy", "/terms", "/studio"]) assert.match(html, new RegExp(`href="${href}"`), `${page} links ${href}`);
-    assert.match(html, /not financial advice/i, `${page} carries the disclaimer`);
+    assert.match(html, disclaimer[page] ?? /not financial advice/i, `${page} carries the disclaimer`);
     assert.doesNotMatch(html, /\b(nexus|omega)\b/i, `${page}: never Nexus or Omega publicly`);
     assert.doesNotMatch(html, /\b(buy now|sell now|entry at|take profit at|stop loss at|guaranteed)\b/i, `${page}: no advice`);
   }
-  const all = [...publicPages, "signin.html", "studio/index.html", "cta.css", "cta.js", "studio/studio.js"].map(read).join("\n");
+  const all = [...publicPages, "studio/index.html", "cta.css", "cta.js", "studio/studio.js"].map(read).join("\n");
   assert.doesNotMatch(all, /\b(meta platforms|facebook)\b|\bmeta for developers\b/i, "our own brand only");
   assert.doesNotMatch(all, /\binnerHTML\b/, "text goes in as text");
 });

@@ -6,51 +6,71 @@
 <title>Sign in · CTA Studio · Cryptophys</title>
 <meta name="description" content="Sign in to the Cryptophys CTA Studio.">
 <meta name="robots" content="noindex">
-<link rel="stylesheet" href="/cta.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#060A12">
+<link rel="preload" href="/fonts/rajdhani-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/newsreader-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/home.css?v=c3669455eeb8">
 </head>
-<body class="public">
-<header class="topbar">
-  <div class="in narrow">
-    <a class="brand" href="/" aria-label="Cryptophys home">
-      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path fill="#c8961e" d="M16 1.5 28.6 8.75v14.5L16 30.5 3.4 23.25V8.75z"/><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" d="M20.6 11.6a6.4 6.4 0 1 0 0 8.8"/></svg>
-      Cryptophys
-    </a>
-    <nav aria-label="Pages">
-      <a href="/">Home</a>
-      <a href="/archive">Archive</a>
-      <a href="/about">How it works</a>
-      <a href="/disclaimer">Disclaimer</a>
-    </nav>
-    <span class="grow"></span>
-    <a class="btn outline sm" href="/studio" id="studio-link">Studio sign in</a>
+<body class="gated">
+<a class="skip" href="#text">Skip to the text</a>
+
+<header class="top">
+  <a class="brand" href="/" aria-label="XAUUSD AI by Cryptophys, home">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M12 2.5v19M2.5 12h19"/><circle cx="12" cy="12" r="3.2"/></svg>
+    <span>XAUUSD AI</span><small>Cryptophys</small>
+  </a>
+  <nav class="nav" aria-label="Main">
+    <a href="/#cast">The cast</a>
+    <a href="/#how">How it works</a>
+    <a href="/performance">Performance</a>
+    <a href="/archive">Archive</a>
+  </nav>
+  <a class="avg-strip" id="avg-strip" href="/performance" title="Simulated, the average of the exit scenarios" hidden>
+    <span class="avg-vals"></span>
+  </a>
+  <p class="top-clock"><b id="clock-utc"></b><span id="clock-local"></span></p>
+  <div class="top-end">
+    <a class="quiet" href="/studio"><span>Studio<span class="q-long"> sign in</span></span></a>
+    <a class="btn gold" href="https://www.threads.net/@cryptophys.adm" rel="noopener" data-threads>Follow on Threads</a>
   </div>
 </header>
-<main>
-  <section class="section signin">
-    <div class="card signin-card">
-      <svg class="logo big" viewBox="0 0 32 32" aria-hidden="true"><path fill="#c8961e" d="M16 1.5 28.6 8.75v14.5L16 30.5 3.4 23.25V8.75z"/><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" d="M20.6 11.6a6.4 6.4 0 1 0 0 8.8"/></svg>
-      <h1>CTA Studio</h1>
-      <p>The studio is for the Cryptophys team. Sign in with your Cloudflare Access account to review and approve drafts.</p>
-      <a class="btn primary lg" href="/studio">Sign in with Cloudflare Access</a>
-      <div class="notice warn">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M1 21h22L12 2zm12-3h-2v-2h2zm0-4h-2v-4h2z"/></svg>
-        <div><b>Not signed in</b><span>If you come back to this page after signing in, your sign-in has expired, your account is not allowed, or studio sign-in is still being set up.</span></div>
-      </div>
-      <a class="meta" href="/">Back to the public site</a>
+
+<main class="page" id="text">
+  <section class="gate" aria-labelledby="gate-title">
+    <h1 id="gate-title">CTA Studio</h1>
+    <p class="lede">The studio is for the Cryptophys team. Sign in with your Cloudflare Access account to review and approve drafts.</p>
+    <p class="gate-go"><a class="btn ghost" href="/studio">Sign in with Cloudflare Access</a></p>
+    <div class="gate-note" role="note">
+      <b>Not signed in</b>
+      <p>If you come back to this page after signing in, your sign-in has expired, your account is not allowed, or studio sign-in is still being set up.</p>
     </div>
+    <p class="gate-back"><a href="/">Back to the public site</a></p>
   </section>
 </main>
-<footer class="site-foot">
-  <div class="in">
-    <span class="brand"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path fill="#c8961e" d="M16 1.5 28.6 8.75v14.5L16 30.5 3.4 23.25V8.75z"/><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" d="M20.6 11.6a6.4 6.4 0 1 0 0 8.8"/></svg>Cryptophys</span>
+
+<footer class="foot">
+  <span>XAUUSD AI by Cryptophys</span>
+  <nav aria-label="Footer">
+    <a href="/#minutes">Minutes</a>
+    <a href="/#cast">The cast</a>
+    <a href="/#how">How it works</a>
+    <a href="/performance">Performance</a>
     <a href="/archive">Archive</a>
-    <a href="/about">How it works</a>
     <a href="/disclaimer">Disclaimer</a>
-    <span>Chart by TradingView</span>
-    <span class="grow"></span>
-    <span>© Cryptophys · Education, not financial advice</span>
-  </div>
+    <a href="https://www.threads.net/@cryptophys.adm" rel="noopener" data-threads>Threads</a>
+    <a class="foot-studio" href="/studio">Studio sign in</a>
+  </nav>
+  <nav class="foot-small" aria-label="Legal">
+    <a href="/privacy">Privacy</a>
+    <a href="/about">About the system</a>
+    <a href="/terms">Terms</a>
+    <a href="/fonts/OFL.txt?v=ff7626ffb2d2">Font licences</a>
+  </nav>
+  <p class="foot-note"><span>Chart by TradingView</span><span>© Cryptophys · Education, not financial advice</span></p>
 </footer>
-<script src="/cta.js"></script>
+<script type="module" src="/page.js?v=cd29d3cf61a7"></script>
 </body>
 </html>

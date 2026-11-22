@@ -1,4 +1,4 @@
-// The page still on cta.css and this script (/signin): the brand's profile and its disclaimer
+// No page loads this script since Sign in moved to the one theme (PR 4; PR 5 removes it): the brand's profile and its disclaimer
 // (GET /api/public/*). Each part fills only when its element is on the page; the home, Performance and Archive pages
 // have their own scripts (site/).
 (function () {
