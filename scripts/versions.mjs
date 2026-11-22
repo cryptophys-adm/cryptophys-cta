@@ -1,4 +1,4 @@
-// Pure: the version hash in the URLs of the home and Performance pages' own files (frontend audit 2026-11-22, approved by
+// Pure: the version hash in the URLs of the home, Performance and Archive pages' own files (frontend audit 2026-11-22, approved by
 // the owner). public/_headers lets browsers keep these files for a year, so each page names the exact build it needs
 // (`/home.css?v=<hash>`): a deploy that changes a file changes its URL. scripts/build-room.mjs writes the hashes into
 // the pages; test/room.test.mjs keeps every page equal to the files.

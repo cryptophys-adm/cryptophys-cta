@@ -9,8 +9,8 @@ The animation clips were removed (the scene poses the skeleton itself); the mesh
 are unchanged. Original file sha256 69591853d817488edaa8fd9bf8fc1d821eaeaf789f8627b3cd23b41c4ed67997 (7,618,436 bytes);
 this file sha256 0d11eb3bbc6df8d30dfe75ce7cc2f060df99c01cf43ed7a4d505332272afacc2 (477,696 bytes), kept as
 site/room/mannequin.source.glb. Served (2026-11-22, scripts/mannequin.mjs with glTF Transform and meshoptimizer):
-public/room/mannequin.glb, the same model quantized (KHR_mesh_quantization), and public/room/mannequin-lo.glb, about
-half the triangles, quantized the same way, for phones.
+public/room/mannequin.glb, the same model quantized (KHR_mesh_quantization; 272,628 bytes), and
+public/room/mannequin-lo.glb, 58 % of the triangles, quantized the same way (161,016 bytes), for phones.
 Its licence file, as shipped:
 
 -------------------------------------------------------

@@ -12,6 +12,8 @@
 //   scene (scripts/versions.mjs): browsers keep these files for a year (public/_headers).
 // The mannequins (public/room/mannequin.glb, mannequin-lo.glb) come from npm run build:mannequin. Run: npm run build:room
 import { build } from "esbuild";
+import { pathToFileURL, fileURLToPath } from "node:url";
+import { realpathSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, readdirSync, rmSync } from "node:fs";
 import { withNavigator, sourceHash } from "./navigator.mjs";
@@ -37,8 +39,10 @@ const vendorEntry = (main, resolveDir) => ({
   }
 });
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const at = (p) => new URL(`../${p}`, import.meta.url).pathname;
+// Run as a script (not imported by the tests). pathToFileURL of the real path: a path with a space or other escaped
+// character, a symlink or a Windows path never equals a hand-built file:// URL (orchestrator review of #64).
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
+  const at = (p) => fileURLToPath(new URL(`../${p}`, import.meta.url));
   const opts = { bundle: true, format: "esm", minify: true, target: "es2020", legalComments: "none", logLevel: "warning" };
   // The mannequin's URL carries its file's hash (the scene and the page, which starts its download with the scene's).
   const mannequin = { __MANNEQUIN_VERSION__: JSON.stringify(mannequinVersion()), __MANNEQUIN_LO_VERSION__: JSON.stringify(mannequinLoVersion()) };
