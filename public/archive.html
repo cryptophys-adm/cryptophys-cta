@@ -15,59 +15,72 @@
 <meta property="og:title" content="Archive · XAUUSD AI · Cryptophys">
 <meta property="og:description" content="Every published Cryptophys XAUUSD post: key-level maps, chart patterns and daily recaps. Education, not financial advice.">
 <meta name="twitter:card" content="summary">
-<link rel="stylesheet" href="/cta.css">
+<meta name="theme-color" content="#060A12">
+<link rel="preload" href="/api/public/archive?limit=100" as="fetch" crossorigin>
+<link rel="preload" href="/fonts/rajdhani-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/newsreader-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/home.css?v=cefae4fd8b83">
 </head>
-<body class="public">
-<header class="topbar">
-  <div class="in narrow">
-    <a class="brand" href="/" aria-label="Cryptophys home">
-      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path fill="#c8961e" d="M16 1.5 28.6 8.75v14.5L16 30.5 3.4 23.25V8.75z"/><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" d="M20.6 11.6a6.4 6.4 0 1 0 0 8.8"/></svg>
-      Cryptophys
-    </a>
-    <nav aria-label="Pages">
-      <a href="/">Home</a>
-      <a href="/archive" class="on" aria-current="page">Archive</a>
-      <a href="/about">How it works</a>
-      <a href="/disclaimer">Disclaimer</a>
-    </nav>
-    <span class="grow"></span>
-    <a class="btn outline sm" href="/studio" id="studio-link">Studio sign in</a>
+<body>
+<a class="skip" href="#posts">Skip to the posts</a>
+
+<header class="top">
+  <a class="brand" href="/" aria-label="XAUUSD AI by Cryptophys, home">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M12 2.5v19M2.5 12h19"/><circle cx="12" cy="12" r="3.2"/></svg>
+    <span>XAUUSD AI</span><small>Cryptophys</small>
+  </a>
+  <nav class="nav" aria-label="Main">
+    <a href="/#cast">The cast</a>
+    <a href="/#how">How it works</a>
+    <a href="/performance">Performance</a>
+    <a href="/archive" aria-current="page">Archive</a>
+  </nav>
+  <a class="avg-strip" id="avg-strip" href="/performance" title="Simulated, the average of the exit scenarios" hidden>
+    <span class="avg-vals"></span>
+  </a>
+  <p class="top-clock"><b id="clock-utc"></b><span id="clock-local"></span></p>
+  <div class="top-end">
+    <a class="quiet" href="/studio"><span>Studio<span class="q-long"> sign in</span></span></a>
+    <a class="btn gold" href="https://www.threads.net/@cryptophys.adm" rel="noopener" data-threads>Follow on Threads</a>
   </div>
 </header>
-<main>
-  <section class="pagehero">
-    <div class="in">
-      <div class="eyebrow"><i></i>Archive</div>
-      <h1>Every published post</h1>
-      <p class="tag">Key-level maps, chart patterns and daily recaps, newest first. Each one passed our checks and a person's approval before it went out.</p>
-    </div>
-  </section>
-  <section class="section">
-    <div class="card">
-      <div class="tabs" id="kinds" role="tablist"></div>
-      <div class="list" id="archive" data-limit="100" data-grouped="1"><div class="empty">No posts published yet.</div></div>
-    </div>
-  </section>
-  <div class="disclaimer">
-    <div class="notice info" role="note">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2zm0-8h-2V7h2z"/></svg>
-      <div><b>Education, not financial advice</b><span id="disclaimer">This content is education and analysis. It is not an invitation to buy or sell and not financial advice.</span> <a href="/disclaimer">Read the full disclaimer</a></div>
-    </div>
+
+<main class="page archive" id="posts">
+  <p class="eyebrow">Archive</p>
+  <h1>Every published post</h1>
+  <p class="lede">Key-level maps, chart patterns and daily recaps, newest first. Each one passed our checks and a person's approval before it went out.</p>
+
+  <div class="kinds" id="kinds" role="tablist" aria-label="Kind of post"></div>
+  <div class="a-list" id="archive" role="tabpanel" aria-busy="true"></div>
+
+  <div class="a-note" role="note">
+    <b>Education, not financial advice</b>
+    <p><span id="disclaimer">This content is education and analysis. It is not an invitation to buy or sell and not financial advice.</span> <a href="/disclaimer">Read the full disclaimer</a></p>
   </div>
 </main>
-<footer class="site-foot">
-  <div class="in">
-    <span class="brand"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path fill="#c8961e" d="M16 1.5 28.6 8.75v14.5L16 30.5 3.4 23.25V8.75z"/><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" d="M20.6 11.6a6.4 6.4 0 1 0 0 8.8"/></svg>Cryptophys</span>
-    <a href="/archive">Archive</a>
-    <a href="/about">How it works</a>
+
+<footer class="foot">
+  <span>XAUUSD AI by Cryptophys</span>
+  <nav aria-label="Footer">
+    <a href="/#minutes">Minutes</a>
+    <a href="/#cast">The cast</a>
+    <a href="/#how">How it works</a>
+    <a href="/performance">Performance</a>
+    <a href="/archive" aria-current="page">Archive</a>
     <a href="/disclaimer">Disclaimer</a>
+    <a href="https://www.threads.net/@cryptophys.adm" rel="noopener" data-threads>Threads</a>
+    <a class="foot-studio" href="/studio">Studio sign in</a>
+  </nav>
+  <nav class="foot-small" aria-label="Legal">
     <a href="/privacy">Privacy</a>
+    <a href="/about">About the system</a>
     <a href="/terms">Terms</a>
-    <span>Chart by TradingView</span>
+    <a href="/fonts/OFL.txt?v=ff7626ffb2d2">Font licences</a>
     <span class="grow"></span>
+    <span>Chart by TradingView</span>
     <span>© Cryptophys · Education, not financial advice</span>
-  </div>
+  </nav>
 </footer>
-<script src="/cta.js"></script>
+<script type="module" src="/archive.js?v=05ea148046eb"></script>
 </body>
 </html>

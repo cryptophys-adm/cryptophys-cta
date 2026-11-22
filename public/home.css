@@ -402,3 +402,46 @@ ul{margin:0;padding:0;list-style:none}
 .t-pos{color:var(--n-pos)}.t-neg{color:var(--n-neg)}.t-wait{color:var(--n-wait)}.t-pf{color:var(--n-pf)}.t-zero{color:var(--n-zero)}
 @media (max-width:1400px){.avg-strip{display:none}}
 .track td b.t-pos{color:var(--n-pos)}.track td b.t-neg{color:var(--n-neg)}.track td b.t-wait{color:var(--n-wait)}.track td b.t-pf{color:var(--n-pf)}.track td b.t-zero{color:var(--n-zero)}
+
+/* ---------- the Archive (frontend mockup 2026-11-22, owner approved): the Performance page's look, the date beside its
+   posts as in the minutes; the list keeps its height while it loads (aria-busy), so nothing below it moves ---------- */
+.page .eyebrow{margin:0 0 6px;font:600 var(--s0)/1 var(--display);color:var(--gold);letter-spacing:.02em}
+.kinds{display:flex;flex-wrap:wrap;gap:2px;margin-top:40px;border-bottom:1px solid var(--rule)}
+.kinds button{display:inline-flex;align-items:baseline;gap:6px;min-height:44px;padding:12px 14px 0;background:none;border:0;border-bottom:2px solid transparent;color:var(--slate);font:600 var(--s0)/1 var(--display);letter-spacing:.02em;cursor:pointer}
+.kinds button:hover{color:var(--ink)}
+.kinds button[aria-selected="true"]{color:var(--holo);border-bottom-color:var(--holo)}
+.kinds .c{font-weight:500;font-size:var(--s-1);font-variant-numeric:tabular-nums}
+.a-list[aria-busy="true"],.a-list.hold{min-height:100vh}
+.a-list .empty{margin-top:40px}
+.a-day{display:grid;grid-template-columns:240px minmax(0,1fr);gap:clamp(32px,6vw,80px);padding-top:40px}
+.a-day+.a-day{border-top:1px solid var(--rule)}
+.a-day h2{align-self:start;font:600 var(--s1)/1.15 var(--display)}
+.a-post{padding-bottom:32px}
+.a-post+.a-post{padding-top:28px;border-top:1px solid var(--rule)}
+.a-meta{display:flex;align-items:baseline;gap:14px;font-family:var(--display)}
+.a-meta b{font-weight:600;font-size:var(--s0)}
+.a-kind{font-weight:500;font-size:var(--s0);color:var(--slate)}
+.a-time{margin-left:auto;text-align:right;font-variant-numeric:tabular-nums;line-height:1.2}
+.a-time span{display:block;font-weight:500;font-size:var(--s0)}
+.a-time .a-local{margin-top:3px;font-size:var(--s-1);color:var(--slate)}
+.a-head{margin-top:14px;max-width:34em;font-size:var(--s1);line-height:1.4;color:var(--ink)}
+.a-body{margin-top:8px;max-width:38em;white-space:pre-wrap;color:#C9D4E4;font-variant-numeric:lining-nums tabular-nums}
+.a-note{margin-top:40px;padding-top:20px;border-top:1px solid var(--rule);max-width:62em}
+.a-note b{display:block;font:600 var(--s0)/1.3 var(--display)}
+.a-note p{margin-top:6px;font-style:italic;color:var(--slate)}
+.a-note a{font-style:normal;font-family:var(--display);font-weight:600;color:var(--holo)}
+.foot-small .grow{flex-grow:1}
+.foot-small span{display:inline-flex;align-items:center;min-height:44px}
+/* a phone (the mockup at 390): the date over its posts; who and what on one line, the times under it; tabs wrap */
+@media (max-width:760px){
+  .kinds{margin-top:28px}
+  .kinds button{align-items:center;padding:0 10px}
+  .a-day{grid-template-columns:1fr;gap:0;padding-top:28px}
+  .a-post,.a-post+.a-post{padding:18px 0 28px}
+  .a-meta{flex-wrap:wrap;gap:2px 12px;line-height:1.25}
+  .a-time{flex:1 0 100%;margin-left:0;text-align:left;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 10px}
+  .a-time span{display:inline}
+  .a-time .a-local{margin-top:0}
+  .a-head{margin-top:12px;font-size:var(--s0);font-weight:500;line-height:1.45}
+  .a-body{margin-top:6px}
+}

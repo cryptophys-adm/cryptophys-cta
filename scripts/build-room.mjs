@@ -1,13 +1,14 @@
-// Builds the home page's scripts and fonts:
+// Builds the home, Performance and Archive pages' scripts and fonts:
 // - the holo war room: site/room/*.js and three.js into one minified ES module (public/room/room.js);
 // - the page itself: site/home/home.js (the minutes, the header's clock and menu, the panels, the meeting dial, the TradingView quote, the
 //   one feed of the rooms) into public/home.js;
 // - the Performance page: site/performance/performance.js (the simulated track record) into public/performance.js;
+// - the Archive page: site/archive/archive.js (the published posts) into public/archive.js;
 // - the cast directory into public/index.html, from site/room/data.js;
 // - the self-hosted fonts (Rajdhani, Newsreader; OFL, latin woff2 only) from @fontsource into public/fonts/;
-// - public/room/build.json: the hash of the sources and of both bundles, which test/room.test.mjs checks, so a source
+// - public/room/build.json: the hash of the sources, of each bundle and of the mannequins, which test/room.test.mjs checks, so a source
 //   change without a rebuild fails the tests;
-// - the version hashes in the URLs of home.css, home.js and performance.js in the pages, and of the mannequin in the
+// - the version hashes in the URLs of home.css, home.js, performance.js and archive.js in the pages, and of the mannequin in the
 //   scene (scripts/versions.mjs): browsers keep these files for a year (public/_headers).
 // The mannequins (public/room/mannequin.glb, mannequin-lo.glb) come from npm run build:mannequin. Run: npm run build:room
 import { build } from "esbuild";
@@ -52,6 +53,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const roomHash = createHash("sha256").update(readFileSync(at("public/room/room.js"))).digest("hex");
   await build({ ...opts, entryPoints: [at("site/home/home.js")], outfile: at("public/home.js"), define: { __ROOM_VERSION__: JSON.stringify(roomHash.slice(0, 12)), ...mannequin } });
   await build({ ...opts, entryPoints: [at("site/performance/performance.js")], outfile: at("public/performance.js") });
+  await build({ ...opts, entryPoints: [at("site/archive/archive.js")], outfile: at("public/archive.js") });
   mkdirSync(at("public/fonts"), { recursive: true });
   for (const [pkg, file] of FONTS) copyFileSync(at(`node_modules/@fontsource/${pkg}/files/${file}`), at(`public/fonts/${file}`));
   // Both families' licences in one file (the OFL asks for it to travel with the fonts).
@@ -59,9 +61,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const three = JSON.parse(readFileSync(at("node_modules/three/package.json"), "utf8")).version;
   const sha = (p) => createHash("sha256").update(readFileSync(at(p))).digest("hex");
   const chunk = readdirSync(at("public/room")).find((f) => /^three-[A-Z0-9]+\.js$/i.test(f));
-  writeFileSync(at("public/room/build.json"), `${JSON.stringify({ sources: sourceHash(), bundle: sha("public/room/room.js"), chunk, three_chunk: sha(`public/room/${chunk}`), mannequin: sha("public/room/mannequin.glb"), mannequin_lo: sha("public/room/mannequin-lo.glb"), home: sha("public/home.js"), performance: sha("public/performance.js"), three }, null, 2)}\n`);
+  writeFileSync(at("public/room/build.json"), `${JSON.stringify({ sources: sourceHash(), bundle: sha("public/room/room.js"), chunk, three_chunk: sha(`public/room/${chunk}`), mannequin: sha("public/room/mannequin.glb"), mannequin_lo: sha("public/room/mannequin-lo.glb"), home: sha("public/home.js"), performance: sha("public/performance.js"), archive: sha("public/archive.js"), three }, null, 2)}\n`);
   writeFileSync(at("public/index.html"), withNavigator(readFileSync(at("public/index.html"), "utf8")));
   for (const page of VERSIONED_PAGES) writeFileSync(at(`public/${page}`), withVersions(readFileSync(at(`public/${page}`), "utf8")));
   const kb = (p) => (readFileSync(at(p)).length / 1024).toFixed(0);
-  console.log(`room.js ${kb("public/room/room.js")} KB, ${chunk} ${kb(`public/room/${chunk}`)} KB, home.js ${kb("public/home.js")} KB, performance.js ${kb("public/performance.js")} KB, three ${three}`);
+  console.log(`room.js ${kb("public/room/room.js")} KB, ${chunk} ${kb(`public/room/${chunk}`)} KB, home.js ${kb("public/home.js")} KB, performance.js ${kb("public/performance.js")} KB, archive.js ${kb("public/archive.js")} KB, three ${three}`);
 }
