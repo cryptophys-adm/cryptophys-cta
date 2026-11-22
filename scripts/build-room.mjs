@@ -1,4 +1,4 @@
-// Builds the home page's scripts and fonts:
+// Builds the home, Performance and Archive pages' scripts and fonts:
 // - the holo war room: site/room/*.js and three.js into one minified ES module (public/room/room.js);
 // - the page itself: site/home/home.js (the minutes, the header's clock and menu, the panels, the meeting dial, the TradingView quote, the
 //   one feed of the rooms) into public/home.js;
@@ -6,9 +6,9 @@
 // - the Archive page: site/archive/archive.js (the published posts) into public/archive.js;
 // - the cast directory into public/index.html, from site/room/data.js;
 // - the self-hosted fonts (Rajdhani, Newsreader; OFL, latin woff2 only) from @fontsource into public/fonts/;
-// - public/room/build.json: the hash of the sources and of both bundles, which test/room.test.mjs checks, so a source
+// - public/room/build.json: the hash of the sources, of each bundle and of the mannequins, which test/room.test.mjs checks, so a source
 //   change without a rebuild fails the tests;
-// - the version hashes in the URLs of home.css, home.js and performance.js in the pages, and of the mannequin in the
+// - the version hashes in the URLs of home.css, home.js, performance.js and archive.js in the pages, and of the mannequin in the
 //   scene (scripts/versions.mjs): browsers keep these files for a year (public/_headers).
 // The mannequins (public/room/mannequin.glb, mannequin-lo.glb) come from npm run build:mannequin. Run: npm run build:room
 import { build } from "esbuild";

@@ -1,5 +1,6 @@
-// The public pages (/, /archive, /about, /disclaimer, /signin): the brand's profile, its channels and the published
-// archive (GET /api/public/*). Each part fills only when its element is on the page.
+// The pages still on cta.css (/about, /disclaimer, /privacy, /terms, /signin): the brand's profile and its disclaimer
+// (GET /api/public/*). Each part fills only when its element is on the page; the home, Performance and Archive pages
+// have their own scripts (site/).
 (function () {
   const el = (id) => document.getElementById(id);
   const text = (node, value) => { if (node && value) node.textContent = value; return node; };

@@ -411,7 +411,7 @@ ul{margin:0;padding:0;list-style:none}
 .kinds button:hover{color:var(--ink)}
 .kinds button[aria-selected="true"]{color:var(--holo);border-bottom-color:var(--holo)}
 .kinds .c{font-weight:500;font-size:var(--s-1);font-variant-numeric:tabular-nums}
-.a-list[aria-busy="true"]{min-height:100vh}
+.a-list[aria-busy="true"],.a-list.hold{min-height:100vh}
 .a-list .empty{margin-top:40px}
 .a-day{display:grid;grid-template-columns:240px minmax(0,1fr);gap:clamp(32px,6vw,80px);padding-top:40px}
 .a-day+.a-day{border-top:1px solid var(--rule)}
@@ -425,7 +425,7 @@ ul{margin:0;padding:0;list-style:none}
 .a-time span{display:block;font-weight:500;font-size:var(--s0)}
 .a-time .a-local{margin-top:3px;font-size:var(--s-1);color:var(--slate)}
 .a-head{margin-top:14px;max-width:34em;font-size:var(--s1);line-height:1.4;color:var(--ink)}
-.a-body{margin-top:8px;max-width:38em;white-space:pre-line;color:#C9D4E4;font-variant-numeric:lining-nums tabular-nums}
+.a-body{margin-top:8px;max-width:38em;white-space:pre-wrap;color:#C9D4E4;font-variant-numeric:lining-nums tabular-nums}
 .a-note{margin-top:40px;padding-top:20px;border-top:1px solid var(--rule);max-width:62em}
 .a-note b{display:block;font:600 var(--s0)/1.3 var(--display)}
 .a-note p{margin-top:6px;font-style:italic;color:var(--slate)}

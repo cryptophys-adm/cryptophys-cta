@@ -16,14 +16,21 @@ const valid = (iso) => typeof iso === 'string' && Number.isFinite(Date.parse(iso
 export const dayOf = (iso) => (valid(iso) ? DAY.format(new Date(iso)) : '');
 /** "20 Nov 2026, 12:15 AM UTC": UTC clock times in 12-hour form (owner 2026-11-17), as the page showed them. */
 export const whenUtc = (iso) => (valid(iso) ? `${DATE.format(new Date(iso))}, ${TIME.format(new Date(iso))} UTC` : '');
-/** "7:15 AM GMT+7": the visitor's own time and zone (owner: UTC plus the viewer's local time). */
+/**
+ * "7:15 AM GMT+7": the visitor's own time and zone (owner: UTC plus the viewer's local time), with the weekday when
+ * the local day is not the UTC day ("Fri 5:00 AM GMT+7" for Thursday 22:00 UTC); empty for a visitor on UTC.
+ */
 export function whenLocal(iso, timeZone) {
   if (!valid(iso)) return '';
   try {
-    const parts = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short', ...(timeZone ? { timeZone } : {}) }).formatToParts(new Date(iso));
+    const at = new Date(iso), tz = timeZone ? { timeZone } : {};
+    const parts = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short', ...tz }).formatToParts(at);
     const zone = parts.find((p) => p.type === 'timeZoneName')?.value ?? '';
+    if (/^(UTC|GMT)$/.test(zone)) return '';
     const time = parts.filter((p) => p.type !== 'timeZoneName').map((p) => p.value).join('').trim();
-    return `${time} ${zone}`.replace(/\u202f/g, ' ').trim();
+    const ymd = (o) => new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', ...o }).format(at);
+    const day = ymd(tz) !== ymd({ timeZone: 'UTC' }) ? `${new Intl.DateTimeFormat('en-US', { weekday: 'short', ...tz }).format(at)} ` : '';
+    return `${day}${time} ${zone}`.replace(/\u202f/g, ' ').trim();
   } catch { return ''; }
 }
 

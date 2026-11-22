@@ -28,6 +28,11 @@ test("AR1 the model: posts by UTC day in the answer's order, the first line as t
   assert.deepEqual(tabsOf(POSTS, "pattern").map((t) => [t.label, t.count, t.selected]), [["All posts", 3, false], ["Key-level map", 1, false], ["Chart pattern", 1, true], ["Daily recap", 0, false], ["Post", 0, false]]);
   assert.deepEqual(KIND, { key_levels: "Key-level map", pattern: "Chart pattern", daily_recap: "Daily recap", custom: "Post" }, "the tab names as before");
   assert.equal(whenUtc("nope"), ""); assert.equal(whenLocal("nope"), ""); assert.equal(dayOf(undefined), "");
+  assert.equal(whenLocal("2026-11-19T22:00:00Z", "Asia/Jakarta"), "Fri 5:00 AM GMT+7", "the local weekday when the local day is not the UTC day");
+  assert.equal(whenLocal("2026-11-20T00:15:00Z", "America/New_York"), "Thu 7:15 PM EST");
+  assert.equal(whenLocal("2026-11-20T00:15:00Z", "UTC"), "", "a visitor on UTC is not shown the time twice");
+  assert.equal(EMPTY, "No posts published yet.", "the empty lines as the page always had them");
+  assert.equal(EMPTY_KIND, "No posts of this type yet.");
 });
 
 test("AR2 the page: the shared header and footer, its words kept, the list preloaded and held open while it loads", () => {
@@ -45,12 +50,18 @@ test("AR2 the page: the shared header and footer, its words kept, the list prelo
   // the list: preloaded with the very URL the script asks for, held open (aria-busy) until it is drawn
   assert.equal(ARCHIVE_URL, "/api/public/archive?limit=100");
   assert.match(html, /<link rel="preload" href="\/api\/public\/archive\?limit=100" as="fetch" crossorigin>/);
-  assert.match(html, /<div class="a-list" id="archive" aria-busy="true"><\/div>/, "no empty line while loading");
+  assert.match(html, /<div class="a-list" id="archive" role="tabpanel" aria-busy="true"><\/div>/, "no empty line while loading; the list is the tabs' panel");
   const src = read("site/archive/archive.js");
   assert.match(src, /fetch\(ARCHIVE_URL\)/, "a plain fetch of the preloaded URL");
   assert.match(src, /removeAttribute\('aria-busy'\)/);
   const css = read("public/home.css");
-  assert.match(css, /\.a-list\[aria-busy="true"\]\{min-height:100vh\}/);
+  assert.match(css, /\.a-list\[aria-busy="true"\],\.a-list\.hold\{min-height:100vh\}/, "held open while loading, and after it when there is nothing to show");
+  assert.match(src, /classList\.toggle\('hold', !state\.posts\.length\)/, "an empty or failed read keeps the height: the note and footer do not jump up");
+  assert.match(css, /\.a-body\{[^}]*white-space:pre-wrap/, "a post's spaces and line breaks as published");
+  // the tabs are built once and only marked afterwards, so focus stays on the tab a person used
+  assert.match(src, /if \(!box\.children\.length\)/);
+  assert.match(src, /setAttribute\('aria-controls', 'archive'\)/);
+  assert.match(src, /\$\('archive'\)\.setAttribute\('aria-labelledby', TAB_ID\(state\.kind\)\)/);
   assert.match(css, /\.kinds\{display:flex;flex-wrap:wrap/, "the tabs wrap on a phone");
   assert.match(css, /\.foot a\{display:inline-flex;align-items:center;min-height:44px/, "44 px footer links");
   assert.doesNotMatch(html, /\b(nexus|omega)\b/i);
