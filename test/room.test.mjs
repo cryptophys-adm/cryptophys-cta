@@ -89,10 +89,14 @@ test("RM4 the build is current: the bundle was built from these sources, the nav
   assert.equal(b.home, createHash("sha256").update(readFileSync(new URL("../public/home.js", import.meta.url))).digest("hex"), "public/home.js is built from site/home");
   assert.ok(read("public/home.js").includes(`/room/room.js?v=${b.bundle.slice(0, 12)}`), "the page loads this very scene: its hash in the URL, past the browsers' hour of /room/*");
   const files = readdirSync(new URL("../public/room/", import.meta.url)).sort();
-  assert.deepEqual(files, ["CREDITS.txt", "build.json", "mannequin.glb", "room.js"]);
+  assert.deepEqual(files, ["CREDITS.txt", "build.json", b.chunk, "mannequin-lo.glb", "mannequin.glb", "room.js"].sort(), "the scene, its one three.js chunk and the two mannequins");
+  assert.match(b.chunk, /^three-[A-Z0-9]+\.js$/);
+  assert.equal(b.three_chunk, createHash("sha256").update(readFileSync(new URL(`../public/room/${b.chunk}`, import.meta.url))).digest("hex"));
+  assert.ok(read("public/room/room.js").startsWith("import{") && read("public/room/room.js").includes(`"./${b.chunk}"`), "the scene imports three.js from its chunk");
+  assert.ok(read("public/room/room.js").length < 80_000, "three.js is not in the scene's own file");
   const credits = read("public/room/CREDITS.txt");
   assert.match(credits, /Quaternius/); assert.match(credits, /CC0 1\.0/); assert.match(credits, /three\.js/); assert.match(credits, /MIT License/);
-  const glb = readFileSync(new URL("../public/room/mannequin.glb", import.meta.url));
+  const glb = readFileSync(new URL("../site/room/mannequin.source.glb", import.meta.url));
   assert.equal(createHash("sha256").update(glb).digest("hex"), "0d11eb3bbc6df8d30dfe75ce7cc2f060df99c01cf43ed7a4d505332272afacc2", "the file CREDITS.txt describes");
 });
 
@@ -248,7 +252,7 @@ test("RM10 the latest post on Threads: the headline only, filtered like the room
 });
 
 test("RM11 the pages name this build of their files (a year in the cache); the scene and the page fetch this mannequin", async () => {
-  const { withVersions, versionOf, mannequinVersion, VERSIONED, VERSIONED_PAGES } = await import("../scripts/versions.mjs");
+  const { withVersions, versionOf, mannequinVersion, mannequinLoVersion, VERSIONED, VERSIONED_PAGES } = await import("../scripts/versions.mjs");
   for (const page of VERSIONED_PAGES) {
     const html = read(`public/${page}`);
     assert.equal(withVersions(html), html, `${page}: run npm run build:room`);
@@ -258,8 +262,11 @@ test("RM11 the pages name this build of their files (a year in the cache); the s
   assert.match(read("public/index.html"), /href="\/home\.css\?v=[0-9a-f]{12}"/);
   assert.match(read("public/index.html"), /href="\/room\/CREDITS\.txt\?v=[0-9a-f]{12}"/, "the credits, kept a year under /room/*, carry their hash");
   for (const p of ["public/index.html", "public/performance.html"]) assert.match(read(p), /href="\/fonts\/OFL\.txt\?v=[0-9a-f]{12}"/, `${p}: the font licences carry their hash`);
-  const v = mannequinVersion();
-  for (const p of ["public/room/room.js", "public/home.js"]) assert.ok(read(p).includes(`/room/mannequin.glb?v=${v}`), `${p} names the mannequin with its hash`);
+  const v = mannequinVersion(), lo = mannequinLoVersion();
+  for (const p of ["public/room/room.js", "public/home.js"]) {
+    assert.ok(read(p).includes(`/room/mannequin.glb?v=${v}`), `${p} names the mannequin with its hash`);
+    assert.ok(read(p).includes(`/room/mannequin-lo.glb?v=${lo}`), `${p} names the phones' mannequin with its hash`);
+  }
   const h = read("public/_headers");
   for (const path of new Set(["/room/*", "/fonts/*", ...VERSIONED.map((f) => (f.includes("/") ? `/${f.split("/")[0]}/*` : `/${f}`))])) {
     const at = h.split("\n").findIndex((l) => l === path);
@@ -268,4 +275,38 @@ test("RM11 the pages name this build of their files (a year in the cache); the s
   }
   assert.doesNotMatch(h, /^\/(\*|index\.html|performance\.html|archive\.html)\n\s+Cache-Control/m, "the pages themselves are never kept");
   assert.doesNotMatch(read("public/index.html"), /id="sub"[^>]*aria-live/, "the rotating caption is not read out on every change");
+});
+
+test("RM12 the mannequins: the source quantized for everyone, a lighter one for phones; plain glTF, no decoder", async () => {
+  const glbJson = (p) => {
+    const b = readFileSync(new URL(`../${p}`, import.meta.url));
+    assert.equal(b.subarray(0, 4).toString(), "glTF", p);
+    const len = b.readUInt32LE(12);
+    assert.equal(b.subarray(16, 20).toString(), "JSON", p);
+    return { size: b.length, json: JSON.parse(b.subarray(20, 20 + len).toString()) };
+  };
+  const src = glbJson("site/room/mannequin.source.glb"), full = glbJson("public/room/mannequin.glb"), lo = glbJson("public/room/mannequin-lo.glb");
+  const verts = (g) => g.json.meshes[0].primitives.reduce((n, p) => n + g.json.accessors[p.attributes.POSITION].count, 0);
+  const tris = (g) => g.json.meshes[0].primitives.reduce((n, p) => n + g.json.accessors[p.indices].count / 3, 0);
+  for (const g of [full, lo]) {
+    assert.deepEqual(g.json.extensionsRequired, ["KHR_mesh_quantization"], "quantized, which three's GLTFLoader reads itself");
+    assert.ok(!JSON.stringify(g.json.extensionsUsed ?? []).match(/draco|meshopt/i), "no decoder: the CSP stays 'self'");
+    assert.equal(g.json.skins.length, 1, "the skeleton the scene poses");
+    const bones = (x) => x.json.skins[0].joints.map((j) => x.json.nodes[j].name).sort();
+    assert.deepEqual(bones(g), bones(src), "every bone the scene aims (upperarm, lowerarm, hand, Head, spine_03, clavicle)");
+  }
+  assert.equal(verts(full), verts(src), "the same mesh");
+  assert.ok(full.size < src.size * 0.6, `mannequin.glb ${full.size} bytes, under 60 % of the source`);
+  assert.ok(tris(lo) < tris(src) * 0.65 && tris(lo) > tris(src) * 0.35, "about half the triangles for phones");
+  assert.ok(lo.size < full.size * 0.7, `mannequin-lo.glb ${lo.size} bytes`);
+  const b = JSON.parse(read("public/room/build.json"));
+  for (const [k, f] of [["mannequin", "mannequin.glb"], ["mannequin_lo", "mannequin-lo.glb"]]) assert.equal(b[k], createHash("sha256").update(readFileSync(new URL(`../public/room/${f}`, import.meta.url))).digest("hex"), `run npm run build:mannequin, then npm run build:room (${f})`);
+  const { lowEnd } = await import("../site/room/quality.js");
+  const win = (w, touch, cores) => ({ innerWidth: w, matchMedia: () => ({ matches: touch }), navigator: { hardwareConcurrency: cores } });
+  assert.equal(lowEnd(win(1440, false, 8)), false);
+  assert.equal(lowEnd(win(390, true, 6)), true, "a phone");
+  assert.equal(lowEnd(win(1440, false, 4)), true, "4 cores or fewer");
+  assert.equal(lowEnd(win(700, false, 8)), true, "under 760 px");
+  assert.match(read("site/room/main.js"), /const LOW = lowEnd\(\);[\s\S]*const MANNEQUIN_URL = mannequinUrl\(LOW\);/, "the scene and the page choose alike");
+  assert.match(read("site/home/home.js"), /fetch\(mannequinUrl\(lowEnd\(\)\)\)/);
 });

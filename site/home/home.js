@@ -9,6 +9,7 @@ import { initPanels } from './panels.js';
 import { TRACK_URL } from './track.js';
 import { renderAvgStrip } from './avg-strip.js';
 import { tvQuoteSrc } from './gold.js';
+import { lowEnd, mannequinUrl } from '../room/quality.js';
 
 const $ = (id) => document.getElementById(id);
 const make = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
@@ -188,6 +189,6 @@ else {
   // 2026-11-20: the live page still showed the blue core from before the deploy).
   // The mannequin is the scene's other large file: its download starts with the scene's, not after it (frontend audit:
   // the scene caption is the page's LCP). The scene takes the bytes from window.__mannequin (site/room/main.js).
-  const start = () => { $('loading').hidden = false; window.__mannequin = fetch(`/room/mannequin.glb?v=${__MANNEQUIN_VERSION__}`).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null); /* global __MANNEQUIN_VERSION__ */ import(`/room/room.js?v=${__ROOM_VERSION__}`) /* global __ROOM_VERSION__: set by scripts/build-room.mjs */.catch(() => { $('loading').textContent = 'The scene did not load.'; }); };
+  const start = () => { $('loading').hidden = false; window.__mannequin = fetch(mannequinUrl(lowEnd())).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null); import(`/room/room.js?v=${__ROOM_VERSION__}`) /* global __ROOM_VERSION__: set by scripts/build-room.mjs */.catch(() => { $('loading').textContent = 'The scene did not load.'; }); };
   afterLoad(start);
 }

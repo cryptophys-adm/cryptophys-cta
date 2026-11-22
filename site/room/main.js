@@ -11,6 +11,7 @@ import { PEOPLE, MEETINGS, READS } from './data.js';
 import { meetingsFromResponse, freshMeetings, latestMeeting, whenOf, statusOf } from './script.js';
 import { onScene } from './feed.js';
 import { ambient } from './sound.js';
+import { lowEnd, mannequinUrl } from './quality.js';
 
 // The holo war room (owner 2026-11-19). People are life-size holograms that beam in around a projection table; the
 // indicator analysts are holographic constructs, each with its own form; the platform agents are drones on patrol.
@@ -21,10 +22,10 @@ import { ambient } from './sound.js';
 const $ = (id) => document.getElementById(id);
 const media = (q) => window.matchMedia?.(q).matches ?? false;
 const TOUCH = media('(pointer: coarse)'), CALM = media('(prefers-reduced-motion: reduce)');
-const LOW = TOUCH || window.innerWidth < 760 || (navigator.hardwareConcurrency || 8) <= 4;
+const LOW = lowEnd();
 const MOTION = CALM ? 0.12 : 1, GAP_S = 4;
-// The file's hash in the URL (scripts/build-room.mjs): browsers keep /room/* for a year.
-const MANNEQUIN_URL = `/room/mannequin.glb?v=${__MANNEQUIN_VERSION__}`; /* global __MANNEQUIN_VERSION__ */
+// Phones and small GPUs take the lighter mannequin; the file's hash is in the URL (site/room/quality.js).
+const MANNEQUIN_URL = mannequinUrl(LOW);
 const HOLO = 0x55c8ff, WARM = 0xffb454, BIAS = { neutral: 0xffb454, bearish: 0xff4d5e, bullish: 0x3ee08f }; // owner 2026-11-20: bearish red, bullish green, neutral amber
 const CONSTRUCTS = ['prophet', 'trade_management', 'interstellar_eyes', 'kinetic_engine', 'fabio_amt', 'chronos_matrix', 'tactical_muscles', 'macro_aether', 'decision_matrix', 'supertrend', 'aegis_footprint', 'order_blocks'];
 const LABEL = { hall: 'Analyst', lead: 'Leader', research: 'Research', content: 'Content studio', ops: 'Platform', knowledge: 'Knowledge' };

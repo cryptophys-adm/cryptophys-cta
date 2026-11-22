@@ -79,5 +79,5 @@ test("GD6 the owner's exception to the no-price rule covers only TradingView's q
   }
   // The rooms' words keep their own filter.
   assert.equal(safeLine("Gold closed at 4,123.46 on the quarter hour."), "");
-  assert.doesNotMatch(page + read("site/home/gold.js") + read("public/home.js") + read("public/room/room.js"), /\bomega\b/i);
+  assert.doesNotMatch(page + read("site/home/gold.js") + read("public/home.js") + read("public/room/room.js") + read(`public/room/${JSON.parse(read("public/room/build.json")).chunk}`), /\bomega\b/i);
 });

@@ -1,13 +1,16 @@
 Third-party work in the holo war room (cta.cryptophys.work)
 ===========================================================
 
-1. The mannequin (public/room/mannequin.glb)
+1. The mannequin (site/room/mannequin.source.glb; served as public/room/mannequin.glb and mannequin-lo.glb)
 
 Universal Animation Library [Standard] by Quaternius, the "UAL1_Standard.glb" model (Unreal-Godot folder), taken
 from the official download at https://quaternius.itch.io/universal-animation-library on 2026-11-19.
 The animation clips were removed (the scene poses the skeleton itself); the mesh, the skeleton and the materials
 are unchanged. Original file sha256 69591853d817488edaa8fd9bf8fc1d821eaeaf789f8627b3cd23b41c4ed67997 (7,618,436 bytes);
-this file sha256 0d11eb3bbc6df8d30dfe75ce7cc2f060df99c01cf43ed7a4d505332272afacc2 (477,696 bytes).
+this file sha256 0d11eb3bbc6df8d30dfe75ce7cc2f060df99c01cf43ed7a4d505332272afacc2 (477,696 bytes), kept as
+site/room/mannequin.source.glb. Served (2026-11-22, scripts/mannequin.mjs with glTF Transform and meshoptimizer):
+public/room/mannequin.glb, the same model quantized (KHR_mesh_quantization), and public/room/mannequin-lo.glb, about
+half the triangles, quantized the same way, for phones.
 Its licence file, as shipped:
 
 -------------------------------------------------------
@@ -24,7 +27,7 @@ https://www.patreon.com/quaternius
 
 
 
-2. three.js r170 (bundled into public/room/room.js)
+2. three.js r170 (bundled into public/room/three-<hash>.js, which public/room/room.js imports)
 
 The MIT License
 
