@@ -130,9 +130,9 @@ test("TK6 the pages: Performance before Archive in the nav, aria-current on its 
   for (const t of ["R", "Win rate", "Expectancy", "Net R", "Profit factor"]) assert.match(perf, new RegExp(`<dt>${t}</dt>`), t);
   assert.match(perf, /"Even" plans/);
   assert.match(perf, /cover different sets/, "the footnote: the columns count different plans");
-  assert.match(perf, /<script type="module" src="\/performance\.js"><\/script>/);
+  assert.match(perf, /<script type="module" src="\/performance\.js\?v=[0-9a-f]{12}"><\/script>/, "the build's hash in the URL (RM11 checks it is this build's)");
   assert.doesNotMatch(perf, /\sstyle=|<style|<script>(?!<\/script>)|<script(?![^>]*\ssrc=)[^>]*>/i, "no inline style or script (CSP)");
-  assert.match(perf, /href="\/home\.css"/); assert.doesNotMatch(perf, /cta\.css/);
+  assert.match(perf, /href="\/home\.css\?v=[0-9a-f]{12}"/); assert.doesNotMatch(perf, /cta\.css/);
   const b = JSON.parse(read("public/room/build.json"));
   assert.equal(b.performance, createHash("sha256").update(readFileSync(new URL("../public/performance.js", import.meta.url))).digest("hex"), "public/performance.js is built from site/performance");
   // Never the internal name; the readings' colours never on the numbers.
