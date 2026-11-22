@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-22 (schedule weekdays)
+- fix(schedule): the cron triggers name their weekdays. Cloudflare reads the weekday field as 1 = Sunday to 7 = Saturday, so `9 * * * 1-5` ran the analysis Sunday to Thursday (three runs on Sunday 22 November from 00:10 UTC while gold was closed, two drafts made and expired; none on Friday 20 November) and `17 22 * * 2-6` ran the recap, token refresh and metrics Monday to Friday (Monday 16 November with no bars; no run on Saturday 21 November, so Friday's trading day has no recap). Now `9 * * * SUN-FRI` and `17 22 * * TUE-SAT` in `wrangler.jsonc`, `organism.json` and `src/app.mjs`; the hourly analysis run drafts only while gold trades (`analysisRunDue`, the AI Worker's market hours), so it skips Sunday's closed hours and Friday's after the close and drafts the week's first hour (Sunday 23:09 UTC in winter; orchestrator review); the studio's Draft now is not bound by it. Tests CR1 to CR3.
+
 ## 2026-11-20 (header nav)
 - fix(home): the minutes follow the hero as the page scrolls, as before, and leave the header (owner 2026-11-20: "minutes jangan di header tapi ikut ke home page scroll bawah seperti sebelumnya"); The cast and How it works stay panels opened from the header, under the minutes (LY2).
 - fix(home): the header's links stand inline again at every width, as before layout v2 (owner 2026-11-20: "header menu belum sesuai, jangan digabungkan semua ... kalau space tidak cukup disesuaikan ukuran font saja"). No Menu button and no groups; under 1300 px the links' type steps down to `--s-1`; on a phone the header takes two rows, the brand and the UTC clock over the links. Test LY3 rewritten; TK6 and CK6 follow. Screenshots `docs/screenshots/layout-v2/header-*.png`.
