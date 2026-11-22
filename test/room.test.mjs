@@ -274,6 +274,9 @@ test("RM11 the pages name this build of their files (a year in the cache); the s
     assert.equal(h.split("\n")[at + 1].trim(), "Cache-Control: public, max-age=31536000, immutable", path);
   }
   assert.doesNotMatch(h, /^\/(\*|index\.html|performance\.html|archive\.html)\n\s+Cache-Control/m, "the pages themselves are never kept");
+  // every versioned page, by its file and by its path (/disclaimer, /privacy, ...), and the root (the one-theme backlog)
+  const pages = [...VERSIONED_PAGES, ...VERSIONED_PAGES.map((p) => p.replace(/(index)?\.html$/, ""))].map((p) => p.replace(/\./g, "\\."));
+  assert.doesNotMatch(h, new RegExp(`^/(\\*|${pages.join("|")})\\n\\s+Cache-Control`, "m"), "no page is ever kept");
   assert.doesNotMatch(read("public/index.html"), /id="sub"[^>]*aria-live/, "the rotating caption is not read out on every change");
 });
 

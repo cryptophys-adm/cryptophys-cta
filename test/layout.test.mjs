@@ -1,5 +1,5 @@
 // The home page's layout v2 (owner 2026-11-20: "jangan tempatkan semua di pojok ... terlalu penuh"): one type scale,
-// the panels opened one at a time by the URL hash, and the header's five links, inline at every width.
+// the panels opened one at a time by the URL hash, and the header's four links, inline at every width.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -58,7 +58,7 @@ test("LY2 the panels: The cast and How it works open one at a time by the URL ha
   assert.doesNotMatch(page, /aria-current/, "marked by the script, from the hash");
 });
 
-test("LY3 the header's nav: the five links inline at every width, never folded or grouped; where room runs short only the type steps down (owner 2026-11-20: \"jangan digabungkan semua ... disesuaikan ukuran font saja\")", () => {
+test("LY3 the header's nav: the four links inline at every width, never folded or grouped; where room runs short only the type steps down (owner 2026-11-20: \"jangan digabungkan semua ... disesuaikan ukuran font saja\")", () => {
   for (const f of ["public/index.html", "public/performance.html"]) {
     const page = read(f);
     const header = page.slice(page.indexOf("<header"), page.indexOf("</header>"));

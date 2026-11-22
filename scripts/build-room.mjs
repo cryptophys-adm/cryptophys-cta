@@ -1,14 +1,16 @@
-// Builds the home, Performance and Archive pages' scripts and fonts:
+// Builds the public pages' scripts and fonts:
 // - the holo war room: site/room/*.js and three.js into one minified ES module (public/room/room.js);
 // - the page itself: site/home/home.js (the minutes, the header's clock and menu, the panels, the meeting dial, the TradingView quote, the
 //   one feed of the rooms) into public/home.js;
 // - the Performance page: site/performance/performance.js (the simulated track record) into public/performance.js;
 // - the Archive page: site/archive/archive.js (the published posts) into public/archive.js;
+// - the pages without a script of their own (Disclaimer, Privacy, Terms): site/page/page.js (the header's clock, the
+//   average strip, the public profile) into public/page.js;
 // - the cast directory into public/index.html, from site/room/data.js;
 // - the self-hosted fonts (Rajdhani, Newsreader; OFL, latin woff2 only) from @fontsource into public/fonts/;
 // - public/room/build.json: the hash of the sources, of each bundle and of the mannequins, which test/room.test.mjs checks, so a source
 //   change without a rebuild fails the tests;
-// - the version hashes in the URLs of home.css, home.js, performance.js and archive.js in the pages, and of the mannequin in the
+// - the version hashes in the URLs of home.css, home.js, performance.js, archive.js and page.js in the pages, and of the mannequin in the
 //   scene (scripts/versions.mjs): browsers keep these files for a year (public/_headers).
 // The mannequins (public/room/mannequin.glb, mannequin-lo.glb) come from npm run build:mannequin. Run: npm run build:room
 import { build } from "esbuild";
@@ -48,7 +50,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
   const mannequin = { __MANNEQUIN_VERSION__: JSON.stringify(mannequinVersion()), __MANNEQUIN_LO_VERSION__: JSON.stringify(mannequinLoVersion()) };
   // The scene and three.js apart (frontend audit 2026-11-22): esbuild splitting puts what the scene and the vendor entry
   // share, three.js and its addons, into public/room/three-<hash>.js, which room.js imports; the vendor entry's own
-  // output is removed. A scene-only change then re-sends the scene's few KB, not three.js.
+  // output is removed. A scene-only change then re-sends the scene's few KiB, not three.js.
   for (const f of readdirSync(at("public/room"))) if (/^three-[A-Z0-9]+\.js$/i.test(f)) rmSync(at(`public/room/${f}`));
   await build({ ...opts, splitting: true, outdir: at("public/room"), entryPoints: { room: at("site/room/main.js"), vendor: "vendor:three" }, chunkNames: "three-[hash]", define: mannequin, plugins: [vendorEntry(readFileSync(at("site/room/main.js"), "utf8"), at("."))] });
   rmSync(at("public/room/vendor.js"));
@@ -58,6 +60,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
   await build({ ...opts, entryPoints: [at("site/home/home.js")], outfile: at("public/home.js"), define: { __ROOM_VERSION__: JSON.stringify(roomHash.slice(0, 12)), ...mannequin } });
   await build({ ...opts, entryPoints: [at("site/performance/performance.js")], outfile: at("public/performance.js") });
   await build({ ...opts, entryPoints: [at("site/archive/archive.js")], outfile: at("public/archive.js") });
+  await build({ ...opts, entryPoints: [at("site/page/page.js")], outfile: at("public/page.js") });
   mkdirSync(at("public/fonts"), { recursive: true });
   for (const [pkg, file] of FONTS) copyFileSync(at(`node_modules/@fontsource/${pkg}/files/${file}`), at(`public/fonts/${file}`));
   // Both families' licences in one file (the OFL asks for it to travel with the fonts).
@@ -65,9 +68,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
   const three = JSON.parse(readFileSync(at("node_modules/three/package.json"), "utf8")).version;
   const sha = (p) => createHash("sha256").update(readFileSync(at(p))).digest("hex");
   const chunk = readdirSync(at("public/room")).find((f) => /^three-[A-Z0-9]+\.js$/i.test(f));
-  writeFileSync(at("public/room/build.json"), `${JSON.stringify({ sources: sourceHash(), bundle: sha("public/room/room.js"), chunk, three_chunk: sha(`public/room/${chunk}`), mannequin: sha("public/room/mannequin.glb"), mannequin_lo: sha("public/room/mannequin-lo.glb"), home: sha("public/home.js"), performance: sha("public/performance.js"), archive: sha("public/archive.js"), three }, null, 2)}\n`);
+  writeFileSync(at("public/room/build.json"), `${JSON.stringify({ sources: sourceHash(), bundle: sha("public/room/room.js"), chunk, three_chunk: sha(`public/room/${chunk}`), mannequin: sha("public/room/mannequin.glb"), mannequin_lo: sha("public/room/mannequin-lo.glb"), home: sha("public/home.js"), performance: sha("public/performance.js"), archive: sha("public/archive.js"), page: sha("public/page.js"), three }, null, 2)}\n`);
   writeFileSync(at("public/index.html"), withNavigator(readFileSync(at("public/index.html"), "utf8")));
   for (const page of VERSIONED_PAGES) writeFileSync(at(`public/${page}`), withVersions(readFileSync(at(`public/${page}`), "utf8")));
   const kb = (p) => (readFileSync(at(p)).length / 1024).toFixed(0);
-  console.log(`room.js ${kb("public/room/room.js")} KB, ${chunk} ${kb(`public/room/${chunk}`)} KB, home.js ${kb("public/home.js")} KB, performance.js ${kb("public/performance.js")} KB, archive.js ${kb("public/archive.js")} KB, three ${three}`);
+  console.log(`room.js ${kb("public/room/room.js")} KiB, ${chunk} ${kb(`public/room/${chunk}`)} KiB, home.js ${kb("public/home.js")} KiB, performance.js ${kb("public/performance.js")} KiB, archive.js ${kb("public/archive.js")} KiB, page.js ${kb("public/page.js")} KiB, three ${three}`);
 }

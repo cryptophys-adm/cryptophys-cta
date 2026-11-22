@@ -15,67 +15,80 @@
 <meta property="og:title" content="Terms of service · XAUUSD AI · Cryptophys">
 <meta property="og:description" content="The terms for this site and the Cryptophys CTA app: education, not financial advice.">
 <meta name="twitter:card" content="summary">
-<link rel="stylesheet" href="/cta.css">
+<meta name="theme-color" content="#060A12">
+<link rel="preload" href="/fonts/rajdhani-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/newsreader-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/home.css?v=39123c0f5495">
 </head>
-<body class="public">
-<header class="topbar">
-  <div class="in narrow">
-    <a class="brand" href="/" aria-label="Cryptophys home">
-      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path fill="#c8961e" d="M16 1.5 28.6 8.75v14.5L16 30.5 3.4 23.25V8.75z"/><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" d="M20.6 11.6a6.4 6.4 0 1 0 0 8.8"/></svg>
-      Cryptophys
-    </a>
-    <nav aria-label="Pages">
-      <a href="/">Home</a>
-      <a href="/archive">Archive</a>
-      <a href="/about">How it works</a>
-      <a href="/disclaimer">Disclaimer</a>
-    </nav>
-    <span class="grow"></span>
-    <a class="btn outline sm" href="/studio" id="studio-link">Studio sign in</a>
+<body>
+<a class="skip" href="#text">Skip to the text</a>
+
+<header class="top">
+  <a class="brand" href="/" aria-label="XAUUSD AI by Cryptophys, home">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M12 2.5v19M2.5 12h19"/><circle cx="12" cy="12" r="3.2"/></svg>
+    <span>XAUUSD AI</span><small>Cryptophys</small>
+  </a>
+  <nav class="nav" aria-label="Main">
+    <a href="/#cast">The cast</a>
+    <a href="/#how">How it works</a>
+    <a href="/performance">Performance</a>
+    <a href="/archive">Archive</a>
+  </nav>
+  <a class="avg-strip" id="avg-strip" href="/performance" title="Simulated, the average of the exit scenarios" hidden>
+    <span class="avg-vals"></span>
+  </a>
+  <p class="top-clock"><b id="clock-utc"></b><span id="clock-local"></span></p>
+  <div class="top-end">
+    <a class="quiet" href="/studio"><span>Studio<span class="q-long"> sign in</span></span></a>
+    <a class="btn gold" href="https://www.threads.net/@cryptophys.adm" rel="noopener" data-threads>Follow on Threads</a>
   </div>
 </header>
-<main>
-  <section class="pagehero">
-    <div class="in">
-      <div class="eyebrow"><i></i>Terms</div>
-      <h1>Terms of service</h1>
-      <p class="tag">The rules for using this site and what we publish.</p>
-    </div>
-  </section>
-  <section class="section">
-    <article class="card prose">
-      <p class="meta">Last updated 17 November 2026.</p>
-      <h2>What this site and app are</h2>
-      <p>This site (cta.cryptophys.work) shows Cryptophys's educational XAUUSD (gold) analysis. The Cryptophys CTA app is an internal tool our team uses to prepare, approve and publish that analysis to Cryptophys's own social accounts. The app is not offered to the public, and only our team can sign in to it.</p>
-      <h2>Education, not advice</h2>
-      <p>Everything we publish is education and market analysis. It is not financial advice, investment advice, a recommendation, or an invitation or offer to buy or sell anything. Trading carries a high risk of loss. Read our <a href="/disclaimer">disclaimer</a> before you use anything we publish.</p>
-      <h2>Using this site</h2>
-      <p>You may read and share our public posts with credit to Cryptophys. Do not misuse the site: no attempts to break in, overload it, or scrape it in a way that harms it.</p>
-      <h2>Third-party platforms</h2>
-      <p>Our posts also appear on third-party platforms (Telegram, Threads, Instagram, X, YouTube and TikTok). Your use of those platforms is governed by their own terms. Charts are TradingView's, shown with TradingView's credit.</p>
-      <h2>No warranty</h2>
-      <p>We check what we publish, but the site and the analysis are provided as they are, without any warranty of accuracy, completeness or fitness for a purpose. Analysis can be out of date by the time you read it.</p>
-      <h2>Liability</h2>
-      <p>To the extent the law allows, Cryptophys is not liable for any loss arising from the use of this site or of anything we publish. Any decision you make, and its outcome, is your own.</p>
-      <h2>Changes</h2>
-      <p>We may update these terms; the date above shows the latest version. See also our <a href="/privacy">privacy policy</a>.</p>
-      <p class="meta" id="disclaimer"></p>
-    </article>
-  </section>
+
+<main class="page" id="text">
+  <p class="eyebrow">Terms</p>
+  <h1>Terms of service</h1>
+  <p class="lede">The rules for using this site and what we publish.</p>
+  <p class="basis">Last updated 17 November 2026.</p>
+
+  <article class="prose">
+    <h2>What this site and app are</h2>
+    <p>This site (cta.cryptophys.work) shows Cryptophys's educational XAUUSD (gold) analysis. The Cryptophys CTA app is an internal tool our team uses to prepare, approve and publish that analysis to Cryptophys's own social accounts. The app is not offered to the public, and only our team can sign in to it.</p>
+    <h2>Education, not advice</h2>
+    <p>Everything we publish is education and market analysis. It is not financial advice, investment advice, a recommendation, or an invitation or offer to buy or sell anything. Trading carries a high risk of loss. Read our <a href="/disclaimer">disclaimer</a> before you use anything we publish.</p>
+    <h2>Using this site</h2>
+    <p>You may read and share our public posts with credit to Cryptophys. Do not misuse the site: no attempts to break in, overload it, or scrape it in a way that harms it.</p>
+    <h2>Third-party platforms</h2>
+    <p>Our posts also appear on third-party platforms (Telegram, Threads, Instagram, X, YouTube and TikTok). Your use of those platforms is governed by their own terms. Charts are TradingView's, shown with TradingView's credit.</p>
+    <h2>No warranty</h2>
+    <p>We check what we publish, but the site and the analysis are provided as they are, without any warranty of accuracy, completeness or fitness for a purpose. Analysis can be out of date by the time you read it.</p>
+    <h2>Liability</h2>
+    <p>To the extent the law allows, Cryptophys is not liable for any loss arising from the use of this site or of anything we publish. Any decision you make, and its outcome, is your own.</p>
+    <h2>Changes</h2>
+    <p>We may update these terms; the date above shows the latest version. See also our <a href="/privacy">privacy policy</a>.</p>
+    <p class="fine" id="disclaimer"></p>
+  </article>
 </main>
-<footer class="site-foot">
-  <div class="in">
-    <span class="brand"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path fill="#c8961e" d="M16 1.5 28.6 8.75v14.5L16 30.5 3.4 23.25V8.75z"/><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" d="M20.6 11.6a6.4 6.4 0 1 0 0 8.8"/></svg>Cryptophys</span>
+
+<footer class="foot">
+  <span>XAUUSD AI by Cryptophys</span>
+  <nav aria-label="Footer">
+    <a href="/#minutes">Minutes</a>
+    <a href="/#cast">The cast</a>
+    <a href="/#how">How it works</a>
+    <a href="/performance">Performance</a>
     <a href="/archive">Archive</a>
-    <a href="/about">How it works</a>
     <a href="/disclaimer">Disclaimer</a>
+    <a href="https://www.threads.net/@cryptophys.adm" rel="noopener" data-threads>Threads</a>
+    <a class="foot-studio" href="/studio">Studio sign in</a>
+  </nav>
+  <nav class="foot-small" aria-label="Legal">
     <a href="/privacy">Privacy</a>
-    <a href="/terms">Terms</a>
-    <span>Chart by TradingView</span>
-    <span class="grow"></span>
-    <span>© Cryptophys · Education, not financial advice</span>
-  </div>
+    <a href="/about">About the system</a>
+    <a href="/terms" aria-current="page">Terms</a>
+    <a href="/fonts/OFL.txt?v=ff7626ffb2d2">Font licences</a>
+  </nav>
+  <p class="foot-note"><span>Chart by TradingView</span><span>© Cryptophys · Education, not financial advice</span></p>
 </footer>
-<script src="/cta.js"></script>
+<script type="module" src="/page.js?v=cd29d3cf61a7"></script>
 </body>
 </html>

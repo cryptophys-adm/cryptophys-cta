@@ -1,0 +1,218 @@
+// One look for every public page (the one-theme backlog, PR 1): each page in the theme stands on home.css alone, with
+// the Performance page's header and the same footer, marks only its own links, and keeps the head's theme colour, font
+// preloads and skip link. The pages that name a versioned file are the build's VERSIONED_PAGES; only the home page
+// carries the war room and TradingView's quote. Disclaimer, Privacy and Terms keep every word they had (public content
+// is final). Node built-ins only: CI runs the tests before npm ci.
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { VERSIONED, VERSIONED_PAGES } from "../scripts/versions.mjs";
+import { applyProfile, profileView, PROFILE_URL } from "../site/page/profile.js";
+
+const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
+const THEME_PAGES = VERSIONED_PAGES;
+const PATH = { "index.html": "/", "performance.html": "/performance", "archive.html": "/archive", "disclaimer.html": "/disclaimer", "privacy.html": "/privacy", "terms.html": "/terms" };
+const PORTED = ["disclaimer.html", "privacy.html", "terms.html"];
+const FOOT_NOTE = '<p class="foot-note"><span>Chart by TradingView</span><span>© Cryptophys · Education, not financial advice</span></p>';
+const page = (f) => read(`public/${f}`);
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const block = (html, open, close) => { const a = html.indexOf(open); assert.ok(a >= 0, open); return html.slice(a, html.indexOf(close, a) + close.length); };
+const headerOf = (html) => block(html, "<header", "</header>");
+const navOf = (html, label) => html.match(new RegExp(`<nav[^>]*aria-label="${label}">([\\s\\S]*?)</nav>`))?.[1] ?? null;
+// The home page's own spellings of the same header and footer: its links are #x (it is "/"), its header carries the
+// schema.org microdata and the panels' data-panel; a page's own link carries aria-current. None of these is a word.
+const norm = (s) => s
+  .replace(/ aria-current="(page|true)"/g, "")
+  .replace(/ itemscope| itemtype="[^"]*"| itemprop="[^"]*"| data-panel="[^"]*"/g, "")
+  .replace(/href="#/g, 'href="/#')
+  .replace(/\?v=[0-9a-f]+"/g, '"');
+const links = (inner) => [...norm(inner).matchAll(/<a ([^>]*)>([^<]*)<\/a>/g)].map((m) => [m[1].match(/href="([^"]*)"/)[1], m[2]]);
+const current = (html) => [...html.matchAll(/<a ([^>]*aria-current[^>]*)>/g)].map((m) => norm(m[1]).match(/href="([^"]*)"/)[1]);
+
+const ENT = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", minus: "−" };
+const decode = (s) => s.replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (m, e) => (e[0] === "#" ? String.fromCodePoint(/^#x/i.test(e) ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : ENT[e] ?? m));
+/** Every word inside <main>, in order: tags removed, entities decoded, whitespace collapsed. */
+const mainWords = (html) => { const a = html.indexOf("<main"); return decode(html.slice(html.indexOf(">", a) + 1, html.indexOf("</main>")).replace(/<[^>]*>/g, " ")).split(/\s+/).filter(Boolean).join(" "); };
+
+test("TH1 one stylesheet, home.css with its hash, one script of the page's own; never cta.css or cta.js", () => {
+  for (const f of THEME_PAGES) {
+    assert.ok(PATH[f], `${f} has a path`);
+    const html = page(f);
+    const sheets = [...html.matchAll(/<link rel="stylesheet" href="([^"]*)">/g)].map((m) => m[1]);
+    assert.equal(sheets.length, 1, `${f}: one stylesheet`);
+    assert.match(sheets[0], /^\/home\.css\?v=[0-9a-f]{12}$/, `${f}: home.css named with its hash`);
+    assert.equal((html.match(/<link[^>]*rel="stylesheet"/g) ?? []).length, 1, `${f}: no other stylesheet link`);
+    assert.doesNotMatch(html, /cta\.(css|js)/, `${f}: not on the old look`);
+    const scripts = [...html.matchAll(/<script\b[^>]*>/g)].map((m) => m[0]);
+    assert.equal(scripts.length, 1, `${f}: one script`);
+    assert.match(scripts[0], /^<script type="module" src="\/(home|performance|archive|page)\.js\?v=[0-9a-f]{12}">$/, `${f}: its own module, with its hash`);
+  }
+  for (const f of PORTED) assert.match(page(f), /<script type="module" src="\/page\.js\?v=[0-9a-f]{12}"><\/script>\n<\/body>/, `${f}: the shared page script`);
+});
+
+test("TH2 the header is the Performance page's on every page (a page's own mark, the home's #x links and microdata aside)", () => {
+  const perf = norm(headerOf(page("performance.html")));
+  assert.match(perf, /<nav class="nav" aria-label="Main">/);
+  for (const id of ["avg-strip", "clock-utc", "clock-local"]) assert.match(perf, new RegExp(`id="${id}"`), id);
+  for (const f of THEME_PAGES) assert.equal(norm(headerOf(page(f))), perf, `${f}: the shared header`);
+  for (const f of PORTED) assert.doesNotMatch(headerOf(page(f)), /aria-current/, `${f}: no header link is its own page`);
+});
+
+test("TH3 the Footer and Legal navs carry the same links on every page ('3D credits' on the home page only); Legal holds links only", () => {
+  const perf = page("performance.html");
+  const footer = links(navOf(perf, "Footer")), legal = links(navOf(perf, "Legal"));
+  assert.deepEqual(footer.map(([, t]) => t), ["Minutes", "The cast", "How it works", "Performance", "Archive", "Disclaimer", "Threads", "Studio sign in"]);
+  assert.deepEqual(legal, [["/privacy", "Privacy"], ["/about", "About the system"], ["/terms", "Terms"], ["/fonts/OFL.txt", "Font licences"]]);
+  for (const f of THEME_PAGES) {
+    const html = page(f);
+    const foot = block(html, '<footer class="foot">', "</footer>");
+    assert.match(foot, /^<footer class="foot">\n {2}<span>XAUUSD AI by Cryptophys<\/span>\n {2}<nav aria-label="Footer">/, `${f}: the footer's brand line`);
+    assert.deepEqual(links(navOf(foot, "Footer")), footer, `${f}: the Footer nav`);
+    const inner = navOf(foot, "Legal");
+    assert.deepEqual(links(inner).filter(([, t]) => f !== "index.html" || t !== "3D credits"), legal, `${f}: the Legal nav`);
+    if (f === "index.html") assert.deepEqual(links(inner).find(([, t]) => t === "3D credits"), ["/room/CREDITS.txt", "3D credits"]);
+    assert.equal(inner.replace(/<a [^>]*>[^<]*<\/a>/g, "").trim(), "", `${f}: the Legal nav holds links only`);
+  }
+  // The chart credit and the copyright stay where they were (owner decision 2: the Archive and the pages that had them),
+  // as words, under the Legal links.
+  for (const f of ["archive.html", ...PORTED]) {
+    const foot = block(page(f), '<footer class="foot">', "</footer>");
+    assert.ok(foot.includes(`</nav>\n  ${FOOT_NOTE}\n</footer>`), `${f}: the foot note under the Legal nav`);
+  }
+});
+
+test("TH4 aria-current marks only the page's own links: the footer's on every page but the home, the header's where the header names the page", () => {
+  for (const f of THEME_PAGES) {
+    const html = page(f), own = PATH[f];
+    const marks = current(html);
+    assert.ok(marks.every((href) => href === own), `${f}: only ${own} is marked (${marks.join(", ")})`);
+    for (const m of html.matchAll(/aria-current="([^"]*)"/g)) assert.equal(m[1], "page", `${f}: aria-current="page"`);
+    if (f === "index.html") { assert.deepEqual(marks, [], "the home page is marked by its script, from the hash"); continue; }
+    const inNav = links(navOf(headerOf(html), "Main")).some(([href]) => href === own);
+    assert.equal(marks.length, inNav ? 2 : 1, `${f}: the header (where it names the page) and the footer`);
+    assert.deepEqual(current(block(html, '<footer class="foot">', "</footer>")), [own], `${f}: the footer marks it`);
+  }
+});
+
+test("TH5 the head and the skip link: the vault's theme colour, two font preloads, a skip link first that reaches its target", () => {
+  const fonts = new Set(readdirSync(new URL("../public/fonts/", import.meta.url)));
+  for (const f of THEME_PAGES) {
+    const html = page(f);
+    assert.equal((html.match(/<meta name="theme-color" content="#060A12">/g) ?? []).length, 1, `${f}: theme-color`);
+    const pre = [...html.matchAll(/<link rel="preload" href="\/fonts\/([^"]+)" as="font" type="font\/woff2" crossorigin>/g)].map((m) => m[1]);
+    assert.equal(pre.length, 2, `${f}: two font preloads`);
+    assert.ok(pre.includes("newsreader-latin-400-normal.woff2") && pre.some((p) => p.startsWith("rajdhani-latin-")), `${f}: the reading face and one display weight`);
+    for (const p of pre) assert.ok(fonts.has(p), `${f}: ${p} is served`);
+    assert.equal((html.match(/as="font"/g) ?? []).length, 2, `${f}: no other font preload`);
+    // the first element of the body (the home page's microdata link and meta are not rendered) is the skip link
+    const body = html.slice(html.indexOf(">", html.indexOf("<body")) + 1).replace(/^\s*(<(link|meta) [^>]*>\s*)*/, "");
+    const skip = body.match(/^<a class="skip" href="#([^"]+)">([^<]+)<\/a>/);
+    assert.ok(skip, `${f}: the skip link comes first`);
+    assert.match(html, new RegExp(`<main [^>]*id="${skip[1]}"|<section [^>]*id="${skip[1]}"`), `${f}: its target #${skip[1]} exists`);
+  }
+  for (const f of PORTED) assert.ok(page(f).includes('<a class="skip" href="#text">Skip to the text</a>') && page(f).includes('<main class="page" id="text">'), f);
+});
+
+test("TH6 every page that names a versioned file is one of the build's VERSIONED_PAGES, so its hashes are rewritten", () => {
+  const html = [];
+  const walk = (dir) => { for (const n of readdirSync(new URL(`../public/${dir}`, import.meta.url))) { const p = `${dir}${n}`; if (statSync(new URL(`../public/${p}`, import.meta.url)).isDirectory()) walk(`${p}/`); else if (n.endsWith(".html")) html.push(p); } };
+  walk("");
+  assert.ok(html.includes("studio/index.html") && html.includes("signin.html") && html.includes("about.html"), "every page is read");
+  for (const p of html) {
+    const text = page(p);
+    const named = VERSIONED.filter((f) => new RegExp(`(?:href|src)="/${esc(f)}(\\?[^"]*)?"`).test(text));
+    if (named.length) assert.ok(VERSIONED_PAGES.includes(p), `${p} names ${named.join(", ")}: add it to VERSIONED_PAGES (scripts/versions.mjs)`);
+  }
+  for (const p of VERSIONED_PAGES) assert.ok(html.includes(p), `${p} exists`);
+});
+
+test("TH7 the war room and TradingView's quote are the home page's only: no #gold-live, frame, TradingView markup, home.js or /room/ elsewhere", () => {
+  for (const f of THEME_PAGES.filter((p) => p !== "index.html")) {
+    // the markup only: the words "Chart by TradingView" and "Charts are TradingView's" are the pages' own text
+    const tags = (page(f).match(/<[^>]*>/g) ?? []).join("\n");
+    assert.doesNotMatch(tags, /gold-live|<iframe|tradingview|home\.js|\/room\//i, `${f}: nothing of the home page's scene or quote`);
+  }
+  for (const f of PORTED) assert.doesNotMatch(page(f), /<iframe|tradingview\.com|gold-live|home\.js|\/room\//, f);
+});
+
+test("TH8 Disclaimer, Privacy and Terms keep every word: <main> and the title equal the PR base, word for word", () => {
+  const base = JSON.parse(read("test/fixtures/legal-words.json"));
+  assert.deepEqual(Object.keys(base.pages).sort(), [...PORTED].sort());
+  for (const f of PORTED) {
+    const html = page(f);
+    assert.equal(mainWords(html), base.pages[f], `${f}: the words inside <main>`);
+    assert.equal(html.match(/<title>([^<]*)<\/title>/)[1], base.titles[f], `${f}: the title`);
+    // the shared look's parts: eyebrow, headline, lede, the date as .basis, the text as unfilled prose, the profile's line
+    assert.match(html, /<main class="page" id="text">\n {2}<p class="eyebrow">[^<]+<\/p>\n {2}<h1>[^<]+<\/h1>\n {2}<p class="lede">[^<]+<\/p>/, f);
+    assert.match(html, /<article class="prose">/, f);
+    assert.match(html, /<p class="fine" id="disclaimer"><\/p>\n {2}<\/article>/, `${f}: the profile's disclaimer, hidden while empty`);
+    assert.doesNotMatch(html, /class="(card|meta|pagehero|section|tag|topbar|site-foot)\b/, `${f}: none of the old look's classes`);
+    if (/Last updated/.test(base.pages[f])) assert.match(html, /<p class="basis">Last updated [^<]+<\/p>/, `${f}: the date as the page's basis line`);
+  }
+  // the words a person sees on each page include the disclaimer (app.test) and the chart credit as before
+  for (const f of PORTED) assert.match(page(f), /not financial advice/i);
+});
+
+test("TH9 page.js: built from site/page, imports only the header, the strip, the record's URL and the profile; kept a year", () => {
+  const b = JSON.parse(read("public/room/build.json"));
+  assert.equal(b.page, createHash("sha256").update(readFileSync(new URL("../public/page.js", import.meta.url))).digest("hex"), "run npm run build:room");
+  const allowed = new Set(["../home/header.js", "../home/avg-strip.js", "../home/track.js", "./profile.js"]);
+  for (const n of readdirSync(new URL("../site/page/", import.meta.url)).filter((x) => x.endsWith(".js"))) {
+    const src = read(`site/page/${n}`);
+    for (const m of src.matchAll(/^\s*import\b[^'"]*['"]([^'"]+)['"]/gm)) assert.ok(allowed.has(m[1]), `site/page/${n} imports ${m[1]}`);
+    assert.doesNotMatch(src, /\bimport\(|site\/room|\.\.\/room\/|home\.js|gold\.js/, `site/page/${n}: never the war room, home.js or gold.js`);
+  }
+  assert.doesNotMatch(read("site/page/profile.js"), /\bfetch\(|^\s*document\./m, "profile.js is pure: no request, no page touched on import");
+  assert.doesNotMatch(read("public/page.js"), /room\.js|mannequin|tradingview|warroom-scene|gold-live|import\(/i, "the bundle carries none of the scene or the quote");
+  assert.equal((read("site/page/page.js").match(/\bfetch\(/g) ?? []).length, 1, "one fetch helper");
+  assert.match(read("site/page/page.js"), /json\(PROFILE_URL\)/, "one GET of the profile");
+  assert.equal(PROFILE_URL, "/api/public/profile");
+  assert.ok(VERSIONED.includes("page.js"));
+  const h = read("public/_headers").split("\n");
+  assert.equal(h[h.indexOf("/page.js") + 1].trim(), "Cache-Control: public, max-age=31536000, immutable");
+});
+
+test("TH10 applyProfile: the Threads links from Threads' own host only, the disclaimer's text; nothing changes without an answer", () => {
+  const fake = () => {
+    const a = [{ href: "https://www.threads.net/@cryptophys.adm" }, { href: "https://www.threads.net/@cryptophys.adm" }];
+    const box = { textContent: "" };
+    return { a, box, doc: { querySelectorAll: (s) => (s === "[data-threads]" ? a : []), getElementById: (id) => (id === "disclaimer" ? box : null) } };
+  };
+  const p = { brand: { disclaimer: "Education, not financial advice." }, links: [{ channel: "x", url: "https://x.com/a" }, { channel: "threads", url: "https://www.threads.com/@cryptophys.adm" }] };
+  const one = fake();
+  assert.deepEqual(applyProfile(p, one.doc), { threads: "https://www.threads.com/@cryptophys.adm", disclaimer: "Education, not financial advice." });
+  assert.deepEqual(one.a.map((x) => x.href), ["https://www.threads.com/@cryptophys.adm", "https://www.threads.com/@cryptophys.adm"]);
+  assert.equal(one.box.textContent, "Education, not financial advice.");
+  for (const bad of [null, undefined, {}, { links: "x" }, { brand: { disclaimer: "  " }, links: [{ channel: "threads", url: "https://evil.example/@x" }] }, { links: [{ channel: "threads", url: "javascript:alert(1)" }] }]) {
+    const two = fake();
+    assert.deepEqual(applyProfile(bad, two.doc), { threads: null, disclaimer: null });
+    assert.deepEqual(two.a.map((x) => x.href), ["https://www.threads.net/@cryptophys.adm", "https://www.threads.net/@cryptophys.adm"], "the page's own link stays");
+    assert.equal(two.box.textContent, "", "the line stays empty (and hidden: .fine:empty)");
+  }
+  assert.deepEqual(profileView({ links: [{ channel: "threads", url: "https://www.threads.net/@a" }] }), { threads: "https://www.threads.net/@a", disclaimer: null });
+  const none = { querySelectorAll: () => [], getElementById: () => null };
+  assert.doesNotThrow(() => applyProfile(p, none), "a page without the elements");
+});
+
+test("TH11 the shared rules: prose without a panel, the date line, an empty profile line hidden, the footer's own link, long words wrap", () => {
+  const css = read("public/home.css");
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => [m[1].trim(), m[2]]);
+  const prose = rules.filter(([sel]) => /\.prose\b/.test(sel));
+  assert.ok(prose.length >= 4, "the prose rules");
+  for (const [sel, body] of prose) assert.doesNotMatch(body, /background|box-shadow|border:/, `${sel}: no fill, no shadow, no panel`);
+  assert.match(css, /\.page \.prose h2\{[^}]*font-size:var\(--s2\)/, "the prose's headings at --s2");
+  assert.match(css, /\.page \.prose\{[^}]*max-width:38em/, "the measure");
+  assert.match(css, /\.page \.prose p\{line-height:1\.7;/, "the reading rhythm");
+  assert.match(css, /\.page \.basis\{/, "the date line");
+  assert.match(css, /\.page \.fine:empty\{display:none\}/);
+  assert.match(css, /\.foot a\[aria-current\]\{color:var\(--ink\)\}/);
+  assert.match(css, /\.page\{overflow-wrap:break-word\}/);
+  assert.match(css, /\.foot \.foot-note\{width:100%;display:flex;flex-wrap:wrap;/);
+  // the short wide window's lede step is the hero's only: the other pages' ledes keep line height 1.72
+  const short = css.slice(css.indexOf("@media (min-width:901px) and (max-height:720px){"), css.indexOf("\n}\n", css.indexOf("@media (min-width:901px) and (max-height:720px){")));
+  assert.match(short, /\n {2}\.hero \.lede\{margin-top:20px;line-height:1\.6\}/);
+  assert.doesNotMatch(short, /\n {2}\.lede\{/, "no unscoped lede rule there");
+  assert.match(css, /\n\.lede\{margin-top:28px;font-size:var\(--s1\);line-height:1\.72;/, "the lede's rhythm");
+});

@@ -1,4 +1,4 @@
-// Pure: the version hash in the URLs of the home, Performance and Archive pages' own files (frontend audit 2026-11-22, approved by
+// Pure: the version hash in the URLs of the public pages' own files (frontend audit 2026-11-22, approved by
 // the owner). public/_headers lets browsers keep these files for a year, so each page names the exact build it needs
 // (`/home.css?v=<hash>`): a deploy that changes a file changes its URL. scripts/build-room.mjs writes the hashes into
 // the pages; test/room.test.mjs keeps every page equal to the files.
@@ -8,8 +8,9 @@ import { readFileSync } from "node:fs";
 /** The files a page names with a version, and the pages that name them. */
 // The pages' footers link two text files under the year-long /room/* and /fonts/* rules (orchestrator review of #61):
 // named with their hash too, so an edit reaches a browser that opened them before.
-export const VERSIONED = Object.freeze(["home.css", "home.js", "performance.js", "archive.js", "room/CREDITS.txt", "fonts/OFL.txt"]);
-export const VERSIONED_PAGES = Object.freeze(["index.html", "performance.html", "archive.html"]);
+export const VERSIONED = Object.freeze(["home.css", "home.js", "performance.js", "archive.js", "page.js", "room/CREDITS.txt", "fonts/OFL.txt"]);
+// Every page that names one of these files (test/theme.test.mjs holds it), so the build rewrites its hashes.
+export const VERSIONED_PAGES = Object.freeze(["index.html", "performance.html", "archive.html", "disclaimer.html", "privacy.html", "terms.html"]);
 
 const pub = (p) => new URL(`../public/${p}`, import.meta.url);
 /** The first 12 hex characters of a public file's SHA-256. */
