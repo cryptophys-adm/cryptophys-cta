@@ -246,3 +246,24 @@ test("RM10 the latest post on Threads: the headline only, filtered like the room
   assert.match(read("public/home.css"), /--bear:#F2606E;--bull:#3FD08A;--flat:#E0A458;/);
   assert.match(read("site/room/main.js"), /BIAS = \{ neutral: 0xffb454, bearish: 0xff4d5e, bullish: 0x3ee08f \}/);
 });
+
+test("RM11 the pages name this build of their files (a year in the cache); the scene and the page fetch this mannequin", async () => {
+  const { withVersions, versionOf, mannequinVersion, VERSIONED, VERSIONED_PAGES } = await import("../scripts/versions.mjs");
+  for (const page of VERSIONED_PAGES) {
+    const html = read(`public/${page}`);
+    assert.equal(withVersions(html), html, `${page}: run npm run build:room`);
+    for (const f of VERSIONED) for (const m of html.matchAll(new RegExp(`(?:href|src)="/${f.replace(/\./g, "\\.")}(\\?[^"]*)?"`, "g"))) assert.equal(m[1], `?v=${versionOf(f)}`, `${page} names ${f} with its hash`);
+  }
+  assert.match(read("public/index.html"), /src="\/home\.js\?v=[0-9a-f]{12}"/);
+  assert.match(read("public/index.html"), /href="\/home\.css\?v=[0-9a-f]{12}"/);
+  const v = mannequinVersion();
+  for (const p of ["public/room/room.js", "public/home.js"]) assert.ok(read(p).includes(`/room/mannequin.glb?v=${v}`), `${p} names the mannequin with its hash`);
+  const h = read("public/_headers");
+  for (const path of ["/room/*", "/fonts/*", ...VERSIONED.map((f) => `/${f}`)]) {
+    const at = h.split("\n").findIndex((l) => l === path);
+    assert.ok(at > 0, `_headers has a rule for ${path}`);
+    assert.equal(h.split("\n")[at + 1].trim(), "Cache-Control: public, max-age=31536000, immutable", path);
+  }
+  assert.doesNotMatch(h, /^\/(\*|index\.html|performance\.html|archive\.html)\n\s+Cache-Control/m, "the pages themselves are never kept");
+  assert.doesNotMatch(read("public/index.html"), /id="sub"[^>]*aria-live/, "the rotating caption is not read out on every change");
+});

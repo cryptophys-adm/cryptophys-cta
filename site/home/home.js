@@ -186,6 +186,8 @@ if (!gl) {
 else {
   // The scene's URL carries its build's hash, so a deploy is never hidden behind the hour browsers keep /room/* (owner
   // 2026-11-20: the live page still showed the blue core from before the deploy).
-  const start = () => { $('loading').hidden = false; import(`/room/room.js?v=${__ROOM_VERSION__}`) /* global __ROOM_VERSION__: set by scripts/build-room.mjs */.catch(() => { $('loading').textContent = 'The scene did not load.'; }); };
+  // The mannequin is the scene's other large file: its download starts with the scene's, not after it (frontend audit:
+  // the scene caption is the page's LCP). The scene takes the bytes from window.__mannequin (site/room/main.js).
+  const start = () => { $('loading').hidden = false; window.__mannequin = fetch(`/room/mannequin.glb?v=${__MANNEQUIN_VERSION__}`).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null); /* global __MANNEQUIN_VERSION__ */ import(`/room/room.js?v=${__ROOM_VERSION__}`) /* global __ROOM_VERSION__: set by scripts/build-room.mjs */.catch(() => { $('loading').textContent = 'The scene did not load.'; }); };
   afterLoad(start);
 }
