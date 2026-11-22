@@ -4,7 +4,7 @@
 //   one feed of the rooms) into public/home.js;
 // - the Performance page: site/performance/performance.js (the simulated track record) into public/performance.js;
 // - the Archive page: site/archive/archive.js (the published posts) into public/archive.js;
-// - the pages without a script of their own (About, Disclaimer, Privacy, Terms): site/page/page.js (the header's clock, the
+// - the pages without a script of their own (About, Disclaimer, Privacy, Terms, Sign in): site/page/page.js (the header's clock, the
 //   average strip, the public profile) into public/page.js;
 // - the cast directory into public/index.html, from site/room/data.js;
 // - the self-hosted fonts (Rajdhani, Newsreader; OFL, latin woff2 only) from @fontsource into public/fonts/;
