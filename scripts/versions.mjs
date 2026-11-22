@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 // named with their hash too, so an edit reaches a browser that opened them before.
 export const VERSIONED = Object.freeze(["home.css", "home.js", "performance.js", "archive.js", "page.js", "room/CREDITS.txt", "fonts/OFL.txt"]);
 // Every page that names one of these files (test/theme.test.mjs holds it), so the build rewrites its hashes.
-export const VERSIONED_PAGES = Object.freeze(["index.html", "performance.html", "archive.html", "disclaimer.html", "privacy.html", "terms.html"]);
+export const VERSIONED_PAGES = Object.freeze(["index.html", "performance.html", "archive.html", "about.html", "disclaimer.html", "privacy.html", "terms.html"]);
 
 const pub = (p) => new URL(`../public/${p}`, import.meta.url);
 /** The first 12 hex characters of a public file's SHA-256. */
