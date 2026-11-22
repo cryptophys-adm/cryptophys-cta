@@ -110,6 +110,15 @@ ul{margin:0;padding:0;list-style:none}
      covering the headline (orchestrator review of #66) */
   .hero-copy{padding-top:106px}
 }
+/* a short wide window (orchestrator review of #66): the room for the strip stays, the copy's other gaps give way, so
+   the hero fits the window again with the scene's controls and the hero's buttons in view */
+@media (min-width:901px) and (max-height:720px){
+  .hero-copy{padding-bottom:24px}
+  .hero h1{font-size:var(--s4)}
+  .lede{margin-top:20px;line-height:1.6}
+  .caveat{margin-top:12px}
+  .hero-actions{margin-top:24px}
+}
 .caveat{margin-top:18px;font-style:italic;color:var(--slate)}
 .hero-actions{margin-top:40px;display:flex;flex-wrap:wrap;gap:12px}
 @media (prefers-reduced-motion:no-preference){

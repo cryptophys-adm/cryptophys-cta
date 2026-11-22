@@ -63,7 +63,12 @@ test("GD5 the TradingView quote: at the hero's top left only (outside the header
   assert.match(home, /addEventListener\('resize', placeQuote/, "a height-only resize places it again");
   // orchestrator review of #66: the lede's cap and the room for the strip only on a wide screen; no nav tracking on a tablet
   assert.match(css, /@media \(min-width:901px\)\{\n  \.hero \.lede\{max-width:min\(27em,46vw\)\}[\s\S]*?\.hero-copy\{padding-top:106px\}\n\}/, "a phone's lede keeps the full width; a short window grows the hero instead of covering the headline");
-  assert.doesNotMatch(css.replace(/@media \(min-width:901px\)\{[\s\S]*?\n\}/, ""), /\.hero \.lede\{max-width/, "no lede cap outside the wide-screen block");
+  const lede = [...css.matchAll(/\.hero \.lede\{max-width:[^}]*\}/g)];
+  assert.equal(lede.length, 1, "one lede cap");
+  const before = css.slice(css.lastIndexOf("@media", lede[0].index), lede[0].index);
+  assert.ok(before.startsWith("@media (min-width:901px){\n") && !before.includes("}\n}"), "the lede cap sits inside the wide-screen block");
+  // a short wide window: the strip's room stays, the copy's gaps give way so the hero's controls stay in view
+  assert.match(css, /@media \(min-width:901px\) and \(max-height:720px\)\{\n  \.hero-copy\{padding-bottom:24px\}\n  \.hero h1\{font-size:var\(--s4\)\}/, "the short-window step");
   assert.match(css, /@media \(max-width:900px\)\{\.nav a\{letter-spacing:normal\}\}/, "the tablet header keeps the room it had");
   assert.match(home, /\$\('gold-live'\)\.hidden = false;\n\s*placeQuote\(\);/);
   // The URL TradingView's own embed script gives its frame: OANDA:XAUUSD, dark, transparent, English.
