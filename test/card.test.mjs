@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { cardHtml, chartOf, panelLines, widgetConfig, chartHeightFor } from "../src/card.mjs";
-import { renderCard, toBase64, fromBase64, MIN_CARD_BYTES } from "../src/render.mjs";
+import { renderCard, chartFrame, toBase64, fromBase64, MIN_CARD_BYTES } from "../src/render.mjs";
 import { BRANDS } from "../src/brands.mjs";
 import { addDrafts, getDraft, decideDraft, attachImage, mediaOf, draftsNeedingImage } from "../src/desk.mjs";
 import { analysisDrafts, ANALYSIS_DISCLAIMER } from "../src/analysis-drafts.mjs";
@@ -70,7 +70,7 @@ test("the screenshot: waits for TradingView's canvas and the panel's fit; refuse
   const ok = fakeBrowser();
   const bytes = await renderCard(draft, brand, { launch: ok.launch, sleep: async () => {} });
   assert.equal(bytes[0], 0xff);
-  assert.deepEqual(ok.calls, [["viewport", 1080, 1350], ["content", true, "networkidle0"], ["wait", "canvas"], ["shot", "jpeg", 85]]);
+  assert.deepEqual(ok.calls, [["viewport", 1080, 1350], ["content", true, "load"], ["wait", "canvas"], ["shot", "jpeg", 85]]);
   assert.ok(ok.browser.closed);
   for (const [opts, re] of [[{ frame: false }, /chart did not load/], [{ fit: "overflow" }, /does not fit/], [{ shot: new Uint8Array([0xff, 0xd8, 1]) }, /too small/]]) {
     const f = fakeBrowser(opts);
@@ -78,6 +78,12 @@ test("the screenshot: waits for TradingView's canvas and the panel's fit; refuse
     assert.ok(f.browser.closed, "the browser is closed on failure too");
   }
   await assert.rejects(renderCard(draft, brand, {}), /no browser/);
+  // The widget's frame appears after the page's load event: polled, not read once.
+  let reads = 0;
+  const late = { frames: () => (++reads < 4 ? [{ url: () => "about:blank" }] : [{ url: () => "https://www.tradingview-widget.com/embed-widget/advanced-chart/" }]) };
+  assert.match((await chartFrame(late, { timeoutMs: 1000, sleep: async () => {} })).url(), /tradingview/);
+  assert.equal(reads, 4);
+  assert.equal(await chartFrame({ frames: () => [] }, { timeoutMs: 1000, sleep: async () => {} }), null, "no frame within the timeout");
   const round = fromBase64(toBase64(bytes));
   assert.deepEqual([...round], [...bytes]);
 });

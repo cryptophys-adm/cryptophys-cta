@@ -18,8 +18,11 @@ export async function renderCard(draft, brand, { launch, disclaimers = [], timeo
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: CARD_WIDTH, height: CARD_HEIGHT, deviceScaleFactor: 1 });
-    await page.setContent(html, { waitUntil: "networkidle0", timeout: timeoutMs });
-    const frame = page.frames().find((f) => /tradingview/i.test(f.url()));
+    // "load", not "networkidle0": TradingView's widget keeps its data connections open, so the network is often never
+    // idle for half a second and the card failed with "Navigation timeout of 30000 ms exceeded" (2026-11-16 to 11-19,
+    // Threads, Instagram and YouTube drafts). What the card needs is waited for below: the chart's frame, then its canvas.
+    await page.setContent(html, { waitUntil: "load", timeout: timeoutMs });
+    const frame = await chartFrame(page, { timeoutMs, sleep });
     if (!frame) throw new Error("the TradingView chart did not load");
     await frame.waitForSelector("canvas", { timeout: timeoutMs });
     await sleep(settleMs);
@@ -49,6 +52,16 @@ export async function renderCard(draft, brand, { launch, disclaimers = [], timeo
   } finally {
     await browser.close().catch(() => {});
   }
+}
+
+/** The TradingView widget's frame, which its embed script adds after the page loads; polled every 250 ms up to the timeout. */
+export async function chartFrame(page, { timeoutMs = 30_000, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), everyMs = 250 } = {}) {
+  for (let i = 0, n = Math.max(1, Math.ceil(timeoutMs / everyMs)); i <= n; i++) {
+    const frame = page.frames().find((f) => /tradingview/i.test(f.url()));
+    if (frame) return frame;
+    if (i < n) await sleep(everyMs);
+  }
+  return null;
 }
 
 /** Base64 of bytes (the desk keeps the card as text: one form for the Durable Object and node:sqlite). */
