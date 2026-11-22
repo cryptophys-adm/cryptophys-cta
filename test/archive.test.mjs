@@ -52,7 +52,7 @@ test("AR2 the page: the shared header and footer, its words kept, the list prelo
   // the list: preloaded with the very URL the script asks for, held open (aria-busy) until it is drawn
   assert.equal(ARCHIVE_URL, "/api/public/archive?limit=100");
   assert.match(html, /<link rel="preload" href="\/api\/public\/archive\?limit=100" as="fetch" crossorigin>/);
-  assert.match(html, /<div class="a-list" id="archive" role="tabpanel" aria-labelledby="kind-all" tabindex="0" aria-busy="true"><\/div>/, "no empty line while loading; the list is the tabs' panel (focusable and labelled, TH17)");
+  assert.match(html, /<div class="a-list" id="archive" role="tabpanel" aria-busy="true"><\/div>/, "no empty line while loading; the list is the tabs' panel (focusable and labelled once the tabs are drawn, TH17)");
   const src = read("site/archive/archive.js");
   assert.match(src, /fetch\(ARCHIVE_URL\)/, "a plain fetch of the preloaded URL");
   assert.match(src, /removeAttribute\('aria-busy'\)/);

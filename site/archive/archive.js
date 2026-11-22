@@ -15,7 +15,8 @@ const make = (tag, cls, text) => { const n = document.createElement(tag); if (cl
 const state = { posts: [], kind: '', label: {} };
 
 // The tabs are built once and then only marked, so the focused tab keeps focus (click, Enter, Space, a screen
-// reader's double tap); the list is their tabpanel.
+// reader's double tap); the list is their tabpanel, a tab stop labelled by the chosen tab only once the tabs exist (before
+// they are drawn, and without a script, it is neither: review of #69).
 const TAB_ID = (k) => `kind-${k || 'all'}`;
 function drawTabs() {
   const box = $('kinds');
@@ -36,6 +37,7 @@ function drawTabs() {
     b.querySelector('.c').textContent = String(t.count);
   }
   $('archive').setAttribute('aria-labelledby', TAB_ID(state.kind));
+  $('archive').tabIndex = 0;
 }
 
 function render() {

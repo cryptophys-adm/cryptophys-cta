@@ -9,6 +9,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { VERSIONED, VERSIONED_PAGES } from "../scripts/versions.mjs";
 import { applyProfile, profileView, PROFILE_URL } from "../site/page/profile.js";
+import { ANSWERS, layoutHash, fromRuns } from "../scripts/track-heights.mjs";
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 const THEME_PAGES = VERSIONED_PAGES;
@@ -302,7 +303,7 @@ const cssRules = (css) => [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => 
 /** The body of the @media block that opens with `head` (one level of nesting). */
 const mediaBlock = (css, head) => { const a = css.indexOf(`${head}{`); assert.ok(a >= 0, head); const end = css.indexOf("\n}\n", a); return css.slice(a + head.length + 1, end); };
 
-test("TH14 Performance without layout shift (C1): the record is preloaded, its box holds the drawn table's height while it loads, a plain fetch", async () => {
+test("TH14 Performance without layout shift (C1; review of #69): the record is preloaded, its box holds the drawn shape's height while it loads, then holds nothing", async () => {
   const { TRACK_URL } = await import("../site/home/track.js");
   const html = page("performance.html"), src = read("site/performance/performance.js"), css = read("public/home.css");
   assert.equal(TRACK_URL, "/api/public/track-record");
@@ -315,17 +316,24 @@ test("TH14 Performance without layout shift (C1): the record is preloaded, its b
   assert.doesNotMatch(block(html, '<div class="track-box"', '\n  </div>\n'), /id="track-body" hidden/, "the table is not display:none while loading");
   assert.match(css, /\n\.track-box\{display:flow-root\}\n/, "the box is shown and contains its children's margins");
   assert.match(css, /\n\.track-box\[aria-busy="true"\] #track-body\{visibility:hidden\}\n/, "unseen while loading, yet taking its room");
-  // the rows' height while loading: the drawn table's (desktop, each band of the pending note's wrapping) and the phone's rows and counts
-  const held = [...css.matchAll(/\.track-box\[aria-busy="true"\] \.track\{height:(\d+)px\}/g)].map((m) => Number(m[1]));
-  assert.deepEqual(held, [398, 421, 444, 467], "the table held at its drawn height from 761 px up");
+  // without a script the record never comes: the table is not laid out, so no room is held under "Loading the record."
+  assert.match(css, /\n@media \(scripting:none\)\{\.track-box\[aria-busy="true"\] #track-body\{display:none\}\}\n/);
+  // from 761 px the columns have fixed widths, so a pending managed exit's note does not widen its column and wrap the
+  // others: both shapes draw one table height (397.72 px, TH20), held while loading, with no band per wrap of the note
+  assert.match(css, /\n@media \(min-width:761px\)\{\n {2}\.track\{table-layout:fixed\}\n {2}\.track thead th:first-child\{width:24%\}\n\}\n/);
+  const held = [...css.matchAll(/\.track-box\[aria-busy="true"\] \.track\{height:([\d.]+)px\}/g)].map((m) => Number(m[1]));
+  assert.deepEqual(held, [397.72], "one held table height from 761 px up");
+  // a phone: the pending managed exit's rows and column counts (the record's shape today, and the shorter one)
   const phone = mediaBlock(css, "/* a phone: the table becomes label and value rows */\n@media (max-width:760px)");
   assert.match(phone, /\.track-box\[aria-busy="true"\] \.track\{height:auto\}/);
-  assert.match(phone, /\.track-box\[aria-busy="true"\] \.bases\{min-height:77px\}/);
-  assert.match(phone, /\.track-box\[aria-busy="true"\] #track-rows\{min-height:723px\}/);
-  // drawn: the held height is read before the drawing and kept as the box's floor, then the box is no longer busy
+  assert.match(phone, /\.track-box\[aria-busy="true"\] \.bases\{min-height:51px\}/);
+  assert.match(phone, /\.track-box\[aria-busy="true"\] #track-rows\{min-height:608\.2px\}/);
+  assert.match(css, /\n@media \(max-width:470px\)\{\.track-box\[aria-busy="true"\] #track-rows\{min-height:633\.7px\}\}\n/, "the pending note on two lines");
+  // drawn: then no longer busy, in the same task, and no floor kept (a floor left the drawn record over a screen of blank)
   const done = src.slice(src.indexOf(".then((body) => {"));
-  const order = ["getBoundingClientRect().height", "draw(body)", "box.style.minHeight = `${held}px`", "removeAttribute('aria-busy')"].map((s) => done.indexOf(s));
-  assert.ok(order.every((i, k) => i > 0 && (k === 0 || i > order[k - 1])), `the floor is read before the drawing (${order})`);
+  const order = ["draw(body)", "renderAvgStrip(body)", "removeAttribute('aria-busy')"].map((s) => done.indexOf(s));
+  assert.ok(order.every((i, k) => i > 0 && (k === 0 || i > order[k - 1])), `drawn, then no longer busy (${order})`);
+  assert.doesNotMatch(src, /minHeight|min-height|getBoundingClientRect|addEventListener\('resize'/, "no floor, nothing measured, nothing released on a resize");
   assert.match(src, /\$\('track-body'\)\.hidden = true;/, "without a record the table stays hidden (the empty line shows)");
 });
 
@@ -339,14 +347,28 @@ test("TH15 forced colours (C2): the page's own link underlined, focus in Highlig
   assert.match(rule(".kinds button,.rooms button"), /border-bottom-color:Canvas/, "the tabs not chosen carry no rule");
   assert.match(rule('.kinds button[aria-selected="true"],.rooms button[aria-selected="true"]'), /border-bottom-color:Highlight/, "the chosen tab does");
   assert.match(rule('.chip[aria-pressed="true"]'), /forced-color-adjust:none;background:Highlight;color:HighlightText/, "a pressed chip's fill");
-  assert.match(rule(".status-reading .tick,.tally b"), /forced-color-adjust:none;background:CanvasText/, "the stance tick and the tally's bars are fills: kept as bars");
+  // the stance tick and the tally's bars are fills: kept as bars. Each tone class is named in the block, so the theme's
+  // .status-reading .tick.bear (0,3,0) and .tally .bear (0,2,0) do not outrank the bar and keep a theme colour that reads
+  // 3.15:1 or less on a white Canvas (review of #69)
+  const BAR = ".status-reading .tick,.status-reading .tick.bear,.status-reading .tick.bull,.tally b,.tally .bear,.tally .bull,.tally .flat";
+  assert.match(rule(BAR), /^forced-color-adjust:none;background:CanvasText$/);
+  // every theme rule that colours a tick or a tally bar has a bar here with its classes and at least its specificity
+  // (classes only: the block comes later, so a tie wins)
+  const classes = (sel) => sel.match(/\.[\w-]+/g) ?? [];
+  const theme = cssRules(css.slice(0, css.indexOf("@media (forced-colors:active)"))).filter(([, body]) => /background:var\(--(bear|bull|flat)\)/.test(body));
+  const marks = theme.flatMap(([sel]) => sel.split(",")).filter((sel) => /\.(tick|tally)\b/.test(sel));
+  assert.ok(marks.length >= 6, `the theme's coloured marks (${marks})`);
+  for (const sel of marks) {
+    assert.doesNotMatch(sel, /#|\[/, `${sel}: classes only`);
+    assert.ok(BAR.split(",").some((bar) => classes(sel).every((c) => classes(bar).includes(c)) && classes(bar).length >= classes(sel).length), `${sel}: a forced-colours bar as specific, later`);
+  }
   // About's never list: the dash is a border (kept by forced colours), not a fill (repainted to Canvas) — review of #68
   const never = cssRules(css).find(([s]) => s === ".page .never li::before")[1];
   assert.match(never, /height:0;border-top:2px solid var\(--slate\)/);
   assert.doesNotMatch(never, /background/, "no fill for the marker");
 });
 
-test("TH16 the shared profile (C3): Performance and the Archive write the Threads links and the disclaimer through applyProfile, not their own code", () => {
+test("TH16 the shared profile (C3): Performance writes the Threads links, the Archive the Threads links and the disclaimer, through applyProfile, not their own code", () => {
   for (const f of ["site/performance/performance.js", "site/archive/archive.js"]) {
     const src = read(f);
     assert.match(src, /^import \{ applyProfile, PROFILE_URL \} from '\.\.\/page\/profile\.js';$/m, `${f}: the shared profile`);
@@ -366,10 +388,14 @@ test("TH16 the shared profile (C3): Performance and the Archive write the Thread
 test("TH17 the Archive's tabs (C4): a roving tabindex on the tablist, the panel focusable and labelled by its tab, each day by its heading", () => {
   const html = page("archive.html"), src = read("site/archive/archive.js");
   assert.match(html, /<div class="kinds" id="kinds" role="tablist" aria-label="Kind of post"><\/div>/);
-  assert.match(html, /<div class="a-list" id="archive" role="tabpanel" aria-labelledby="kind-all" tabindex="0" aria-busy="true"><\/div>/, "the panel, labelled by All posts before the tabs are drawn");
+  // before the tabs are drawn, and without a script, the panel is neither a tab stop nor named after a tab that is not
+  // there (review of #69): drawTabs() makes it both
+  assert.match(html, /<div class="a-list" id="archive" role="tabpanel" aria-busy="true"><\/div>/, "no tabindex, no aria-labelledby in the page");
   assert.match(src, /const TAB_ID = \(k\) => `kind-\$\{k \|\| 'all'\}`;/, "kind-all is the All posts tab's id");
   assert.match(src, /b\.tabIndex = t\.selected \? 0 : -1;/, "one tab in the tab order: the selected one");
-  assert.match(src, /\$\('archive'\)\.setAttribute\('aria-labelledby', TAB_ID\(state\.kind\)\)/);
+  const draw = src.slice(src.indexOf("function drawTabs() {"), src.indexOf("\n}\n", src.indexOf("function drawTabs() {")));
+  assert.match(draw, /\n {2}\$\('archive'\)\.setAttribute\('aria-labelledby', TAB_ID\(state\.kind\)\);\n {2}\$\('archive'\)\.tabIndex = 0;$/, "labelled and focusable once the tabs exist");
+  assert.equal([...src.matchAll(/\$\('archive'\)\.(tabIndex|setAttribute\('aria-labelledby')/g)].length, 2, "only there");
   assert.match(src, /h2\.id = `day-\$\{i\}`;\n {4}sec\.setAttribute\('aria-labelledby', h2\.id\);/, "a day is labelled by its own h2");
   assert.doesNotMatch(src, /setAttribute\('aria-label', d\.day\)/);
   assert.match(read("public/home.css"), /\n\.a-list:focus-visible\{outline-offset:8px\}\n/);
@@ -406,4 +432,28 @@ test("TH19 About's step numbers use a preloaded weight (review of #68: Rajdhani 
   assert.deepEqual(preloaded, [600]);
   assert.ok(preloaded.includes(weight), `the numbers' weight ${weight} is preloaded`);
   assert.equal(weight, 600);
+});
+
+test("TH20 the record draws at the room held for it (review of #69): pending and shown never more than 2 px shorter, pending at it, 320 to 1600 px", async () => {
+  // test/fixtures/track-heights.json: the box's height at every width while the record loads and once each answer is
+  // drawn, measured in headless Chromium by scripts/track-heights.mjs from the layout as it is now (a change to the
+  // Performance rules, the page's <main>, its script or trackModel needs a new measure)
+  const { trackModel } = await import("../site/home/track.js");
+  const f = JSON.parse(read("test/fixtures/track-heights.json"));
+  assert.equal(f.layout, layoutHash(), "measured from the current layout: run scripts/track-heights.mjs");
+  // the answers measured: the live record with the managed exit pending, the same with it shown, and no record
+  assert.deepEqual(trackModel(ANSWERS.pending).columns.map((c) => c.shown), [true, true, false]);
+  assert.deepEqual(trackModel(ANSWERS.shown).columns.map((c) => c.shown), [true, true, true]);
+  assert.equal(trackModel(ANSWERS.none).available, false);
+  const held = fromRuns(f.held), pending = fromRuns(f.pending), shown = fromRuns(f.shown), none = fromRuns(f.none);
+  for (let w = 320; w <= 1600; w++) {
+    for (const [name, m] of [["pending", pending], ["shown", shown]]) {
+      assert.ok(m.get(w) >= held.get(w) - 2, `${w} px, ${name}: drawn ${m.get(w)} under the ${held.get(w)} held (a gap below the record)`);
+    }
+    assert.ok(Math.abs(pending.get(w) - held.get(w)) <= 1, `${w} px: the live shape draws at the room held (${pending.get(w)} vs ${held.get(w)})`);
+    // the table's two shapes are one height from 761 px up, where the page below is in view
+    if (w > 760) assert.ok(Math.abs(shown.get(w) - held.get(w)) <= 1, `${w} px: shown at the room held`);
+    // no record: one line, so the page below moves up once (the shrink the review accepts, rather than a screen of blank)
+    assert.ok(none.get(w) < 100, `${w} px: no record is one line (${none.get(w)})`);
+  }
 });

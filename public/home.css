@@ -395,16 +395,22 @@ ul{margin:0;padding:0;list-style:none}
 .terms dt{font:600 var(--s0)/1.2 var(--display)}
 .terms dd{margin:4px 0 0;color:var(--slate)}
 .page .fine{margin-top:40px;font-style:italic;color:var(--slate);max-width:62em;padding-top:20px;border-top:1px solid var(--rule)}
-/* the record's box (the one-theme backlog, PR 3, C1): while the record loads (aria-busy) the box is laid out as the drawn
-   table, unseen: the column heads and the footnote in their own words, the rows and the column counts held at the
-   height they take once drawn (the taller of a shown and a pending managed exit), so the terms, the note and the
-   footer never move; the script keeps that height as the box's floor */
+/* the record's box (the one-theme backlog, PR 3, C1; review of #69): while the record loads (aria-busy) the box is laid
+   out as the drawn table, unseen: the column heads and the footnote in their own words, the rows and the column counts
+   held at the height the record's shape takes once drawn, so the terms, the note and the footer do not move. From 761 px
+   the columns have fixed widths (the label's 24 %, the rest shared), so a pending managed exit's note no longer widens
+   its column and wraps the others: a pending and a shown managed exit draw the same 397.72 px table at every width. On a
+   phone the hold is the pending managed exit's (the record's shape today, and the shorter one): a shown managed exit
+   adds its four lines below it, under the fold. The script holds nothing once it has drawn; an empty or failed record
+   is one line, so that one shrinks. Without a script the record never comes: no room is held */
 .track-box{display:flow-root}
 .track-box[aria-busy="true"] #track-body{visibility:hidden}
-.track-box[aria-busy="true"] .track{height:398px}
-@media (min-width:900px) and (max-width:959px){.track-box[aria-busy="true"] .track{height:421px}}
-@media (min-width:800px) and (max-width:899px){.track-box[aria-busy="true"] .track{height:444px}}
-@media (min-width:761px) and (max-width:799px){.track-box[aria-busy="true"] .track{height:467px}}
+.track-box[aria-busy="true"] .track{height:397.72px}
+@media (scripting:none){.track-box[aria-busy="true"] #track-body{display:none}}
+@media (min-width:761px){
+  .track{table-layout:fixed}
+  .track thead th:first-child{width:24%}
+}
 /* a phone: the table becomes label and value rows */
 @media (max-width:760px){
   .page{padding-top:48px}
@@ -425,10 +431,11 @@ ul{margin:0;padding:0;list-style:none}
   .track td.pending::before{font:500 var(--s0)/1.2 var(--display);font-style:normal}
   .terms{grid-template-columns:1fr}
   .track-box[aria-busy="true"] .track{height:auto}
-  .track-box[aria-busy="true"] .bases{min-height:77px}
-  .track-box[aria-busy="true"] #track-rows{min-height:723px}
+  .track-box[aria-busy="true"] .bases{min-height:51px}
+  .track-box[aria-busy="true"] #track-rows{min-height:608.2px}
 }
-@media (max-width:340px){.track-box[aria-busy="true"] .bases{min-height:102px}}
+/* the pending note takes two lines beside its label from 470 px down */
+@media (max-width:470px){.track-box[aria-busy="true"] #track-rows{min-height:633.7px}}
 
 /* the header's average strip (owner 2026-11-20): one quiet link beside the clock, Nexus colours on the values only */
 .avg-strip{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 0 0 16px;border-left:1px solid var(--rule);color:var(--slate);text-decoration:none;font-family:var(--display);white-space:nowrap;flex:none}
@@ -507,8 +514,9 @@ ul{margin:0;padding:0;list-style:none}
 /* ---------- forced colours (Windows high contrast; the one-theme backlog, PR 3, C2): the system repaints every colour
    and drops box shadows and fills, so each mark the theme makes with colour alone gets a shape the system keeps: the
    page's own link is underlined, focus is the Highlight ring, the selected tab (and only it) carries a Highlight rule,
-   a pressed chip is filled with Highlight, and the room's reading tick and the tally keep their bars; the header is
-   opaque, so the text it scrolls over does not show through ---------- */
+   a pressed chip is filled with Highlight, and the room's reading tick and the tally keep their bars (each tone class
+   named, so the theme's .tick.bear and .tally .bear do not outrank the bar); the header is opaque, so the text it
+   scrolls over does not show through ---------- */
 @media (forced-colors:active){
   .top{background:Canvas}
   .nav a[aria-current],.foot a[aria-current]{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px}
@@ -516,7 +524,7 @@ ul{margin:0;padding:0;list-style:none}
   .kinds button,.rooms button{border-bottom-color:Canvas}
   .kinds button[aria-selected="true"],.rooms button[aria-selected="true"]{border-bottom-color:Highlight}
   .chip[aria-pressed="true"]{forced-color-adjust:none;background:Highlight;color:HighlightText;border-color:Highlight}
-  .status-reading .tick,.tally b{forced-color-adjust:none;background:CanvasText}
+  .status-reading .tick,.status-reading .tick.bear,.status-reading .tick.bull,.tally b,.tally .bear,.tally .bull,.tally .flat{forced-color-adjust:none;background:CanvasText}
 }
 
 /* ---------- About (the one-theme backlog, PR 2): its own rules, not the home page's .steps, so the grid of #how stays
