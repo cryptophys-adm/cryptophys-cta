@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-22 (scene weight)
+- perf(room): the scene weighs less (frontend audit, owner approved; the 3D room and its look unchanged). The mannequin is quantized (`KHR_mesh_quantization`; 478 KB to 266 KB, the same mesh and skeleton) and phones and small GPUs (the scene's LOW, `site/room/quality.js`) take `mannequin-lo.glb`, about half the triangles (157 KB); both are built from `site/room/mannequin.source.glb` by `npm run build:mannequin` (glTF Transform and meshoptimizer, dev dependencies; plain glTF, no decoder, so the CSP is unchanged). three.js moves into its own chunk `public/room/three-<hash>.js` (645 KB, kept a year) and the scene's own file `room.js` drops from 671 KB to 44 KB, so a scene-only deploy re-sends 44 KB. Headless Chromium: the scene loads on desktop and phone with no console errors, each with its own mannequin. Tests RM4, RM11, RM12; screenshots `docs/screenshots/scene-weight/`.
+
 ## 2026-11-22 (caching)
 - perf(site): a year in the browser for the files that change only with a deploy (frontend audit, owner approved; no public text changed). `public/_headers` keeps `/room/*`, `/fonts/*`, `/home.css`, `/home.js` and `/performance.js` for a year (`immutable`; before: max-age 0, the scene and mannequin an hour). Each is named with its hash: `?v=` on home.css, home.js and performance.js in `index.html` and `performance.html` (`scripts/versions.mjs`, written by `npm run build:room`), on the scene as before and now on the mannequin. The home page starts the mannequin's download with the scene's instead of after it (one request; the scene parses the bytes). The scene's caption `#sub` loses `aria-live`, so a screen reader is not read every rotating line. Test RM11; TK6 accepts the hash.
 

@@ -13,6 +13,7 @@ const pub = (p) => new URL(`../public/${p}`, import.meta.url);
 /** The first 12 hex characters of a public file's SHA-256. */
 export const versionOf = (file) => createHash("sha256").update(readFileSync(pub(file))).digest("hex").slice(0, 12);
 export const mannequinVersion = () => versionOf("room/mannequin.glb");
+export const mannequinLoVersion = () => versionOf("room/mannequin-lo.glb");
 
 /** The page with each versioned file's `href`/`src` carrying that file's current hash. */
 export function withVersions(html, version = versionOf) {
