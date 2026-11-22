@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-22 (metadata)
+- feat(site): head metadata and root files (frontend audit, owner approved; no visible text changed). Every public page gets its canonical URL, the icons and Open Graph and Twitter tags from its own title and description; `favicon.svg` is the header's brand mark (gold on the vault), with `favicon.ico` (32 px) and `apple-touch-icon.png` (180 px) rendered from it, ending the `/favicon.ico` 404. `robots.txt` (before: only Cloudflare's comments) keeps the studio and sign-in out and names `sitemap.xml` (before: 404), which lists the seven public pages. The home page carries schema.org `WebSite` and `Organization` (name, url, sameAs Threads) as microdata on its existing markup. No share image and no llms.txt (the owner's call). Tests MD1 to MD3.
+
 ## 2026-11-22 (card render)
 - fix(render): the card page loads with `waitUntil: "load"`, then waits for TradingView's frame (polled every 250 ms) and its canvas, instead of `networkidle0`. TradingView's widget keeps its data connections open, so the network was often never idle and cards and videos failed with "Navigation timeout of 30000 ms exceeded" (from 2026-11-16: the recaps of 16 and 18 November, a War Room post on Threads, Instagram and YouTube drafts). Test `chartFrame`.
 
