@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /studio
+Disallow: /api/studio/
+Disallow: /signin
+
+Sitemap: https://cta.cryptophys.work/sitemap.xml

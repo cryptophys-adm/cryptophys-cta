@@ -256,10 +256,12 @@ test("RM11 the pages name this build of their files (a year in the cache); the s
   }
   assert.match(read("public/index.html"), /src="\/home\.js\?v=[0-9a-f]{12}"/);
   assert.match(read("public/index.html"), /href="\/home\.css\?v=[0-9a-f]{12}"/);
+  assert.match(read("public/index.html"), /href="\/room\/CREDITS\.txt\?v=[0-9a-f]{12}"/, "the credits, kept a year under /room/*, carry their hash");
+  for (const p of ["public/index.html", "public/performance.html"]) assert.match(read(p), /href="\/fonts\/OFL\.txt\?v=[0-9a-f]{12}"/, `${p}: the font licences carry their hash`);
   const v = mannequinVersion();
   for (const p of ["public/room/room.js", "public/home.js"]) assert.ok(read(p).includes(`/room/mannequin.glb?v=${v}`), `${p} names the mannequin with its hash`);
   const h = read("public/_headers");
-  for (const path of ["/room/*", "/fonts/*", ...VERSIONED.map((f) => `/${f}`)]) {
+  for (const path of new Set(["/room/*", "/fonts/*", ...VERSIONED.map((f) => (f.includes("/") ? `/${f.split("/")[0]}/*` : `/${f}`))])) {
     const at = h.split("\n").findIndex((l) => l === path);
     assert.ok(at > 0, `_headers has a rule for ${path}`);
     assert.equal(h.split("\n")[at + 1].trim(), "Cache-Control: public, max-age=31536000, immutable", path);
