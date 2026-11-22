@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { SECURITY_HEADERS } from "../src/app.mjs";
 import { checkContentDraft } from "../src/guardian.mjs";
-import { GOLD_PRICE_IDS, TV_FRAME_HOST, TV_QUOTE_SETTINGS, tvQuoteSrc } from "../site/home/gold.js";
+import { GOLD_PRICE_IDS, TV_FRAME_HOST, TV_QUOTE_SETTINGS, tvQuoteSrc, quoteTop } from "../site/home/gold.js";
 import { safeLine } from "../site/room/script.js";
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
@@ -51,13 +51,21 @@ test("GD5 the TradingView quote: at the hero's top left only (outside the header
   assert.doesNotMatch(read("site/room/main.js"), /gold-live|placeGold/, "the scene never places the quote");
   const css = read("public/home.css");
   assert.match(css, /\.gold-live\{position:absolute;z-index:3;left:calc\(max\(0px, \(100% - var\(--wrap\)\) \/ 2\) \+ var\(--gut\)\);top:clamp\(16px,3vh,32px\);/, "an overlay (it shifts nothing) at the hero's top left, on the copy's left edge");
-  assert.match(css, /\.tv-frame\{height:calc\(62px \* var\(--lens-k\)\);overflow:hidden\}/, "the quote's rows only");
+  assert.match(css, /\.tv-frame\{flex:0 0 340px;height:60px;overflow:hidden\}/, "the quote's one row: XAUUSD in full, price and change on one line (owner 2026-11-22)");
+  assert.match(css, /\.tv-frame iframe\{display:block;width:340px;height:60px;/);
+  assert.match(css, /\.gold-live\{[^}]*display:flex;align-items:center;/, "the credit beside the quote on a wide screen");
+  // On a wide screen the strip sits right above the headline: the page measures and places it (the scene never does).
+  assert.equal(quoteTop({ titleTop: 300, height: 62 }), 210, "28 px above the headline");
+  assert.equal(quoteTop({ titleTop: 60, height: 62 }), 16, "never above the scene's top edge");
+  assert.equal(quoteTop({ titleTop: NaN, height: 62 }), null);
+  assert.match(home, /if \(!WIDE\?\.matches\) \{ g\.style\.removeProperty\('top'\); return; \}/, "a phone keeps the CSS place");
+  assert.match(home, /\$\('gold-live'\)\.hidden = false;\n\s*placeQuote\(\);/);
   // The URL TradingView's own embed script gives its frame: OANDA:XAUUSD, dark, transparent, English.
   const u = new URL(tvQuoteSrc("cta.cryptophys.work/"));
   assert.equal(u.origin, TV_FRAME_HOST);
   assert.equal(u.pathname, "/embed-widget/single-quote/");
   assert.equal(u.searchParams.get("locale"), "en");
-  assert.deepEqual(JSON.parse(decodeURIComponent(u.hash.slice(1))), { symbol: "OANDA:XAUUSD", width: "100%", colorTheme: "dark", isTransparent: true, height: 101, "page-uri": "cta.cryptophys.work/" });
+  assert.deepEqual(JSON.parse(decodeURIComponent(u.hash.slice(1))), { symbol: "OANDA:XAUUSD", width: "100%", colorTheme: "dark", isTransparent: true, height: 60, "page-uri": "cta.cryptophys.work/" });
   assert.equal(TV_QUOTE_SETTINGS.symbol, "OANDA:XAUUSD");
   // The CSP: one frame host added, the widget frame's; no script, style or connect host.
   const csp = Object.fromEntries(SECURITY_HEADERS["content-security-policy"].split(";").map((d) => d.trim().split(/\s+/)).map(([k, ...v]) => [k, v.join(" ")]));
