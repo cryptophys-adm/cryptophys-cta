@@ -185,11 +185,16 @@ function placeQuote() {
   const g = $('gold-live'), h = $('hero-title'), hero = h?.closest('.hero');
   if (!g || g.hidden || !hero) return;
   if (!WIDE?.matches) { g.style.removeProperty('top'); return; }
-  const top = quoteTop({ titleTop: h.getBoundingClientRect().top - hero.getBoundingClientRect().top, height: g.offsetHeight });
+  // offsetTop ignores transforms: the headline's rise animation (translateY 8px) does not move the measure.
+  let titleTop = 0;
+  for (let n = h; n && n !== hero; n = n.offsetParent) titleTop += n.offsetTop;
+  const top = quoteTop({ titleTop, height: g.offsetHeight });
   if (top != null) g.style.top = `${top}px`;
 }
 if ($('gold-live')) {
-  window.ResizeObserver && new ResizeObserver(placeQuote).observe($('hero-title')?.closest('.hero') ?? document.body);
+  const ro = window.ResizeObserver && new ResizeObserver(placeQuote);
+  for (const el of [$('hero-title')?.closest('.hero'), $('hero-title')?.closest('.hero-copy')]) if (el) ro?.observe(el);
+  window.addEventListener('resize', placeQuote, { passive: true });
   WIDE?.addEventListener?.('change', placeQuote);
 }
 

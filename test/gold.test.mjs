@@ -59,6 +59,12 @@ test("GD5 the TradingView quote: at the hero's top left only (outside the header
   assert.equal(quoteTop({ titleTop: 60, height: 62 }), 16, "never above the scene's top edge");
   assert.equal(quoteTop({ titleTop: NaN, height: 62 }), null);
   assert.match(home, /if \(!WIDE\?\.matches\) \{ g\.style\.removeProperty\('top'\); return; \}/, "a phone keeps the CSS place");
+  assert.match(home, /for \(let n = h; n && n !== hero; n = n\.offsetParent\) titleTop \+= n\.offsetTop;/, "measured without the headline's rise animation (offsetTop ignores transforms)");
+  assert.match(home, /addEventListener\('resize', placeQuote/, "a height-only resize places it again");
+  // orchestrator review of #66: the lede's cap and the room for the strip only on a wide screen; no nav tracking on a tablet
+  assert.match(css, /@media \(min-width:901px\)\{\n  \.hero \.lede\{max-width:min\(27em,46vw\)\}[\s\S]*?\.hero-copy\{padding-top:106px\}\n\}/, "a phone's lede keeps the full width; a short window grows the hero instead of covering the headline");
+  assert.doesNotMatch(css.replace(/@media \(min-width:901px\)\{[\s\S]*?\n\}/, ""), /\.hero \.lede\{max-width/, "no lede cap outside the wide-screen block");
+  assert.match(css, /@media \(max-width:900px\)\{\.nav a\{letter-spacing:normal\}\}/, "the tablet header keeps the room it had");
   assert.match(home, /\$\('gold-live'\)\.hidden = false;\n\s*placeQuote\(\);/);
   // The URL TradingView's own embed script gives its frame: OANDA:XAUUSD, dark, transparent, English.
   const u = new URL(tvQuoteSrc("cta.cryptophys.work/"));
