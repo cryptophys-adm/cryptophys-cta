@@ -72,6 +72,6 @@ test("LY3 the header's nav: the four links inline at every width, never folded o
   const css = read("public/home.css");
   assert.doesNotMatch(css, /\.nav[^{]*\{[^}]*display:none/, "the nav is never hidden");
   assert.match(css, /@media \(max-width:1299px\)\{[\s\S]*?\.nav a\{padding:0 7px;font-size:var\(--s-1\)\}/, "narrower: smaller type");
-  assert.match(css, /@media \(max-width:600px\)\{[\s\S]*?\.nav\{order:5;flex:1 0 100%/, "a phone: the links on their own row");
+  assert.match(css, /@media \(max-width:760px\)\{\n(?:(?!\n\}\n)[\s\S])*?\n {2}\.nav\{order:5;flex:1 0 100%/, "760 px and narrower (a phone and the 601 to 760 px band, theme PR 3, TH18): the links on their own row");
 });
 

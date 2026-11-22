@@ -6,6 +6,7 @@ import { archiveModel, tabsOf, ARCHIVE_URL } from './model.js';
 import { startClock } from '../home/header.js';
 import { renderAvgStrip } from '../home/avg-strip.js';
 import { TRACK_URL } from '../home/track.js';
+import { applyProfile, PROFILE_URL } from '../page/profile.js';
 
 startClock();
 
@@ -43,9 +44,11 @@ function render() {
   const box = $('archive');
   box.replaceChildren();
   if (m.empty) box.append(make('p', 'empty', m.empty));
-  for (const d of m.days) {
+  m.days.forEach((d, i) => {
+    // each day is labelled by its own heading (C4)
     const sec = make('section', 'a-day');
-    sec.setAttribute('aria-label', d.day);
+    const h2 = make('h2', null, d.day); h2.id = `day-${i}`;
+    sec.setAttribute('aria-labelledby', h2.id);
     const list = make('div', 'a-posts');
     for (const p of d.posts) {
       const art = make('article', 'a-post');
@@ -60,9 +63,9 @@ function render() {
       if (p.body) art.append(make('p', 'a-body', p.body));
       list.append(art);
     }
-    sec.append(make('h2', null, d.day), list);
+    sec.append(h2, list);
     box.append(sec);
-  }
+  });
   // With nothing to show at first (an empty or failed read) the list keeps the height it held while loading, so the
   // note and the footer do not jump up (orchestrator review of #63).
   if (box.hasAttribute('aria-busy')) box.classList.toggle('hold', !state.posts.length);
@@ -82,11 +85,11 @@ $('kinds').addEventListener('keydown', (e) => {
 });
 
 const json = (url) => fetch(url, { headers: { accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-const profile = json('/api/public/profile').then((p) => {
-  for (const l of p?.links ?? []) state.label[l.channel] = l.label;
-  if (p?.brand?.disclaimer) $('disclaimer').textContent = p.brand.disclaimer;
-  const threads = (p?.links ?? []).find((l) => l.channel === 'threads')?.url;
-  if (threads && /^https:\/\/www\.threads\.(net|com)\//.test(threads)) document.querySelectorAll('[data-threads]').forEach((a) => { a.href = threads; });
+// The profile: the channels' names for the posts, then the Threads links and the disclaimer through the shared
+// applyProfile (the one-theme backlog, PR 3, C3), as on the other pages.
+const profile = json(PROFILE_URL).then((p) => {
+  for (const l of Array.isArray(p?.links) ? p.links : []) if (l?.channel) state.label[l.channel] = l.label;
+  applyProfile(p);
 });
 // The same URL as the head's preload, so the browser uses that answer.
 Promise.all([profile, fetch(ARCHIVE_URL).then((r) => (r.ok ? r.json() : null)).catch(() => null)]).then(([, a]) => {

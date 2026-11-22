@@ -335,16 +335,23 @@ ul{margin:0;padding:0;list-style:none}
   .steps li::before{font-size:var(--s4)}
   .steps li::after{display:none}
 }
-/* a phone: the header takes two rows, the brand and the UTC clock over the four links in smaller type; Follow on
-   Threads stays in the hero, Studio sign in in the footer */
-@media (max-width:600px){
+/* two rows from 760 px down (the one-theme backlog, PR 3, C5): below about 752 px the four links no longer fit beside
+   the brand, the clock and Follow on Threads (Archive ran under the clock), so the header takes the phone's two rows
+   there too: the brand, the clock and Follow on Threads over the four links, each link a 44 px target (C4b); the
+   header stays under 100 px */
+@media (max-width:760px){
   :root{--top:100px}
   .top{flex-wrap:wrap;height:auto;row-gap:0;padding-top:6px;padding-bottom:2px}
-  .top .top-end{display:none}
-  .top-clock{min-width:0;padding-left:12px;margin-left:auto}
-  .top-clock span{display:none}
+  .top-clock{margin-left:auto}
   .nav{order:5;flex:1 0 100%;justify-content:space-between;margin:0;gap:0}
-  .nav a{padding:0 4px;min-height:40px;font-size:var(--s-1)}
+  .nav a{padding:0 4px;min-height:44px;font-size:var(--s-1)}
+}
+/* a phone: the brand and the UTC clock over the four links in smaller type; Follow on Threads stays in the hero,
+   Studio sign in in the footer */
+@media (max-width:600px){
+  .top .top-end{display:none}
+  .top-clock{min-width:0;padding-left:12px}
+  .top-clock span{display:none}
   .brand small{display:none}
   .hero h1{font-size:var(--s4)}
   .lede{font-size:var(--s0);line-height:1.72}
@@ -388,6 +395,16 @@ ul{margin:0;padding:0;list-style:none}
 .terms dt{font:600 var(--s0)/1.2 var(--display)}
 .terms dd{margin:4px 0 0;color:var(--slate)}
 .page .fine{margin-top:40px;font-style:italic;color:var(--slate);max-width:62em;padding-top:20px;border-top:1px solid var(--rule)}
+/* the record's box (the one-theme backlog, PR 3, C1): while the record loads (aria-busy) the box is laid out as the drawn
+   table, unseen: the column heads and the footnote in their own words, the rows and the column counts held at the
+   height they take once drawn (the taller of a shown and a pending managed exit), so the terms, the note and the
+   footer never move; the script keeps that height as the box's floor */
+.track-box{display:flow-root}
+.track-box[aria-busy="true"] #track-body{visibility:hidden}
+.track-box[aria-busy="true"] .track{height:398px}
+@media (min-width:900px) and (max-width:959px){.track-box[aria-busy="true"] .track{height:421px}}
+@media (min-width:800px) and (max-width:899px){.track-box[aria-busy="true"] .track{height:444px}}
+@media (min-width:761px) and (max-width:799px){.track-box[aria-busy="true"] .track{height:467px}}
 /* a phone: the table becomes label and value rows */
 @media (max-width:760px){
   .page{padding-top:48px}
@@ -407,7 +424,11 @@ ul{margin:0;padding:0;list-style:none}
   .track td.pending{text-align:right}
   .track td.pending::before{font:500 var(--s0)/1.2 var(--display);font-style:normal}
   .terms{grid-template-columns:1fr}
+  .track-box[aria-busy="true"] .track{height:auto}
+  .track-box[aria-busy="true"] .bases{min-height:77px}
+  .track-box[aria-busy="true"] #track-rows{min-height:723px}
 }
+@media (max-width:340px){.track-box[aria-busy="true"] .bases{min-height:102px}}
 
 /* the header's average strip (owner 2026-11-20): one quiet link beside the clock, Nexus colours on the values only */
 .avg-strip{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 0 0 16px;border-left:1px solid var(--rule);color:var(--slate);text-decoration:none;font-family:var(--display);white-space:nowrap;flex:none}
@@ -430,6 +451,7 @@ ul{margin:0;padding:0;list-style:none}
 .kinds button[aria-selected="true"]{color:var(--holo);border-bottom-color:var(--holo)}
 .kinds .c{font-weight:500;font-size:var(--s-1);font-variant-numeric:tabular-nums}
 .a-list[aria-busy="true"],.a-list.hold{min-height:100vh}
+.a-list:focus-visible{outline-offset:8px}
 .a-list .empty{margin-top:40px}
 .a-day{display:grid;grid-template-columns:240px minmax(0,1fr);gap:clamp(32px,6vw,80px);padding-top:40px}
 .a-day+.a-day{border-top:1px solid var(--rule)}
@@ -482,13 +504,28 @@ ul{margin:0;padding:0;list-style:none}
   .page .prose h2{margin-top:40px}
 }
 
+/* ---------- forced colours (Windows high contrast; the one-theme backlog, PR 3, C2): the system repaints every colour
+   and drops box shadows and fills, so each mark the theme makes with colour alone gets a shape the system keeps: the
+   page's own link is underlined, focus is the Highlight ring, the selected tab (and only it) carries a Highlight rule,
+   a pressed chip is filled with Highlight, and the room's reading tick and the tally keep their bars; the header is
+   opaque, so the text it scrolls over does not show through ---------- */
+@media (forced-colors:active){
+  .top{background:Canvas}
+  .nav a[aria-current],.foot a[aria-current]{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px}
+  :focus-visible{outline:2px solid Highlight}
+  .kinds button,.rooms button{border-bottom-color:Canvas}
+  .kinds button[aria-selected="true"],.rooms button[aria-selected="true"]{border-bottom-color:Highlight}
+  .chip[aria-pressed="true"]{forced-color-adjust:none;background:Highlight;color:HighlightText;border-color:Highlight}
+  .status-reading .tick,.tally b{forced-color-adjust:none;background:CanvasText}
+}
+
 /* ---------- About (the one-theme backlog, PR 2): its own rules, not the home page's .steps, so the grid of #how stays
    as it is. The five steps are a real sequence, so they are numbered, in gold as on the home page; a thin rule runs
    down from each number to the next. The post types and the never list read on the vault: no panel, no reading colours ---------- */
 .page .a-steps{list-style:none;margin:64px 0 0;padding:0;max-width:46em}
 .page .a-steps li{position:relative;display:grid;grid-template-columns:56px minmax(0,1fr);column-gap:clamp(16px,3vw,36px);padding-bottom:44px}
 .page .a-steps li:last-child{padding-bottom:0}
-.page .a-steps .num{align-self:start;font:700 var(--s5)/1 var(--display);color:var(--gold);text-align:center;font-variant-numeric:lining-nums tabular-nums}
+.page .a-steps .num{align-self:start;font:600 var(--s5)/1 var(--display);color:var(--gold);text-align:center;font-variant-numeric:lining-nums tabular-nums}
 .page .a-steps li:not(:last-child)::after{content:"";position:absolute;left:28px;top:64px;bottom:12px;width:1px;background:var(--rule)}
 .page .a-steps h2{padding-top:9px;font-size:var(--s1);line-height:1.2}
 .page .a-steps p{margin-top:10px;max-width:38em;line-height:1.7;color:#C9D4E4}
@@ -501,7 +538,7 @@ ul{margin:0;padding:0;list-style:none}
 .page .never{margin-top:28px;max-width:38em}
 .page .never li{position:relative;padding-left:32px;line-height:1.6;color:#C9D4E4}
 .page .never li+li{margin-top:12px}
-.page .never li::before{content:"";position:absolute;left:2px;top:.8em;width:12px;height:2px;background:var(--slate)}
+.page .never li::before{content:"";position:absolute;left:2px;top:.8em;width:12px;height:0;border-top:2px solid var(--slate)}
 .page .a-sec+.a-note{margin-top:80px}
 @media (max-width:760px){
   .page .a-steps{margin-top:48px}

@@ -16,9 +16,10 @@
 <meta property="og:description" content="What the rooms' plans would have returned, simulated in R: win rate, expectancy, net R and profit factor, followed three ways. Not advice.">
 <meta name="twitter:card" content="summary">
 <meta name="theme-color" content="#060A12">
+<link rel="preload" href="/api/public/track-record" as="fetch" crossorigin>
 <link rel="preload" href="/fonts/rajdhani-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/newsreader-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/home.css?v=1a7bd6a91708">
+<link rel="stylesheet" href="/home.css?v=b77b734550de">
 </head>
 <body>
 <a class="skip" href="#record">Skip to the record</a>
@@ -49,14 +50,16 @@
   <p class="lede">What the rooms' plans would have returned, followed three ways: out at the first target, out at the second, or managed by the system's live rules.</p>
   <p class="basis" id="basis">Loading the record.</p>
 
-  <p class="empty" id="track-empty" hidden></p>
-  <div id="track-body" hidden>
-    <ul class="bases" id="bases" aria-label="What each column counts"></ul>
-    <table class="track" id="track">
-      <thead><tr><th scope="col"><span class="sr">Measure</span></th><th scope="col" id="col-first">Exit at TP1</th><th scope="col" id="col-second">Exit at TP2</th><th scope="col" id="col-managed">Managed exit</th></tr></thead>
-      <tbody id="track-rows"></tbody>
-    </table>
-    <p class="sets">The columns cover different sets. Exit at TP2 counts only the plans that have a second target. The managed exit is a separate replayed account under its own rules, so it counts trades.</p>
+  <div class="track-box" id="track-box" aria-busy="true">
+    <p class="empty" id="track-empty" hidden></p>
+    <div id="track-body">
+      <ul class="bases" id="bases" aria-label="What each column counts"></ul>
+      <table class="track" id="track">
+        <thead><tr><th scope="col"><span class="sr">Measure</span></th><th scope="col" id="col-first">Exit at TP1</th><th scope="col" id="col-second">Exit at TP2</th><th scope="col" id="col-managed">Managed exit</th></tr></thead>
+        <tbody id="track-rows"></tbody>
+      </table>
+      <p class="sets">The columns cover different sets. Exit at TP2 counts only the plans that have a second target. The managed exit is a separate replayed account under its own rules, so it counts trades.</p>
+    </div>
   </div>
 
   <dl class="terms">
@@ -89,6 +92,6 @@
     <a href="/fonts/OFL.txt?v=ff7626ffb2d2">Font licences</a>
   </nav>
 </footer>
-<script type="module" src="/performance.js?v=4632d98ef021"></script>
+<script type="module" src="/performance.js?v=3421ae700353"></script>
 </body>
 </html>
