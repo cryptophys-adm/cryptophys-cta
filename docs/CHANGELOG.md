@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-22 (caching)
+- perf(site): a year in the browser for the files that change only with a deploy (frontend audit, owner approved; no public text changed). `public/_headers` keeps `/room/*`, `/fonts/*`, `/home.css`, `/home.js` and `/performance.js` for a year (`immutable`; before: max-age 0, the scene and mannequin an hour). Each is named with its hash: `?v=` on home.css, home.js and performance.js in `index.html` and `performance.html` (`scripts/versions.mjs`, written by `npm run build:room`), on the scene as before and now on the mannequin. The home page starts the mannequin's download with the scene's instead of after it (one request; the scene parses the bytes). The scene's caption `#sub` loses `aria-live`, so a screen reader is not read every rotating line. Test RM11; TK6 accepts the hash.
+
 ## 2026-11-22 (card render)
 - fix(render): the card page loads with `waitUntil: "load"`, then waits for TradingView's frame (polled every 250 ms) and its canvas, instead of `networkidle0`. TradingView's widget keeps its data connections open, so the network was often never idle and cards and videos failed with "Navigation timeout of 30000 ms exceeded" (from 2026-11-16: the recaps of 16 and 18 November, a War Room post on Threads, Instagram and YouTube drafts). Test `chartFrame`.
 
