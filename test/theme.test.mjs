@@ -5,7 +5,7 @@
 // they had (public content is final). Node built-ins only: CI runs the tests before npm ci.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { VERSIONED, VERSIONED_PAGES } from "../scripts/versions.mjs";
 import { applyProfile, profileView, PROFILE_URL } from "../site/page/profile.js";
@@ -647,7 +647,7 @@ test("TH23 the studio's 403 page is Sign in, themed: /studio without a valid Acc
   for (const u of page("signin.html").matchAll(/(?:href|src)="([^"]*)"/g)) assert.match(u[1], /^(\/|#|https:\/\/)/, u[1]);
 });
 
-test("TH24 cta.css loses only Sign in's rules (E2): no .signin, .signin-card or .logo.big; every class the studio uses keeps its rules; the studio stays on cta.css", () => {
+test("TH24 cta.css is the studio's own (PR 5; E2 in PR 4): only rules the studio can match, no public page's rule, no Sign in rule; the studio stays on cta.css; cta.js is gone and no file names it", () => {
   const css = read("public/cta.css");
   const selectors = [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{/g)].map((m) => m[1].trim());
   for (const s of selectors) assert.doesNotMatch(s, /\.signin\b|\.signin-card\b|\.logo\.big\b/, `${s}: Sign in's rule`);
@@ -659,15 +659,37 @@ test("TH24 cta.css loses only Sign in's rules (E2): no .signin, .signin-card or 
     ...[...js.matchAll(/"([^"\\\n]*)"|'([^'\\\n]*)'|`([^`]*)`/g)].flatMap((m) => (m[1] ?? m[2] ?? m[3]).split(/[^a-zA-Z0-9-]+/))
   ].filter((t) => /^[a-z][a-z0-9-]*$/.test(t)));
   for (const c of ["signin", "signin-card", "big"]) assert.ok(!used.has(c), `the studio never names "${c}"`);
-  // every rule the studio can match (each selector whose classes are all ones the studio names), media and body included:
-  // the same 256 rules as at the PR base (357668f, #69 on main), byte for byte. A deliberate change to the studio's look updates this.
-  const studioRules = rulesOf(css).flatMap(([media, sel, body]) => sel.split(",").map((x) => x.trim()).filter((x) => [...x.matchAll(/\.([a-zA-Z][\w-]*)/g)].every((m) => used.has(m[1]))).map((x) => `${media}|${x}{${body}}`)).sort();
-  assert.equal(studioRules.length, 256, "the rules the studio can match");
-  assert.equal(createHash("sha256").update(studioRules.join("\n")).digest("hex").slice(0, 16), "afc834f4ab493f6a", "the studio's rules are unchanged");
+  // every rule in cta.css is one the studio can match (each selector's classes all ones the studio names), media and body
+  // included: the 256 of PR 4 less the ten public-page rules that matched only words in studio.js's strings (.links,
+  // .post, span.num, .never and its marker, #studio-link, the public top bar's nav and its links), byte for byte. The
+  // studio's screens at 1440 and 390 px are pixel-identical before and after. A deliberate change to its look updates this.
+  const parts = rulesOf(css).flatMap(([media, sel, body]) => sel.split(",").map((x) => [media, x.trim(), body]));
+  const studioRules = parts.filter(([, x]) => [...x.matchAll(/\.([a-zA-Z][\w-]*)/g)].every((m) => used.has(m[1]))).map(([media, x, body]) => `${media}|${x}{${body}}`).sort();
+  assert.equal(studioRules.length, parts.length, "every rule in cta.css is one the studio can match");
+  assert.equal(studioRules.length, 246, "the rules the studio can match");
+  assert.equal(createHash("sha256").update(studioRules.join("\n")).digest("hex").slice(0, 16), "176669ef1344a5cd", "the studio's rules are unchanged");
+  // no public page's rule: the old public page's and sub-pages' classes, the public top bar's nav, the steps' number,
+  // the old Studio link; the only id a rule names is one the studio's markup has
+  const PUBLIC = ["public", "hero", "hero-card", "hero-more", "eyebrow", "facts", "section", "chan", "disclaimer", "site-foot", "pagehero", "meta-p", "steps", "prose", "never", "links", "post", "narrow", "lg", "three", "sr"];
+  for (const [media, x] of parts) {
+    for (const m of x.matchAll(/\.([a-zA-Z][\w-]*)/g)) assert.ok(!PUBLIC.includes(m[1]), `${media}|${x}: a public page's rule`);
+    for (const m of x.matchAll(/#([a-zA-Z][\w-]*)/g)) assert.match(studio, new RegExp(`id="${m[1]}"`), `${media}|${x}: an id the studio has`);
+    assert.doesNotMatch(x, /^\.topbar nav\b|^span\.num$/, `${media}|${x}: a public page's rule`);
+  }
+  assert.doesNotMatch(css, /#studio-link|@media \(max-width:860px\)/, "the public pages' Studio link and breakpoint");
   for (const c of ["list", "notice", "warn", "badge", "sidenav", "draft", "tab", "logo"]) assert.ok(CTA_RULE_CLASSES(css).has(c) && used.has(c), `.${c}: the studio's, kept`);
   assert.match(studio, /<link rel="stylesheet" href="\/cta\.css">/, "the studio stays on cta.css (the owner's light look)");
   assert.doesNotMatch(studio, /home\.css/);
-  assert.ok(read("public/cta.js").length > 0, "cta.js stays until PR 5 (E1)");
+  // cta.js (E1): no page loaded it after PR 4; gone in PR 5, and no file names it (the pages, the Worker, the build,
+  // the headers, the config, the tests; the docs keep its history)
+  assert.ok(!existsSync(new URL("../public/cta.js", import.meta.url)), "public/cta.js is gone");
+  const files = [];
+  const walk = (dir) => { for (const n of readdirSync(new URL(`../${dir}`, import.meta.url))) { const p = `${dir}${n}`; if (statSync(new URL(`../${p}`, import.meta.url)).isDirectory()) walk(`${p}/`); else if (/\.(html|css|js|mjs|json|jsonc|txt|xml|md)$|^_headers$/.test(n)) files.push(p); } };
+  for (const d of ["public/", "src/", "scripts/", "site/", "test/"]) walk(d);
+  files.push("wrangler.jsonc", "organism.json", "package.json", "README.md", "AGENTS.md");
+  assert.ok(files.includes("public/_headers") && files.includes("src/app.mjs") && files.includes("scripts/versions.mjs"), "the headers, the Worker and the build are read");
+  for (const f of files.filter((x) => x !== "test/theme.test.mjs")) assert.doesNotMatch(read(f), /\bcta\.js\b/, `${f} names cta.js`);
+  assert.ok(!VERSIONED.includes("cta.js") && !VERSIONED.includes("cta.css"), "neither is a versioned file");
 });
 
 test("TH25 Sign in fits: nothing wider than a 320 px window (the button's words wrap, the panel can shrink, long words break) and the footer meets the bottom of a tall window", () => {

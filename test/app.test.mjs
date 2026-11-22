@@ -372,7 +372,7 @@ test("the pages: no inline script or style (CSP 'self'), the studio's four views
     assert.doesNotMatch(html, /\b(nexus|omega)\b/i, `${page}: never Nexus or Omega publicly`);
     assert.doesNotMatch(html, /\b(buy now|sell now|entry at|take profit at|stop loss at|guaranteed)\b/i, `${page}: no advice`);
   }
-  const all = [...publicPages, "studio/index.html", "cta.css", "cta.js", "studio/studio.js"].map(read).join("\n");
+  const all = [...publicPages, "studio/index.html", "cta.css", "studio/studio.js"].map(read).join("\n");
   assert.doesNotMatch(all, /\b(meta platforms|facebook)\b|\bmeta for developers\b/i, "our own brand only");
   assert.doesNotMatch(all, /\binnerHTML\b/, "text goes in as text");
 });
