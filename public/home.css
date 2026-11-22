@@ -440,7 +440,7 @@ ul{margin:0;padding:0;list-style:none}
   .a-post,.a-post+.a-post{padding:18px 0 28px}
   .a-meta{flex-wrap:wrap;gap:2px 12px;line-height:1.25}
   .a-time{flex:1 0 100%;margin-left:0;text-align:left;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 10px}
-  .a-time span{display:inline;font-size:15px}
+  .a-time span{display:inline}
   .a-time .a-local{margin-top:0}
   .a-head{margin-top:12px;font-size:var(--s0);font-weight:500;line-height:1.45}
   .a-body{margin-top:6px}

@@ -7,24 +7,29 @@
 // - the cast directory into public/index.html, from site/room/data.js;
 // - the self-hosted fonts (Rajdhani, Newsreader; OFL, latin woff2 only) from @fontsource into public/fonts/;
 // - public/room/build.json: the hash of the sources and of both bundles, which test/room.test.mjs checks, so a source
-//   change without a rebuild fails the tests.
+//   change without a rebuild fails the tests;
+// - the version hashes in the URLs of home.css, home.js and performance.js in the pages, and of the mannequin in the
+//   scene (scripts/versions.mjs): browsers keep these files for a year (public/_headers).
 // The mannequin (public/room/mannequin.glb) is a committed file, not built. Run: npm run build:room
 import { build } from "esbuild";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from "node:fs";
 import { withNavigator, sourceHash } from "./navigator.mjs";
 import { FONTS } from "./fonts.mjs";
+import { withVersions, mannequinVersion, VERSIONED_PAGES } from "./versions.mjs";
 
 export { FONTS };
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const at = (p) => new URL(`../${p}`, import.meta.url).pathname;
   const opts = { bundle: true, format: "esm", minify: true, target: "es2020", legalComments: "none", logLevel: "warning" };
-  await build({ ...opts, entryPoints: [at("site/room/main.js")], outfile: at("public/room/room.js") });
+  // The mannequin's URL carries its file's hash (the scene and the page, which starts its download with the scene's).
+  const mannequin = { __MANNEQUIN_VERSION__: JSON.stringify(mannequinVersion()) };
+  await build({ ...opts, entryPoints: [at("site/room/main.js")], outfile: at("public/room/room.js"), define: mannequin });
   // /room/room.js is the scene's own file: the page imports it at run time, never into its bundle, with the scene's hash
   // in the URL (?v=), so a new scene is fetched at once although browsers keep /room/* for an hour.
   const roomHash = createHash("sha256").update(readFileSync(at("public/room/room.js"))).digest("hex");
-  await build({ ...opts, entryPoints: [at("site/home/home.js")], outfile: at("public/home.js"), define: { __ROOM_VERSION__: JSON.stringify(roomHash.slice(0, 12)) } });
+  await build({ ...opts, entryPoints: [at("site/home/home.js")], outfile: at("public/home.js"), define: { __ROOM_VERSION__: JSON.stringify(roomHash.slice(0, 12)), ...mannequin } });
   await build({ ...opts, entryPoints: [at("site/performance/performance.js")], outfile: at("public/performance.js") });
   await build({ ...opts, entryPoints: [at("site/archive/archive.js")], outfile: at("public/archive.js") });
   mkdirSync(at("public/fonts"), { recursive: true });
@@ -35,6 +40,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const sha = (p) => createHash("sha256").update(readFileSync(at(p))).digest("hex");
   writeFileSync(at("public/room/build.json"), `${JSON.stringify({ sources: sourceHash(), bundle: sha("public/room/room.js"), home: sha("public/home.js"), performance: sha("public/performance.js"), archive: sha("public/archive.js"), three }, null, 2)}\n`);
   writeFileSync(at("public/index.html"), withNavigator(readFileSync(at("public/index.html"), "utf8")));
+  for (const page of VERSIONED_PAGES) writeFileSync(at(`public/${page}`), withVersions(readFileSync(at(`public/${page}`), "utf8")));
   const kb = (p) => (readFileSync(at(p)).length / 1024).toFixed(0);
   console.log(`room.js ${kb("public/room/room.js")} KB, home.js ${kb("public/home.js")} KB, performance.js ${kb("public/performance.js")} KB, archive.js ${kb("public/archive.js")} KB, three ${three}`);
 }

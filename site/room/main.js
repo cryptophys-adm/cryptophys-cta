@@ -23,7 +23,8 @@ const media = (q) => window.matchMedia?.(q).matches ?? false;
 const TOUCH = media('(pointer: coarse)'), CALM = media('(prefers-reduced-motion: reduce)');
 const LOW = TOUCH || window.innerWidth < 760 || (navigator.hardwareConcurrency || 8) <= 4;
 const MOTION = CALM ? 0.12 : 1, GAP_S = 4;
-const MANNEQUIN_URL = '/room/mannequin.glb';
+// The file's hash in the URL (scripts/build-room.mjs): browsers keep /room/* for a year.
+const MANNEQUIN_URL = `/room/mannequin.glb?v=${__MANNEQUIN_VERSION__}`; /* global __MANNEQUIN_VERSION__ */
 const HOLO = 0x55c8ff, WARM = 0xffb454, BIAS = { neutral: 0xffb454, bearish: 0xff4d5e, bullish: 0x3ee08f }; // owner 2026-11-20: bearish red, bullish green, neutral amber
 const CONSTRUCTS = ['prophet', 'trade_management', 'interstellar_eyes', 'kinetic_engine', 'fabio_amt', 'chronos_matrix', 'tactical_muscles', 'macro_aether', 'decision_matrix', 'supertrend', 'aegis_footprint', 'order_blocks'];
 const LABEL = { hall: 'Analyst', lead: 'Leader', research: 'Research', content: 'Content studio', ops: 'Platform', knowledge: 'Knowledge' };
@@ -81,7 +82,9 @@ function init() {
   // The bloom pass is the costly part: phones and small GPUs render without it.
   if (!LOW) { composer = new EffectComposer(renderer); composer.addPass(new RenderPass(scene, camera)); composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.42, 0.5, 0.55)); composer.addPass(new OutputPass()); }
   buildRoom(); buildTable(); buildAether(); buildCorpus(); buildVault(); bindUi(); resize(); window.addEventListener('resize', resize);
-  new GLTFLoader().loadAsync(MANNEQUIN_URL).then((g) => { mannequin = g.scene; buildAgents(); $('loading').hidden = true; onScene(take); }).catch((e) => { console.error(e); $('loading').textContent = 'The scene did not load.'; });
+  // The page starts the mannequin's download with the scene's (site/home/home.js); without it the loader fetches it here.
+  const loader = new GLTFLoader();
+  Promise.resolve(window.__mannequin ?? null).then((buf) => (buf ? loader.parseAsync(buf, '/room/') : loader.loadAsync(MANNEQUIN_URL))).then((g) => { mannequin = g.scene; buildAgents(); $('loading').hidden = true; onScene(take); }).catch((e) => { console.error(e); $('loading').textContent = 'The scene did not load.'; });
   // Draw only while the room is on screen and the tab is visible.
   const run = () => renderer.setAnimationLoop(state.visible && !document.hidden ? frame : null);
   if ('IntersectionObserver' in window) new IntersectionObserver(([e]) => { state.visible = e.isIntersecting; run(); }).observe(canvas);
