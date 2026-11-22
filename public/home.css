@@ -515,7 +515,8 @@ ul{margin:0;padding:0;list-style:none}
    and drops box shadows and fills, so each mark the theme makes with colour alone gets a shape the system keeps: the
    page's own link is underlined, focus is the Highlight ring, the selected tab (and only it) carries a Highlight rule,
    a pressed chip is filled with Highlight, and the room's reading tick and the tally keep their bars (each tone class
-   named, so the theme's .tick.bear and .tally .bear do not outrank the bar); the header is opaque, so the text it
+   named, so the theme's .tick.bear and .tally .bear do not outrank the bar; the tick ringed in Canvas, as it stands on
+   the room's scene, which forced colours do not repaint); the header is opaque, so the text it
    scrolls over does not show through ---------- */
 @media (forced-colors:active){
   .top{background:Canvas}
@@ -525,6 +526,7 @@ ul{margin:0;padding:0;list-style:none}
   .kinds button[aria-selected="true"],.rooms button[aria-selected="true"]{border-bottom-color:Highlight}
   .chip[aria-pressed="true"]{forced-color-adjust:none;background:Highlight;color:HighlightText;border-color:Highlight}
   .status-reading .tick,.status-reading .tick.bear,.status-reading .tick.bull,.tally b,.tally .bear,.tally .bull,.tally .flat{forced-color-adjust:none;background:CanvasText}
+  .status-reading .tick{outline:2px solid Canvas}
 }
 
 /* ---------- About (the one-theme backlog, PR 2): its own rules, not the home page's .steps, so the grid of #how stays

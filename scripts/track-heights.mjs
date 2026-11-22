@@ -3,12 +3,13 @@
 // drawn: the managed exit pending (the live record of 2026-11-22), shown, and no record. It writes
 // test/fixtures/track-heights.json, which test/theme.test.mjs (TH20) checks: a record's normal shapes never draw more than
 // 2 px shorter than the room held for them, the pending shape draws at it, and the file is measured from the current
-// layout (layoutHash: the Performance rules of home.css, the page's <main>, its script and trackModel).
+// layout (layoutHash: the fonts, the head of home.css to the body rule, its Performance rules, the page's <main>, its
+// script and trackModel).
 // Playwright is not a dependency of this repository (CI runs the tests before npm ci): point PLAYWRIGHT at a copy.
 // Run: PLAYWRIGHT=/path/to/node_modules/playwright node scripts/track-heights.mjs
 import { createServer } from "node:http";
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync, existsSync, statSync, realpathSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, statSync, realpathSync, readdirSync } from "node:fs";
 import { extname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
@@ -25,14 +26,20 @@ const shown = { ...pending, replay_check: { status: "pass", shown: true }, scena
   { id: "managed", label: "Managed exit (the system's live rules)", shown: true, since: "2026-11-12", count: 41, won: 21, lost: 16, even: 4, win_rate: 0.512, expectancy_r: 0.18, net_r: 7.38, avg_win_r: 1.12, avg_loss_r: -1, profit_factor: 1.47 }] };
 export const ANSWERS = Object.freeze({ pending, shown, none: { available: false, unit: "R", simulated: true, scenarios: [], notice: pending.notice } });
 
-/** The hash of what the record's heights follow: the Performance rules of home.css, the page's <main>, its script, trackModel. */
+/**
+ * The hash of what the record's heights follow: the fonts (their bytes), the head of home.css to the body rule (the
+ * @font-face rules, :root's sizes, gutters and widths, html and body with its line height), the Performance rules, the
+ * page's <main>, its script and trackModel (re-review of #69: a :root or body change kept the hash).
+ */
 export function layoutHash() {
   const css = read("public/home.css"), html = read("public/performance.html");
+  const body = css.indexOf("\nbody{"), headEnd = body < 0 ? -1 : css.indexOf("\n", body + 1);
   const a = css.indexOf("/* ---------- the Performance page"), b = css.indexOf("/* the header's average strip");
   const main = html.slice(html.indexOf("<main"), html.indexOf("</main>"));
-  if (a < 0 || b < a || !main) throw new Error("the Performance rules or <main> not found");
+  if (headEnd < 0 || a < 0 || b < a || !main) throw new Error("the head of home.css, the Performance rules or <main> not found");
   const h = createHash("sha256");
-  for (const part of [css.slice(a, b), main, read("site/performance/performance.js"), read("site/home/track.js")]) h.update(part).update("\0");
+  for (const f of readdirSync(at("public/fonts")).filter((n) => n.endsWith(".woff2")).sort()) h.update(f).update("\0").update(readFileSync(at(`public/fonts/${f}`))).update("\0");
+  for (const part of [css.slice(0, headEnd), css.slice(a, b), main, read("site/performance/performance.js"), read("site/home/track.js")]) h.update(part).update("\0");
   return h.digest("hex").slice(0, 16);
 }
 
