@@ -1,5 +1,5 @@
-// The shared script of the pages in the one look that have no script of their own (Disclaimer, Privacy, Terms; the
-// one-theme backlog, PR 1): the header's UTC and local clock, the average strip, and one GET of the public profile
+// The shared script of the pages in the one look that have no script of their own (About, Disclaimer, Privacy, Terms; the
+// one-theme backlog, PR 1 and PR 2): the header's UTC and local clock, the average strip, and one GET of the public profile
 // (the Threads link and the disclaimer, ./profile.js). It never loads the war room, the home page's script or the
 // TradingView quote: only the header, the strip, the record's URL and the profile.
 import { startClock } from '../home/header.js';

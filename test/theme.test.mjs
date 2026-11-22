@@ -1,8 +1,8 @@
-// One look for every public page (the one-theme backlog, PR 1): each page in the theme stands on home.css alone, with
-// the Performance page's header and the same footer, marks only its own links, and keeps the head's theme colour, font
-// preloads and skip link. The pages that name a versioned file are the build's VERSIONED_PAGES; only the home page
-// carries the war room and TradingView's quote. Disclaimer, Privacy and Terms keep every word they had (public content
-// is final). Node built-ins only: CI runs the tests before npm ci.
+// One look for every public page (the one-theme backlog, PR 1 and PR 2): each page in the theme stands on home.css
+// alone, with the Performance page's header and the same footer, marks only its own links, and keeps the head's theme
+// colour, font preloads and skip link. The pages that name a versioned file are the build's VERSIONED_PAGES; only the
+// home page carries the war room and TradingView's quote. About, Disclaimer, Privacy and Terms keep every word they had
+// (public content is final). Node built-ins only: CI runs the tests before npm ci.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -12,8 +12,10 @@ import { applyProfile, profileView, PROFILE_URL } from "../site/page/profile.js"
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 const THEME_PAGES = VERSIONED_PAGES;
-const PATH = { "index.html": "/", "performance.html": "/performance", "archive.html": "/archive", "disclaimer.html": "/disclaimer", "privacy.html": "/privacy", "terms.html": "/terms" };
-const PORTED = ["disclaimer.html", "privacy.html", "terms.html"];
+const PATH = { "index.html": "/", "performance.html": "/performance", "archive.html": "/archive", "about.html": "/about", "disclaimer.html": "/disclaimer", "privacy.html": "/privacy", "terms.html": "/terms" };
+// The pages ported from cta.css: the three legal pages (PR 1, prose) and About (PR 2, its own rules).
+const LEGAL = ["disclaimer.html", "privacy.html", "terms.html"];
+const PORTED = [...LEGAL, "about.html"];
 const FOOT_NOTE = '<p class="foot-note"><span>Chart by TradingView</span><span>© Cryptophys · Education, not financial advice</span></p>';
 const page = (f) => read(`public/${f}`);
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -147,13 +149,17 @@ test("TH7 the war room and TradingView's quote are the home page's only: no #gol
   for (const f of PORTED) assert.doesNotMatch(page(f), /<iframe|tradingview\.com|gold-live|home\.js|\/room\//, f);
 });
 
-test("TH8 Disclaimer, Privacy and Terms keep every word: <main> and the title equal the PR base, word for word", () => {
+test("TH8 About, Disclaimer, Privacy and Terms keep every word: <main> and the title equal the PR base, word for word", () => {
   const base = JSON.parse(read("test/fixtures/legal-words.json"));
   assert.deepEqual(Object.keys(base.pages).sort(), [...PORTED].sort());
+  assert.deepEqual(Object.keys(base.titles).sort(), [...PORTED].sort());
   for (const f of PORTED) {
     const html = page(f);
     assert.equal(mainWords(html), base.pages[f], `${f}: the words inside <main>`);
     assert.equal(html.match(/<title>([^<]*)<\/title>/)[1], base.titles[f], `${f}: the title`);
+  }
+  for (const f of LEGAL) {
+    const html = page(f);
     // the shared look's parts: eyebrow, headline, lede, the date as .basis, the text as unfilled prose, the profile's line
     assert.match(html, /<main class="page" id="text">\n {2}<p class="eyebrow">[^<]+<\/p>\n {2}<h1>[^<]+<\/h1>\n {2}<p class="lede">[^<]+<\/p>/, f);
     assert.match(html, /<article class="prose">/, f);
@@ -225,4 +231,68 @@ test("TH11 the shared rules: prose without a panel, the date line, an empty prof
   assert.match(short, /\n {2}\.hero \.lede\{margin-top:20px;line-height:1\.6\}/);
   assert.doesNotMatch(short, /\n {2}\.lede\{/, "no unscoped lede rule there");
   assert.match(css, /\n\.lede\{margin-top:28px;font-size:var\(--s1\);line-height:1\.72;/, "the lede's rhythm");
+});
+
+test("TH12 About (PR 2): every part keeps its words, the steps are h2 under the h1, the headings never skip a level", () => {
+  const html = page("about.html"), base = JSON.parse(read("test/fixtures/legal-words.json"));
+  const main = html.slice(html.indexOf("<main"), html.indexOf("</main>"));
+  const text = (s) => decode(s.replace(/<[^>]*>/g, " ")).split(/\s+/).filter(Boolean).join(" ");
+  const all = (re, from = main) => [...from.matchAll(re)].map((m) => text(m[1]));
+  assert.equal(html.match(/<title>([^<]*)<\/title>/)[1], "How it works · XAUUSD AI · Cryptophys");
+  assert.match(main, /^<main class="page" id="text">\n {2}<p class="eyebrow">How it works<\/p>\n {2}<h1>From analysis to a post<\/h1>\n {2}<p class="lede">[^<]+<\/p>/);
+  // the five steps: the number, the step's heading (h2, was h3: markup, not words) and its text
+  const steps = block(main, '<ol class="a-steps">', "</ol>");
+  const items = [...steps.matchAll(/<li><span class="num">(\d)<\/span><div><h2>([^<]+)<\/h2><p>([\s\S]*?)<\/p><\/div><\/li>/g)];
+  assert.deepEqual(items.map((m) => m[1]), ["1", "2", "3", "4", "5"], "five numbered steps");
+  assert.deepEqual(items.map((m) => m[2]), ["The system reads the market", "A draft from a fixed template", "Automatic checks", "A person approves", "Published on each channel's schedule"]);
+  assert.doesNotMatch(steps, /<h3/, "the steps' headings are h2");
+  assert.deepEqual(all(/<section class="a-sec" aria-labelledby="[^"]+">\n {4}<h2 id="[^"]+">([^<]+)<\/h2>/g), ["What each post type means", "What we never post"], "the two sections");
+  for (const m of main.matchAll(/aria-labelledby="([^"]+)"/g)) assert.match(main, new RegExp(`<h2 id="${m[1]}">`), `#${m[1]} names its section`);
+  const types = block(main, '<div class="types">', "\n    </div>");
+  assert.deepEqual(all(/<h3>([^<]+)<\/h3>/g, types), ["Key-level map", "Chart pattern", "Daily recap"], "the three post types");
+  assert.equal((types.match(/<p>/g) ?? []).length, 3);
+  assert.equal(all(/<li>([^<]+)<\/li>/g, block(main, '<ul class="never">', "</ul>")).length, 5, "the five lines we never post");
+  assert.match(main, /<div class="a-note" role="note">\n {4}<b>Education, not financial advice<\/b>\n {4}<p><span id="disclaimer">[^<]+<\/span> <a href="\/disclaimer">Read the full disclaimer<\/a><\/p>\n {2}<\/div>\n$/, "the note, with the profile's disclaimer");
+  // the parts, in order, are the page's words at the PR base, word for word
+  const parts = [
+    ...all(/<p class="eyebrow">([^<]+)<\/p>/g), ...all(/<h1>([^<]+)<\/h1>/g), ...all(/<p class="lede">([^<]+)<\/p>/g),
+    ...items.flatMap((m) => [m[1], m[2], text(m[3])]),
+    "What each post type means", ...[...types.matchAll(/<h3>([^<]+)<\/h3><p>([\s\S]*?)<\/p>/g)].flatMap((m) => [m[1], text(m[2])]),
+    "What we never post", ...all(/<li>([^<]+)<\/li>/g, block(main, '<ul class="never">', "</ul>")),
+    text(block(main, '<div class="a-note"', "</div>"))
+  ];
+  assert.equal(parts.join(" "), base.pages["about.html"], "the words inside <main>, part by part");
+  // the footer's two strings stay (owner decision 2), as words under the Legal links
+  for (const s of ["<span>Chart by TradingView</span>", "<span>© Cryptophys · Education, not financial advice</span>"]) assert.ok(block(html, '<footer class="foot">', "</footer>").includes(s), s);
+  // heading order: one h1 first, and no heading deeper than one level below the one before it
+  const levels = [...html.matchAll(/<h([1-6])\b/g)].map((m) => Number(m[1]));
+  assert.deepEqual(levels, [1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 2]);
+  assert.equal(levels.filter((l) => l === 1).length, 1);
+  levels.reduce((prev, l) => { assert.ok(l <= prev + 1, `h${l} after h${prev}`); return l; });
+  const classes = new Set([...html.matchAll(/class="([^"]*)"/g)].flatMap((m) => m[1].split(/\s+/)));
+  for (const c of ["steps", "card", "grid", "three", "hero-card", "meta-p", "notice", "info", "disclaimer", "pagehero", "section", "head", "tag", "topbar", "site-foot", "in", "narrow", "on", "public", "logo"]) assert.ok(!classes.has(c), `no class "${c}": none of the old look's classes, nor the home page's .steps`);
+  assert.doesNotMatch(html, /#0866FF|<svg[^>]*class="logo"/i, "nothing of cta.css's blue or its logo");
+});
+
+test("TH13 About's own rules: the numbered steps, the sections, three post types (one column on a phone), the never list's marker; no panel, no reading colours", () => {
+  const css = read("public/home.css");
+  const at = css.indexOf("/* ---------- About (the one-theme backlog, PR 2)");
+  assert.ok(at > 0, "the About block");
+  const about = css.slice(at);
+  const rules = [...about.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => [m[1].trim().replace(/^\/\*[\s\S]*?\*\/\s*/, ""), m[2]]);
+  const rule = (sel) => rules.filter(([s]) => s === sel).map(([, b]) => b);
+  for (const [sel, body] of rules) {
+    assert.match(sel, /^(\.page \.(a-steps|a-sec|types|never)\b|@media)/, `${sel}: About's own classes, under .page`);
+    assert.doesNotMatch(body, /background:(?!var\(--(rule|slate)\))|box-shadow|--bear|--bull|--flat|#F2606E|#3FD08A|#E0A458|#0866FF/i, `${sel}: no panel, no reading colour`);
+  }
+  assert.match(rule(".page .a-steps .num")[0], /font:700 var\(--s5\)\/1 var\(--display\);color:var\(--gold\)/, "the step numbers: Rajdhani, --s5, gold");
+  assert.match(rule(".page .a-steps h2")[0], /font-size:var\(--s1\)/, "the step headings at --s1");
+  assert.match(rule(".page .a-sec>h2")[0], /font-size:var\(--s3\)/, "the section headings at --s3");
+  assert.match(rule(".page .types")[0], /display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/, "three columns");
+  const phone = about.slice(about.indexOf("@media (max-width:760px){"));
+  assert.match(phone, /\.page \.types\{grid-template-columns:1fr;/, "one column at 760 px and narrower");
+  assert.match(rule(".page .never li::before")[0], /content:"";/, "the never list's marker");
+  assert.match(css, /\n\.steps\{list-style:none;counter-reset:step;margin:48px 0 0;padding:0;display:grid;grid-template-columns:repeat\(3,1fr\);/, "the home page's #how grid is untouched");
+  assert.doesNotMatch(css, /\.page \.steps|\.a-steps[^{]*\.steps/, "About never borrows .steps");
+  assert.match(page("index.html"), /<ol class="steps">/, "the home page keeps its .steps");
 });

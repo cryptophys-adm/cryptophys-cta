@@ -481,3 +481,36 @@ ul{margin:0;padding:0;list-style:none}
   .page .prose{margin-top:40px}
   .page .prose h2{margin-top:40px}
 }
+
+/* ---------- About (the one-theme backlog, PR 2): its own rules, not the home page's .steps, so the grid of #how stays
+   as it is. The five steps are a real sequence, so they are numbered, in gold as on the home page; a thin rule runs
+   down from each number to the next. The post types and the never list read on the vault: no panel, no reading colours ---------- */
+.page .a-steps{list-style:none;margin:64px 0 0;padding:0;max-width:46em}
+.page .a-steps li{position:relative;display:grid;grid-template-columns:56px minmax(0,1fr);column-gap:clamp(16px,3vw,36px);padding-bottom:44px}
+.page .a-steps li:last-child{padding-bottom:0}
+.page .a-steps .num{align-self:start;font:700 var(--s5)/1 var(--display);color:var(--gold);text-align:center;font-variant-numeric:lining-nums tabular-nums}
+.page .a-steps li:not(:last-child)::after{content:"";position:absolute;left:28px;top:64px;bottom:12px;width:1px;background:var(--rule)}
+.page .a-steps h2{padding-top:9px;font-size:var(--s1);line-height:1.2}
+.page .a-steps p{margin-top:10px;max-width:38em;line-height:1.7;color:#C9D4E4}
+.page .a-sec{margin-top:96px}
+.page .a-sec>h2{font-size:var(--s3);line-height:1.1}
+.page .types{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:32px clamp(24px,4vw,48px);margin-top:32px}
+.page .types>div{padding-top:20px;border-top:1px solid var(--rule)}
+.page .types h3{font-size:var(--s1);line-height:1.2}
+.page .types p{margin-top:10px;line-height:1.7;color:#C9D4E4}
+.page .never{margin-top:28px;max-width:38em}
+.page .never li{position:relative;padding-left:32px;line-height:1.6;color:#C9D4E4}
+.page .never li+li{margin-top:12px}
+.page .never li::before{content:"";position:absolute;left:2px;top:.8em;width:12px;height:2px;background:var(--slate)}
+.page .a-sec+.a-note{margin-top:80px}
+@media (max-width:760px){
+  .page .a-steps{margin-top:48px}
+  .page .a-steps li{grid-template-columns:40px minmax(0,1fr);padding-bottom:36px}
+  .page .a-steps .num{font-size:var(--s4)}
+  .page .a-steps li:not(:last-child)::after{left:20px;top:52px}
+  .page .a-steps h2{padding-top:6px}
+  .page .a-sec{margin-top:72px}
+  .page .a-sec>h2{font-size:var(--s2)}
+  .page .types{grid-template-columns:1fr;gap:28px}
+  .page .a-sec+.a-note{margin-top:64px}
+}
