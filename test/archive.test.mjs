@@ -31,6 +31,8 @@ test("AR1 the model: posts by UTC day in the answer's order, the first line as t
   assert.equal(whenLocal("2026-11-19T22:00:00Z", "Asia/Jakarta"), "Fri 5:00 AM GMT+7", "the local weekday when the local day is not the UTC day");
   assert.equal(whenLocal("2026-11-20T00:15:00Z", "America/New_York"), "Thu 7:15 PM EST");
   assert.equal(whenLocal("2026-11-20T00:15:00Z", "UTC"), "", "a visitor on UTC is not shown the time twice");
+  assert.equal(whenLocal("2026-11-20T00:15:00Z", "Europe/Lisbon"), "", "nor one at UTC+0 in winter (GMT)");
+  assert.equal(whenLocal("2026-07-20T00:15:00Z", "Europe/Lisbon"), "1:15 AM GMT+1", "Lisbon in summer is an hour ahead");
   assert.equal(EMPTY, "No posts published yet.", "the empty lines as the page always had them");
   assert.equal(EMPTY_KIND, "No posts of this type yet.");
 });

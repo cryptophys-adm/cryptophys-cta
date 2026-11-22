@@ -301,6 +301,16 @@ test("RM12 the mannequins: the source quantized for everyone, a lighter one for 
   assert.ok(lo.size < full.size * 0.7, `mannequin-lo.glb ${lo.size} bytes`);
   const b = JSON.parse(read("public/room/build.json"));
   for (const [k, f] of [["mannequin", "mannequin.glb"], ["mannequin_lo", "mannequin-lo.glb"]]) assert.equal(b[k], createHash("sha256").update(readFileSync(new URL(`../public/room/${f}`, import.meta.url))).digest("hex"), `run npm run build:mannequin, then npm run build:room (${f})`);
+  // the committed mannequins are what this source, this recipe and these tools make (scripts/mannequin.lock.json)
+  const { LOCK, SOURCE, OUTPUTS, TOOLS } = await import("../scripts/mannequin.mjs");
+  const lock = JSON.parse(read(LOCK));
+  const shaOf = (p) => createHash("sha256").update(readFileSync(new URL(`../${p}`, import.meta.url))).digest("hex");
+  assert.deepEqual(lock.source, { [SOURCE]: shaOf(SOURCE) }, "the source the lock names");
+  assert.deepEqual(lock.recipe, { "scripts/mannequin.mjs": shaOf("scripts/mannequin.mjs") }, "scripts/mannequin.mjs changed: run npm run build:mannequin");
+  const dev = JSON.parse(read("package.json")).devDependencies;
+  assert.deepEqual(lock.tools, Object.fromEntries(TOOLS.map((t) => [t, dev[t]])), "the tools pinned in package.json made them");
+  assert.deepEqual(lock.outputs, Object.fromEntries(OUTPUTS.map((o) => [o, shaOf(o)])), "the committed mannequins are the recipe's output");
+  for (const p of ["scripts/mannequin.mjs", "scripts/build-room.mjs"]) assert.match(read(p), /import\.meta\.url === pathToFileURL\(realpathSync\(process\.argv\[1\]\)\)\.href/, `${p} runs from any path`);
   const { lowEnd } = await import("../site/room/quality.js");
   const win = (w, touch, cores) => ({ innerWidth: w, matchMedia: () => ({ matches: touch }), navigator: { hardwareConcurrency: cores } });
   assert.equal(lowEnd(win(1440, false, 8)), false);

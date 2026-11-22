@@ -24,7 +24,8 @@ function drawTabs() {
       b.type = 'button'; b.id = TAB_ID(t.kind); b.setAttribute('role', 'tab'); b.setAttribute('aria-controls', 'archive');
       b.dataset.kind = t.kind;
       b.append(make('span', 'c'));
-      b.addEventListener('click', () => select(t.kind));
+      // Safari and Firefox on a Mac do not focus a clicked button: the arrow keys work after a click all the same.
+      b.addEventListener('click', () => { select(t.kind); b.focus(); });
       return b;
     }));
   }
