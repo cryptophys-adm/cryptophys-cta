@@ -18,9 +18,16 @@ import { bestTimes, abResult, evergreen, EVERGREEN_MIN_DAYS } from "./growth.mjs
 import { linkHosts, normalizeLink, randomSlug, shortUrl, redirectTarget, GO_PATH, normalizeHashtagSet, MAX_SETS, normalizeMix, DEFAULT_MIX, MIX_KINDS, wibWeek, mixReport } from "./marketing.mjs";
 import { templateTexts, checkPost, composeDrafts, overlayFor, recapWindow, COMPOSE_KINDS, COMPOSE_KIND_NAMES } from "./compose.mjs";
 import { sourceOf } from "./warroom-drafts.mjs";
+import { goldClosedAt } from "../site/home/market-hours.js";
 
-export const RECAP_CRON = "17 22 * * 2-6";
-export const ANALYSIS_CRON = "9 * * * 1-5";
+export const RECAP_CRON = "17 22 * * TUE-SAT";
+export const ANALYSIS_CRON = "9 * * * MON-FRI";
+/**
+ * The hourly analysis run drafts only while gold trades (the AI Worker's rule, site/home/market-hours.js): the cron's
+ * Monday to Friday still has Friday's hours after the close (22:09 and 23:09 UTC in November), when the zones are a
+ * closed week's. A person's Draft now in the studio is not bound by it.
+ */
+export const analysisRunDue = (now) => !goldClosedAt(now);
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" };
 // frame-src: the home page's TradingView quote (owner 2026-11-20), the widget frame's host only; no script host is added.
 export const SECURITY_HEADERS = Object.freeze({
