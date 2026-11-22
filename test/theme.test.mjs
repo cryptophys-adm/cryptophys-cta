@@ -9,6 +9,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { VERSIONED, VERSIONED_PAGES } from "../scripts/versions.mjs";
 import { applyProfile, profileView, PROFILE_URL } from "../site/page/profile.js";
+import { ANSWERS, layoutHash, fromRuns } from "../scripts/track-heights.mjs";
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 const THEME_PAGES = VERSIONED_PAGES;
@@ -285,7 +286,7 @@ test("TH13 About's own rules: the numbered steps, the sections, three post types
     assert.match(sel, /^(\.page \.(a-steps|a-sec|types|never)\b|@media)/, `${sel}: About's own classes, under .page`);
     assert.doesNotMatch(body, /background:(?!var\(--(rule|slate)\))|box-shadow|--bear|--bull|--flat|#F2606E|#3FD08A|#E0A458|#0866FF/i, `${sel}: no panel, no reading colour`);
   }
-  assert.match(rule(".page .a-steps .num")[0], /font:700 var\(--s5\)\/1 var\(--display\);color:var\(--gold\)/, "the step numbers: Rajdhani, --s5, gold");
+  assert.match(rule(".page .a-steps .num")[0], /font:600 var\(--s5\)\/1 var\(--display\);color:var\(--gold\)/, "the step numbers: Rajdhani 600 (preloaded, TH19), --s5, gold");
   assert.match(rule(".page .a-steps h2")[0], /font-size:var\(--s1\)/, "the step headings at --s1");
   assert.match(rule(".page .a-sec>h2")[0], /font-size:var\(--s3\)/, "the section headings at --s3");
   assert.match(rule(".page .types")[0], /display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/, "three columns");
@@ -295,4 +296,164 @@ test("TH13 About's own rules: the numbered steps, the sections, three post types
   assert.match(css, /\n\.steps\{list-style:none;counter-reset:step;margin:48px 0 0;padding:0;display:grid;grid-template-columns:repeat\(3,1fr\);/, "the home page's #how grid is untouched");
   assert.doesNotMatch(css, /\.page \.steps|\.a-steps[^{]*\.steps/, "About never borrows .steps");
   assert.match(page("index.html"), /<ol class="steps">/, "the home page keeps its .steps");
+});
+
+// ---------- PR 3 (C1 to C5, and two follow-ups to About from the review of #68) ----------
+const cssRules = (css) => [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => [m[1].trim().replace(/^(\/\*[\s\S]*?\*\/\s*)+/, ""), m[2]]);
+/** The body of the @media block that opens with `head` (one level of nesting). */
+const mediaBlock = (css, head) => { const a = css.indexOf(`${head}{`); assert.ok(a >= 0, head); const end = css.indexOf("\n}\n", a); return css.slice(a + head.length + 1, end); };
+
+test("TH14 Performance without layout shift (C1; review of #69): the record is preloaded, its box holds the drawn shape's height while it loads, then holds nothing", async () => {
+  const { TRACK_URL } = await import("../site/home/track.js");
+  const html = page("performance.html"), src = read("site/performance/performance.js"), css = read("public/home.css");
+  assert.equal(TRACK_URL, "/api/public/track-record");
+  // the preload names the very URL the script asks for, before the stylesheet
+  assert.match(html, /<link rel="preload" href="\/api\/public\/track-record" as="fetch" crossorigin>\n(<link rel="preload" [^>]*as="font"[^>]*>\n){2}<link rel="stylesheet"/);
+  assert.match(src, /\nfetch\(TRACK_URL\)\n/, "a plain fetch of the preloaded URL (no header, so the preload is used)");
+  assert.doesNotMatch(src, /fetch\(TRACK_URL,/);
+  // a visible box, busy while loading, around the empty line and the table; the table is laid out (unseen) from the start
+  assert.match(html, /\n {2}<div class="track-box" id="track-box" aria-busy="true">\n {4}<p class="empty" id="track-empty" hidden><\/p>\n {4}<div id="track-body">\n/);
+  assert.doesNotMatch(block(html, '<div class="track-box"', '\n  </div>\n'), /id="track-body" hidden/, "the table is not display:none while loading");
+  assert.match(css, /\n\.track-box\{display:flow-root\}\n/, "the box is shown and contains its children's margins");
+  assert.match(css, /\n\.track-box\[aria-busy="true"\] #track-body\{visibility:hidden\}\n/, "unseen while loading, yet taking its room");
+  // without a script the record never comes: the table is not laid out, so no room is held under "Loading the record."
+  assert.match(css, /\n@media \(scripting:none\)\{\.track-box\[aria-busy="true"\] #track-body\{display:none\}\}\n/);
+  // from 761 px the columns have fixed widths, so a pending managed exit's note does not widen its column and wrap the
+  // others: both shapes draw one table height (397.72 px, TH20), held while loading, with no band per wrap of the note
+  assert.match(css, /\n@media \(min-width:761px\)\{\n {2}\.track\{table-layout:fixed\}\n {2}\.track thead th:first-child\{width:24%\}\n\}\n/);
+  const held = [...css.matchAll(/\.track-box\[aria-busy="true"\] \.track\{height:([\d.]+)px\}/g)].map((m) => Number(m[1]));
+  assert.deepEqual(held, [397.72], "one held table height from 761 px up");
+  // a phone: the pending managed exit's rows and column counts (the record's shape today, and the shorter one)
+  const phone = mediaBlock(css, "/* a phone: the table becomes label and value rows */\n@media (max-width:760px)");
+  assert.match(phone, /\.track-box\[aria-busy="true"\] \.track\{height:auto\}/);
+  assert.match(phone, /\.track-box\[aria-busy="true"\] \.bases\{min-height:51px\}/);
+  assert.match(phone, /\.track-box\[aria-busy="true"\] #track-rows\{min-height:608\.2px\}/);
+  assert.match(css, /\n@media \(max-width:470px\)\{\.track-box\[aria-busy="true"\] #track-rows\{min-height:633\.7px\}\}\n/, "the pending note on two lines");
+  // drawn: then no longer busy, in the same task, and no floor kept (a floor left the drawn record over a screen of blank)
+  const done = src.slice(src.indexOf(".then((body) => {"));
+  const order = ["draw(body)", "renderAvgStrip(body)", "removeAttribute('aria-busy')"].map((s) => done.indexOf(s));
+  assert.ok(order.every((i, k) => i > 0 && (k === 0 || i > order[k - 1])), `drawn, then no longer busy (${order})`);
+  assert.doesNotMatch(src, /minHeight|min-height|getBoundingClientRect|addEventListener\('resize'/, "no floor, nothing measured, nothing released on a resize");
+  assert.match(src, /\$\('track-body'\)\.hidden = true;/, "without a record the table stays hidden (the empty line shows)");
+});
+
+test("TH15 forced colours (C2): the page's own link underlined, focus in Highlight, only the selected tab ruled, pressed chips and the reading's marks kept", () => {
+  const css = read("public/home.css");
+  const fc = mediaBlock(css, "@media (forced-colors:active)");
+  const rule = (sel) => cssRules(fc).find(([s]) => s === sel)?.[1] ?? "";
+  assert.match(rule(".nav a[aria-current],.foot a[aria-current]"), /text-decoration:underline/, "aria-current: the header's mark is a box shadow, which forced colours drop");
+  assert.match(css, /\.nav a\[aria-current\]\{[^}]*box-shadow:inset/, "(the shadow the underline stands in for)");
+  assert.match(rule(":focus-visible"), /outline:2px solid Highlight/);
+  assert.match(rule(".kinds button,.rooms button"), /border-bottom-color:Canvas/, "the tabs not chosen carry no rule");
+  assert.match(rule('.kinds button[aria-selected="true"],.rooms button[aria-selected="true"]'), /border-bottom-color:Highlight/, "the chosen tab does");
+  assert.match(rule('.chip[aria-pressed="true"]'), /forced-color-adjust:none;background:Highlight;color:HighlightText/, "a pressed chip's fill");
+  // the stance tick and the tally's bars are fills: kept as bars. Each tone class is named in the block, so the theme's
+  // .status-reading .tick.bear (0,3,0) and .tally .bear (0,2,0) do not outrank the bar and keep a theme colour that reads
+  // 3.15:1 or less on a white Canvas (review of #69)
+  const BAR = ".status-reading .tick,.status-reading .tick.bear,.status-reading .tick.bull,.tally b,.tally .bear,.tally .bull,.tally .flat";
+  assert.match(rule(BAR), /^forced-color-adjust:none;background:CanvasText$/);
+  // every theme rule that colours a tick or a tally bar has a bar here with its classes and at least its specificity
+  // (classes only: the block comes later, so a tie wins)
+  const classes = (sel) => sel.match(/\.[\w-]+/g) ?? [];
+  const theme = cssRules(css.slice(0, css.indexOf("@media (forced-colors:active)"))).filter(([, body]) => /background:var\(--(bear|bull|flat)\)/.test(body));
+  const marks = theme.flatMap(([sel]) => sel.split(",")).filter((sel) => /\.(tick|tally)\b/.test(sel));
+  assert.ok(marks.length >= 6, `the theme's coloured marks (${marks})`);
+  for (const sel of marks) {
+    assert.doesNotMatch(sel, /#|\[/, `${sel}: classes only`);
+    assert.ok(BAR.split(",").some((bar) => classes(sel).every((c) => classes(bar).includes(c)) && classes(bar).length >= classes(sel).length), `${sel}: a forced-colours bar as specific, later`);
+  }
+  // About's never list: the dash is a border (kept by forced colours), not a fill (repainted to Canvas) — review of #68
+  const never = cssRules(css).find(([s]) => s === ".page .never li::before")[1];
+  assert.match(never, /height:0;border-top:2px solid var\(--slate\)/);
+  assert.doesNotMatch(never, /background/, "no fill for the marker");
+});
+
+test("TH16 the shared profile (C3): Performance writes the Threads links, the Archive the Threads links and the disclaimer, through applyProfile, not their own code", () => {
+  for (const f of ["site/performance/performance.js", "site/archive/archive.js"]) {
+    const src = read(f);
+    assert.match(src, /^import \{ applyProfile, PROFILE_URL \} from '\.\.\/page\/profile\.js';$/m, `${f}: the shared profile`);
+    assert.match(src, /applyProfile\(p\)/, `${f}: applied`);
+    assert.match(src, /\(PROFILE_URL\)/, `${f}: one GET of the profile`);
+    assert.doesNotMatch(src, /threads\\?\.\(net\|com\)|data-threads|brand\?\.disclaimer|'\/api\/public\/profile'/, `${f}: no copy of applyProfile's work`);
+  }
+  // the bundles carry it: the Threads host check of profile.js and the profile's URL
+  for (const f of ["public/performance.js", "public/archive.js"]) {
+    const js = read(f);
+    assert.ok(js.includes("/api/public/profile") && js.includes("[data-threads]") && /threads\\\.\(net\|com\)/.test(js), `${f}: built with applyProfile`);
+  }
+  // the Archive still names each post's channel from the profile's links
+  assert.match(read("site/archive/archive.js"), /state\.label\[l\.channel\] = l\.label/);
+});
+
+test("TH17 the Archive's tabs (C4): a roving tabindex on the tablist, the panel focusable and labelled by its tab, each day by its heading", () => {
+  const html = page("archive.html"), src = read("site/archive/archive.js");
+  assert.match(html, /<div class="kinds" id="kinds" role="tablist" aria-label="Kind of post"><\/div>/);
+  // before the tabs are drawn, and without a script, the panel is neither a tab stop nor named after a tab that is not
+  // there (review of #69): drawTabs() makes it both
+  assert.match(html, /<div class="a-list" id="archive" role="tabpanel" aria-busy="true"><\/div>/, "no tabindex, no aria-labelledby in the page");
+  assert.match(src, /const TAB_ID = \(k\) => `kind-\$\{k \|\| 'all'\}`;/, "kind-all is the All posts tab's id");
+  assert.match(src, /b\.tabIndex = t\.selected \? 0 : -1;/, "one tab in the tab order: the selected one");
+  const draw = src.slice(src.indexOf("function drawTabs() {"), src.indexOf("\n}\n", src.indexOf("function drawTabs() {")));
+  assert.match(draw, /\n {2}\$\('archive'\)\.setAttribute\('aria-labelledby', TAB_ID\(state\.kind\)\);\n {2}\$\('archive'\)\.tabIndex = 0;$/, "labelled and focusable once the tabs exist");
+  assert.equal([...src.matchAll(/\$\('archive'\)\.(tabIndex|setAttribute\('aria-labelledby')/g)].length, 2, "only there");
+  assert.match(src, /h2\.id = `day-\$\{i\}`;\n {4}sec\.setAttribute\('aria-labelledby', h2\.id\);/, "a day is labelled by its own h2");
+  assert.doesNotMatch(src, /setAttribute\('aria-label', d\.day\)/);
+  assert.match(read("public/home.css"), /\n\.a-list:focus-visible\{outline-offset:8px\}\n/);
+});
+
+test("TH18 the header fits (C5) and its links are 44 px on a phone (C4b): two rows from 760 px down, under 100 px tall", () => {
+  const css = read("public/home.css");
+  // The header wraps to two rows only in this block, and the block reaches 760 px: from 601 to about 752 px the four links
+  // ran under the clock in one row (headless sweep in the PR).
+  const wraps = [...css.matchAll(/@media \(max-width:(\d+)px\)\{(?:(?!\n\}\n)[\s\S])*?\n {2}\.top\{flex-wrap:wrap;/g)].map((m) => Number(m[1]));
+  assert.deepEqual(wraps, [760], "one breakpoint puts the header on two rows");
+  assert.ok(wraps[0] >= 760, "the two rows reach at least 760 px");
+  const two = mediaBlock(css, "@media (max-width:760px)");
+  assert.match(two, /\n {2}\.nav\{order:5;flex:1 0 100%;/, "the links on their own row");
+  assert.match(two, /\n {2}\.top-clock\{margin-left:auto\}/, "the clock at the first row's end, clear of the links");
+  // every rule for the header's links keeps a 44 px target
+  for (const [sel, body] of cssRules(css).filter(([s]) => /(^|,)\s*\.nav a\s*(,|$)/.test(s))) {
+    const h = body.match(/min-height:(\d+)px/);
+    if (h) assert.ok(Number(h[1]) >= 44, `${sel}: min-height ${h[1]}px`);
+  }
+  assert.match(two, /\.nav a\{[^}]*min-height:44px/);
+  // two rows: 6 px above, the brand's and the links' 44 px rows, 2 px below, the 1 px rule, under the 100 px of --top
+  const top = two.match(/\.top\{[^}]*padding-top:(\d+)px;padding-bottom:(\d+)px\}/);
+  assert.ok(top, "the two rows' padding");
+  assert.ok(Number(top[1]) + 44 + 44 + Number(top[2]) + 1 < 100, "under 100 px");
+  assert.match(two, /:root\{--top:100px\}/);
+});
+
+test("TH19 About's step numbers use a preloaded weight (review of #68: Rajdhani 700 swapped in late and moved them)", () => {
+  const css = read("public/home.css"), html = page("about.html");
+  const num = cssRules(css).find(([s]) => s === ".page .a-steps .num")[1];
+  const weight = Number(num.match(/font:(\d+) /)[1]);
+  const preloaded = [...html.matchAll(/<link rel="preload" href="\/fonts\/rajdhani-latin-(\d+)-normal\.woff2"/g)].map((m) => Number(m[1]));
+  assert.deepEqual(preloaded, [600]);
+  assert.ok(preloaded.includes(weight), `the numbers' weight ${weight} is preloaded`);
+  assert.equal(weight, 600);
+});
+
+test("TH20 the record draws at the room held for it (review of #69): pending and shown never more than 2 px shorter, pending at it, 320 to 1600 px", async () => {
+  // test/fixtures/track-heights.json: the box's height at every width while the record loads and once each answer is
+  // drawn, measured in headless Chromium by scripts/track-heights.mjs from the layout as it is now (a change to the
+  // Performance rules, the page's <main>, its script or trackModel needs a new measure)
+  const { trackModel } = await import("../site/home/track.js");
+  const f = JSON.parse(read("test/fixtures/track-heights.json"));
+  assert.equal(f.layout, layoutHash(), "measured from the current layout: run scripts/track-heights.mjs");
+  // the answers measured: the live record with the managed exit pending, the same with it shown, and no record
+  assert.deepEqual(trackModel(ANSWERS.pending).columns.map((c) => c.shown), [true, true, false]);
+  assert.deepEqual(trackModel(ANSWERS.shown).columns.map((c) => c.shown), [true, true, true]);
+  assert.equal(trackModel(ANSWERS.none).available, false);
+  const held = fromRuns(f.held), pending = fromRuns(f.pending), shown = fromRuns(f.shown), none = fromRuns(f.none);
+  for (let w = 320; w <= 1600; w++) {
+    for (const [name, m] of [["pending", pending], ["shown", shown]]) {
+      assert.ok(m.get(w) >= held.get(w) - 2, `${w} px, ${name}: drawn ${m.get(w)} under the ${held.get(w)} held (a gap below the record)`);
+    }
+    assert.ok(Math.abs(pending.get(w) - held.get(w)) <= 1, `${w} px: the live shape draws at the room held (${pending.get(w)} vs ${held.get(w)})`);
+    // the table's two shapes are one height from 761 px up, where the page below is in view
+    if (w > 760) assert.ok(Math.abs(shown.get(w) - held.get(w)) <= 1, `${w} px: shown at the room held`);
+    // no record: one line, so the page below moves up once (the shrink the review accepts, rather than a screen of blank)
+    assert.ok(none.get(w) < 100, `${w} px: no record is one line (${none.get(w)})`);
+  }
 });
