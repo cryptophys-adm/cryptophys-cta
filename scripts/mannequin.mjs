@@ -8,10 +8,8 @@
 // Plain glTF that three's GLTFLoader reads without a decoder, so the CSP stays as it is (Draco and meshopt
 // compression need WebAssembly in script-src). The source, site/room/mannequin.source.glb, is the file
 // public/room/CREDITS.txt describes. Run: npm run build:mannequin (then npm run build:room for the URLs' hashes).
-import { NodeIO } from "@gltf-transform/core";
-import { ALL_EXTENSIONS } from "@gltf-transform/extensions";
-import { quantize, simplify, weld, prune } from "@gltf-transform/functions";
-import { MeshoptSimplifier } from "meshoptimizer";
+// The tools are imported only when this runs as a script: the tests read its constants before npm ci (CI runs them
+// first), so this module must load without its dev dependencies.
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL, fileURLToPath } from "node:url";
@@ -28,6 +26,10 @@ export const TOOLS = Object.freeze(["@gltf-transform/core", "@gltf-transform/ext
 // Run as a script. pathToFileURL of the real path: a hand-built file:// URL never equals import.meta.url for a path
 // with a space, a symlink or on Windows, and the script then exited 0 having built nothing (orchestrator review).
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
+  const { NodeIO } = await import("@gltf-transform/core");
+  const { ALL_EXTENSIONS } = await import("@gltf-transform/extensions");
+  const { quantize, simplify, weld, prune } = await import("@gltf-transform/functions");
+  const { MeshoptSimplifier } = await import("meshoptimizer");
   const at = (p) => fileURLToPath(new URL(`../${p}`, import.meta.url));
   await MeshoptSimplifier.ready;
   const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);

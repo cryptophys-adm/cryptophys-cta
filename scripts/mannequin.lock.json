@@ -3,7 +3,7 @@
     "site/room/mannequin.source.glb": "0d11eb3bbc6df8d30dfe75ce7cc2f060df99c01cf43ed7a4d505332272afacc2"
   },
   "recipe": {
-    "scripts/mannequin.mjs": "259792ad76893c9b21d6868375b8aaaf49b2b23b31107f4be33ce2db22e49def"
+    "scripts/mannequin.mjs": "867e423a2aa7d8b215364306b5e0308d9a933d90ede4fc54c933ced629df014d"
   },
   "tools": {
     "@gltf-transform/core": "4.5.1",
