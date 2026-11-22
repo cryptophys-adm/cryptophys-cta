@@ -1,8 +1,8 @@
 {
   "base": "c744187bb53c5569a7e86ff3ff57439b3b014104",
   "about_base": "b650f1896414aec131f7c57e903098cbae0cb674",
-  "signin_base": "c41f6e8989f0fc2372e35b8850928b544439d2c0",
-  "note": "The words inside <main> of each page, and its <title>, at the PR base (git show <base>:public/<page>): tags removed, entities decoded, whitespace collapsed. Disclaimer, Privacy and Terms at the base of PR 1 (base); About at the base of PR 2 (about_base, unchanged since base); Sign in at the base of PR 4 (signin_base, unchanged since #17). Public content is final: test/theme.test.mjs holds the ported pages to these words.",
+  "signin_base": "357668f6870b8fbaee1900d5cb9cc9b833777c9c",
+  "note": "The words inside <main> of each page, and its <title>, at the PR base (git show <base>:public/<page>): tags removed, entities decoded, whitespace collapsed. Disclaimer, Privacy and Terms at the base of PR 1 (base); About at the base of PR 2 (about_base, unchanged since base); Sign in at the base of PR 4 (signin_base, #69 on main; public/signin.html unchanged since #14). Public content is final: test/theme.test.mjs holds the ported pages to these words.",
   "titles": {
     "about.html": "How it works · XAUUSD AI · Cryptophys",
     "disclaimer.html": "Disclaimer · XAUUSD AI · Cryptophys",
