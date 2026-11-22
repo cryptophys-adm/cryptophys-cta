@@ -28,7 +28,7 @@ const norm = (s) => s
   .replace(/ itemscope| itemtype="[^"]*"| itemprop="[^"]*"| data-panel="[^"]*"/g, "")
   .replace(/href="#/g, 'href="/#')
   .replace(/\?v=[0-9a-f]+"/g, '"');
-const links = (inner) => [...norm(inner).matchAll(/<a ([^>]*)>([^<]*)<\/a>/g)].map((m) => [m[1].match(/href="([^"]*)"/)[1], m[2]]);
+const links = (inner) => [...norm(inner).matchAll(/<a ([^>]*)>([\s\S]*?)<\/a>/g)].map((m) => [m[1].match(/href="([^"]*)"/)[1], m[2]]);
 const current = (html) => [...html.matchAll(/<a ([^>]*aria-current[^>]*)>/g)].map((m) => norm(m[1]).match(/href="([^"]*)"/)[1]);
 
 const ENT = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", minus: "−" };
@@ -80,6 +80,16 @@ test("TH3 the Footer and Legal navs carry the same links on every page ('3D cred
   for (const f of ["archive.html", ...PORTED]) {
     const foot = block(page(f), '<footer class="foot">', "</footer>");
     assert.ok(foot.includes(`</nav>\n  ${FOOT_NOTE}\n</footer>`), `${f}: the foot note under the Legal nav`);
+  }
+  // The whole footer, markup and attributes, equals the Performance page's (review of #67): nothing between or after
+  // the navs, no nested markup in a link, no extra attribute. Allowed: the foot note (Archive and the ported pages) and
+  // the home page's 3D credits link; aria-current and ?v= are normalised away.
+  const perfFoot = norm(block(perf, '<footer class="foot">', "</footer>"));
+  for (const f of THEME_PAGES) {
+    const foot = norm(block(page(f), '<footer class="foot">', "</footer>"))
+      .replace(`\n  ${FOOT_NOTE}`, "")
+      .replace(/\n {4}<a href="\/room\/CREDITS\.txt">3D credits<\/a>/, "");
+    assert.equal(foot, perfFoot, `${f}: the shared footer`);
   }
 });
 
