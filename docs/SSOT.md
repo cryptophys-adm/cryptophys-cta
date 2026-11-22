@@ -55,6 +55,7 @@ Bindings:
     mapping in the card page. Nothing is drawn inside TradingView and no bar leaves the browser. This reads
     TradingView's internal chart objects (not a public API): if they change, `geometryProblem` refuses the card, the
     draft stays `needs_image` with the reason, and nothing wrong is published.
+  - The browser loads the card page (`load`), waits for TradingView's frame and its canvas, never for an idle network (the widget's connections stay open).
   - Rendered right after each drafting run (about 7–8 seconds a card, at most 3 a run, 3 tries per draft), kept in
     the Desk (`media`, base64); the draft then waits for a person. `@cloudflare/puppeteer` is the one runtime
     dependency (`nodejs_compat`).

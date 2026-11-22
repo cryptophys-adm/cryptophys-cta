@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-22 (card render)
+- fix(render): the card page loads with `waitUntil: "load"`, then waits for TradingView's frame (polled every 250 ms) and its canvas, instead of `networkidle0`. TradingView's widget keeps its data connections open, so the network was often never idle and cards and videos failed with "Navigation timeout of 30000 ms exceeded" (from 2026-11-16: the recaps of 16 and 18 November, a War Room post on Threads, Instagram and YouTube drafts). Test `chartFrame`.
+
 ## 2026-11-22 (schedule weekdays)
 - fix(schedule): the cron triggers name their weekdays. Cloudflare reads the weekday field as 1 = Sunday to 7 = Saturday, so `9 * * * 1-5` ran the analysis Sunday to Thursday (three runs on Sunday 22 November from 00:10 UTC while gold was closed, two drafts made and expired; none on Friday 20 November) and `17 22 * * 2-6` ran the recap, token refresh and metrics Monday to Friday (Monday 16 November with no bars; no run on Saturday 21 November, so Friday's trading day has no recap). Now `9 * * * SUN-FRI` and `17 22 * * TUE-SAT` in `wrangler.jsonc`, `organism.json` and `src/app.mjs`; the hourly analysis run drafts only while gold trades (`analysisRunDue`, the AI Worker's market hours), so it skips Sunday's closed hours and Friday's after the close and drafts the week's first hour (Sunday 23:09 UTC in winter; orchestrator review); the studio's Draft now is not bound by it. Tests CR1 to CR3.
 
