@@ -1,8 +1,10 @@
 // Builds the war room's two mannequins from the source model (frontend audit 2026-11-22, owner approved):
 // - public/room/mannequin.glb: the source quantized (KHR_mesh_quantization: positions 16-bit, normals and weights
-//   8-bit), the same mesh, skeleton and look in about half the bytes;
-// - public/room/mannequin-lo.glb: for phones and small GPUs (the scene's LOW), about half the triangles
-//   (meshoptimizer's simplifier at build time), then quantized the same way.
+//   8-bit), the same mesh, skeleton and look: 466 KiB to 266 KiB (43 % less);
+// - public/room/mannequin-lo.glb: for phones and small GPUs (the scene's LOW), 58 % of the source's triangles
+//   (meshoptimizer's simplifier at ratio 0.5 within its error bound), then quantized the same way: 157 KiB.
+// It writes scripts/mannequin.lock.json: the source's and this recipe's sha256, the tools' versions and the outputs'
+// sha256, which test/room.test.mjs RM12 holds against the committed files (orchestrator review of #64).
 // Plain glTF that three's GLTFLoader reads without a decoder, so the CSP stays as it is (Draco and meshopt
 // compression need WebAssembly in script-src). The source, site/room/mannequin.source.glb, is the file
 // public/room/CREDITS.txt describes. Run: npm run build:mannequin (then npm run build:room for the URLs' hashes).
@@ -10,21 +12,35 @@ import { NodeIO } from "@gltf-transform/core";
 import { ALL_EXTENSIONS } from "@gltf-transform/extensions";
 import { quantize, simplify, weld, prune } from "@gltf-transform/functions";
 import { MeshoptSimplifier } from "meshoptimizer";
+import { createHash } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL, fileURLToPath } from "node:url";
+import { realpathSync } from "node:fs";
 
 export const QUANTIZE = Object.freeze({ quantizePosition: 16, quantizeNormal: 8, quantizeWeight: 8 });
 export const SIMPLIFY = Object.freeze({ ratio: 0.5, error: 0.001 });
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const at = (p) => new URL(`../${p}`, import.meta.url).pathname;
+export const LOCK = "scripts/mannequin.lock.json";
+export const SOURCE = "site/room/mannequin.source.glb";
+export const OUTPUTS = Object.freeze(["public/room/mannequin.glb", "public/room/mannequin-lo.glb"]);
+export const TOOLS = Object.freeze(["@gltf-transform/core", "@gltf-transform/extensions", "@gltf-transform/functions", "meshoptimizer"]);
+
+// Run as a script. pathToFileURL of the real path: a hand-built file:// URL never equals import.meta.url for a path
+// with a space, a symlink or on Windows, and the script then exited 0 having built nothing (orchestrator review).
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
+  const at = (p) => fileURLToPath(new URL(`../${p}`, import.meta.url));
   await MeshoptSimplifier.ready;
   const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
-  const full = await io.read(at("site/room/mannequin.source.glb"));
+  const full = await io.read(at(SOURCE));
   await full.transform(quantize(QUANTIZE), prune());
   await io.write(at("public/room/mannequin.glb"), full);
-  const lo = await io.read(at("site/room/mannequin.source.glb"));
+  const lo = await io.read(at(SOURCE));
   await lo.transform(weld(), simplify({ simplifier: MeshoptSimplifier, ...SIMPLIFY }), quantize(QUANTIZE), prune());
   await io.write(at("public/room/mannequin-lo.glb"), lo);
-  const { statSync } = await import("node:fs");
-  const kb = (p) => (statSync(at(p)).size / 1024).toFixed(0);
-  console.log(`mannequin.glb ${kb("public/room/mannequin.glb")} KB, mannequin-lo.glb ${kb("public/room/mannequin-lo.glb")} KB`);
+  const sha = (p) => createHash("sha256").update(readFileSync(at(p))).digest("hex");
+  const version = (pkg) => JSON.parse(readFileSync(at(`node_modules/${pkg}/package.json`), "utf8")).version;
+  const lock = { source: { [SOURCE]: sha(SOURCE) }, recipe: { "scripts/mannequin.mjs": sha("scripts/mannequin.mjs") }, tools: Object.fromEntries(TOOLS.map((t) => [t, version(t)])), quantize: QUANTIZE, simplify: SIMPLIFY, outputs: Object.fromEntries(OUTPUTS.map((o) => [o, sha(o)])) };
+  writeFileSync(at(LOCK), `${JSON.stringify(lock, null, 2)}\n`);
+  const kib = (p) => (readFileSync(at(p)).length / 1024).toFixed(0);
+  console.log(`mannequin.glb ${kib("public/room/mannequin.glb")} KiB, mannequin-lo.glb ${kib("public/room/mannequin-lo.glb")} KiB, ${LOCK} written`);
 }
