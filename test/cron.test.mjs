@@ -23,8 +23,8 @@ function cloudflareWeekdays(field) {
 }
 const weekdays = (cron) => cloudflareWeekdays(cron.trim().split(/\s+/)[4]);
 
-test("CR1: the analysis runs Monday to Friday and the recap Tuesday to Saturday (UTC), as Cloudflare reads the field", () => {
-  assert.deepEqual(weekdays(ANALYSIS_CRON), ["MON", "TUE", "WED", "THU", "FRI"]);
+test("CR1: the analysis runs Sunday to Friday and the recap Tuesday to Saturday (UTC), as Cloudflare reads the field", () => {
+  assert.deepEqual(weekdays(ANALYSIS_CRON), ["SUN", "MON", "TUE", "WED", "THU", "FRI"], "Sunday for the hour after the reopen; the guard skips the closed hours");
   assert.deepEqual(weekdays(RECAP_CRON), ["TUE", "WED", "THU", "FRI", "SAT"]);
   assert.deepEqual(weekdays(SCHEDULE_CRON), NAMES);
   assert.deepEqual(weekdays("9 * * * 1-5"), ["SUN", "MON", "TUE", "WED", "THU"], "the old field, as it ran");
@@ -41,6 +41,8 @@ test("CR3: the hourly analysis run drafts only while gold trades (Friday's hours
   assert.equal(analysisRunDue(Date.parse("2026-11-20T21:09:00Z")), true, "Friday 21:09 UTC, before the 22:00 close");
   assert.equal(analysisRunDue(Date.parse("2026-11-20T22:09:00Z")), false, "Friday 22:09 UTC, closed");
   assert.equal(analysisRunDue(Date.parse("2026-11-22T00:09:00Z")), false, "Sunday 00:09 UTC, closed (the old trigger ran here)");
+  assert.equal(analysisRunDue(Date.parse("2026-11-22T22:09:00Z")), false, "Sunday 22:09 UTC in November, still closed");
+  assert.equal(analysisRunDue(Date.parse("2026-11-22T23:09:00Z")), true, "Sunday 23:09 UTC, the week's first hour");
   assert.equal(analysisRunDue(Date.parse("2026-11-23T00:09:00Z")), true, "Monday 00:09 UTC, open since Sunday 23:00");
   const src = readFileSync(new URL("../src/index.mjs", import.meta.url), "utf8");
   assert.match(src, /event\?\.cron === ANALYSIS_CRON\) \{\s*if \(!analysisRunDue\(/, "the scheduled handler asks before drafting");

@@ -21,11 +21,11 @@ import { sourceOf } from "./warroom-drafts.mjs";
 import { goldClosedAt } from "../site/home/market-hours.js";
 
 export const RECAP_CRON = "17 22 * * TUE-SAT";
-export const ANALYSIS_CRON = "9 * * * MON-FRI";
+export const ANALYSIS_CRON = "9 * * * SUN-FRI";
 /**
- * The hourly analysis run drafts only while gold trades (the AI Worker's rule, site/home/market-hours.js): the cron's
- * Monday to Friday still has Friday's hours after the close (22:09 and 23:09 UTC in November), when the zones are a
- * closed week's. A person's Draft now in the studio is not bound by it.
+ * The hourly analysis run drafts only while gold trades (the AI Worker's rule, site/home/market-hours.js). The cron runs
+ * Sunday to Friday so the week's first hour after the reopen is drafted (Sunday 23:09 UTC in winter, 22:09 in US
+ * summer); this skips Sunday's closed hours and Friday's after the close. A person's Draft now is not bound by it.
  */
 export const analysisRunDue = (now) => !goldClosedAt(now);
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" };

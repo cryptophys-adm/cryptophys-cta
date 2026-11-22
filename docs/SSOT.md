@@ -119,12 +119,12 @@ rest of the host stays public.
 
 ## 3. Schedule (UTC)
 
-Cloudflare reads a cron's weekday field as 1 = Sunday to 7 = Saturday, so the triggers name their days (`MON-FRI`, `TUE-SAT`; `test/cron.test.mjs`). Until 2026-11-22 they said `1-5` and `2-6`, which ran the analysis Sunday to Thursday and the recap Monday to Friday.
+Cloudflare reads a cron's weekday field as 1 = Sunday to 7 = Saturday, so the triggers name their days (`SUN-FRI`, `TUE-SAT`; `test/cron.test.mjs`). Until 2026-11-22 they said `1-5` and `2-6`, which ran the analysis Sunday to Thursday and the recap Monday to Friday.
 
 | Cron | What |
 |---|---|
 | `*/5 * * * *` | the per-channel scheduler: each channel's due posting slot publishes its oldest approved draft (only while `CONTENT_PUBLISH` is "on", and only for the channels in `PUBLISH_CHANNELS`; no Desk call otherwise) |
-| `9 * * * MON-FRI` | only while gold trades (`analysisRunDue`, the AI Worker's market hours: Friday's runs after the close are skipped): pattern posts (confirmed on H1/H4/D1, forming on H4/D1; once each; at most four a day per channel); at 06:09 the key-level map |
+| `9 * * * SUN-FRI` | only while gold trades (`analysisRunDue`, the AI Worker's market hours: Sunday's hours before the reopen and Friday's after the close are skipped, so the week's first hour, Sunday 23:09 UTC in winter, is drafted): pattern posts (confirmed on H1/H4/D1, forming on H4/D1; once each; at most four a day per channel); at 06:09 the key-level map |
 | `17 22 * * TUE-SAT` | the recap of the trading day that ended 24 hours earlier; token refresh (only while publishing is on: Threads and Instagram long-lived tokens, TikTok's rotating refresh token); then the metrics of the last 14 days' posts (`src/insights.mjs`; only while publishing is on) |
 
 **Expiry (owner 2026-11-17: "kadaluwarsa otomatis").** An analysis draft (`key_levels`, `pattern`) expires `ANALYSIS_TTL_HOURS` (2) after it was made: each scheduler run (every 5 minutes, publishing on or off), an approval, a send again, a slot's next draft and the publisher itself mark it `expired` (with an event), and a copy of it is refused. The studio shows it as "Expired (old analysis)" with "Make a fresh one" (Create, the same kind, the latest analysis). The cause: a 06:10 UTC map went out at 15:50 with "Price is inside the zone ...". A recap is about the past and does not expire.
