@@ -21,8 +21,10 @@ export async function renderCard(draft, brand, { launch, disclaimers = [], timeo
     // "load", not "networkidle0": TradingView's widget keeps its data connections open, so the network is often never
     // idle for half a second and the card failed with "Navigation timeout of 30000 ms exceeded" (2026-11-16 to 11-19,
     // Threads, Instagram and YouTube drafts). What the card needs is waited for below: the chart's frame, then its canvas.
+    // One deadline for the page and the chart's frame (orchestrator review): a bad render fails within timeoutMs, as before.
+    const started = Date.now();
     await page.setContent(html, { waitUntil: "load", timeout: timeoutMs });
-    const frame = await chartFrame(page, { timeoutMs, sleep });
+    const frame = await chartFrame(page, { timeoutMs: Math.max(1_000, timeoutMs - (Date.now() - started)), sleep });
     if (!frame) throw new Error("the TradingView chart did not load");
     await frame.waitForSelector("canvas", { timeout: timeoutMs });
     await sleep(settleMs);
