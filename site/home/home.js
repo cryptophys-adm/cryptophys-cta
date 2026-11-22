@@ -8,7 +8,7 @@ import { startClock } from './header.js';
 import { initPanels } from './panels.js';
 import { TRACK_URL } from './track.js';
 import { renderAvgStrip } from './avg-strip.js';
-import { tvQuoteSrc } from './gold.js';
+import { tvQuoteSrc, quoteTop } from './gold.js';
 import { lowEnd, mannequinUrl } from '../room/quality.js';
 
 const $ = (id) => document.getElementById(id);
@@ -174,7 +174,28 @@ if ($('gold-live')) {
     f.referrerPolicy = 'strict-origin-when-cross-origin';
     $('tv-frame').append(f);
     $('gold-live').hidden = false;
+    placeQuote();
   });
+}
+
+// On a wide screen the strip sits right above the headline (the copy is pinned to the hero's foot, so its top moves
+// with the window): measured, then set through the CSSOM (the CSP allows no inline style). A phone keeps the CSS place.
+const WIDE = window.matchMedia?.('(min-width: 901px)');
+function placeQuote() {
+  const g = $('gold-live'), h = $('hero-title'), hero = h?.closest('.hero');
+  if (!g || g.hidden || !hero) return;
+  if (!WIDE?.matches) { g.style.removeProperty('top'); return; }
+  // offsetTop ignores transforms: the headline's rise animation (translateY 8px) does not move the measure.
+  let titleTop = 0;
+  for (let n = h; n && n !== hero; n = n.offsetParent) titleTop += n.offsetTop;
+  const top = quoteTop({ titleTop, height: g.offsetHeight });
+  if (top != null) g.style.top = `${top}px`;
+}
+if ($('gold-live')) {
+  const ro = window.ResizeObserver && new ResizeObserver(placeQuote);
+  for (const el of [$('hero-title')?.closest('.hero'), $('hero-title')?.closest('.hero-copy')]) if (el) ro?.observe(el);
+  window.addEventListener('resize', placeQuote, { passive: true });
+  WIDE?.addEventListener?.('change', placeQuote);
 }
 
 /* ---------- the scene: three.js and the mannequin are this site's own files, fetched once the page has painted ---------- */
