@@ -463,32 +463,54 @@ ul{margin:0;padding:0;list-style:none}
 .a-day{display:grid;grid-template-columns:240px minmax(0,1fr);gap:clamp(32px,6vw,80px);padding-top:40px}
 .a-day+.a-day{border-top:1px solid var(--rule)}
 .a-day h2{align-self:start;font:600 var(--s1)/1.15 var(--display)}
-.a-post{padding-bottom:32px}
-.a-post+.a-post{padding-top:28px;border-top:1px solid var(--rule)}
-.a-meta{display:flex;align-items:baseline;gap:14px;font-family:var(--display)}
-.a-meta b{font-weight:600;font-size:var(--s0)}
-.a-kind{font-weight:500;font-size:var(--s0);color:var(--slate)}
-.a-time{margin-left:auto;text-align:right;font-variant-numeric:tabular-nums;line-height:1.2}
-.a-time span{display:block;font-weight:500;font-size:var(--s0)}
+/* the digest (owner 2026-11-23): one line per post, opened in place with its text and, when it has one, its card */
+.a-day{gap:clamp(24px,4vw,48px);padding-top:28px}
+.a-posts{list-style:none;margin:0 0 24px;padding:0}
+.a-post{border-bottom:1px solid var(--rule)}
+.a-post summary{display:grid;grid-template-columns:7.5em 6.5em 8em minmax(0,1fr) 22px;align-items:baseline;gap:14px;min-height:44px;padding:11px 0;cursor:pointer;list-style:none;font-family:var(--display)}
+.a-post summary::-webkit-details-marker{display:none}
+.a-post summary:focus-visible{outline:2px solid var(--holo);outline-offset:4px}
+.a-post summary:hover .a-head{color:var(--holo)}
+.a-time{font-variant-numeric:tabular-nums;line-height:1.2}
+.a-time span{display:block;font-weight:500;font-size:var(--s0);white-space:nowrap}
 .a-time .a-local{margin-top:3px;font-size:var(--s-1);color:var(--slate)}
-.a-head{margin-top:14px;max-width:34em;font-size:var(--s1);line-height:1.4;color:var(--ink)}
-.a-body{margin-top:8px;max-width:38em;white-space:pre-wrap;color:#C9D4E4;font-variant-numeric:lining-nums tabular-nums}
+.a-ch{font-weight:600;font-size:var(--s0)}
+.a-kind{font-weight:500;font-size:var(--s0);color:var(--slate)}
+.a-head{font:400 var(--s0)/1.45 var(--read);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.a-post[open] .a-head{white-space:normal;color:var(--holo)}
+.a-pic{grid-column:5;justify-self:end;width:18px;height:14px;border:1.5px solid var(--slate);border-radius:2px;position:relative;top:2px}
+.a-pic::after{content:"";position:absolute;left:3px;right:3px;bottom:2px;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:5px solid var(--slate)}
+.a-open{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:32px;padding:4px 0 24px calc(7.5em + 14px)}
+.a-open.noimg{grid-template-columns:minmax(0,1fr)}
+.a-body{max-width:38em;white-space:pre-wrap;color:#C9D4E4;font-variant-numeric:lining-nums tabular-nums}
+.a-card{margin:0}
+.a-card img{display:block;width:100%;height:auto;aspect-ratio:4/5;border:1px solid var(--rule);border-radius:4px;background:var(--deck)}
 .a-note{margin-top:40px;padding-top:20px;border-top:1px solid var(--rule);max-width:62em}
 .a-note b{display:block;font:600 var(--s0)/1.3 var(--display)}
 .a-note p{margin-top:6px;font-style:italic;color:var(--slate)}
 .a-note a{font-style:normal;font-family:var(--display);font-weight:600;color:var(--holo)}
-/* a phone (the mockup at 390): the date over its posts; who and what on one line, the times under it; tabs wrap */
+/* a tablet and a narrow window (the mockup's 1100 px rule; orchestrator review of #73: from 761 px the day's 240 px
+   column left the line and the opened text 0 to 20 px): the date over its posts, so a line and its card take the width */
+@media (max-width:1100px){
+  .a-day{grid-template-columns:1fr;gap:6px}
+}
+/* the opened post: its card beside the text while both fit (the text at least 20 em), else under it */
+@media (max-width:860px){
+  .a-open{grid-template-columns:1fr;gap:16px}
+  .a-card{max-width:300px}
+}
+/* a phone (the mockup at 390): per line the time in its own column over two rows, the channel and kind beside it with
+   the first line under them, whole; the opened text and card under the line, full width; tabs wrap */
 @media (max-width:760px){
   .kinds{margin-top:28px}
   .kinds button{align-items:center;padding:0 10px}
-  .a-day{grid-template-columns:1fr;gap:0;padding-top:28px}
-  .a-post,.a-post+.a-post{padding:18px 0 28px}
-  .a-meta{flex-wrap:wrap;gap:2px 12px;line-height:1.25}
-  .a-time{flex:1 0 100%;margin-left:0;text-align:left;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 10px}
-  .a-time span{display:inline}
-  .a-time .a-local{margin-top:0}
-  .a-head{margin-top:12px;font-size:var(--s0);font-weight:500;line-height:1.45}
-  .a-body{margin-top:6px}
+  .a-day{padding-top:28px}
+  .a-post summary{grid-template-columns:min-content auto minmax(0,1fr) 20px;grid-template-areas:"t c k p" "t h h h";row-gap:2px;column-gap:10px}
+  .a-time{grid-area:t}
+  .a-time .a-local{white-space:normal}
+  .a-ch{grid-area:c}.a-kind{grid-area:k}.a-pic{grid-area:p;grid-column:auto}
+  .a-head{grid-area:h;white-space:normal}
+  .a-open{padding-left:0}
 }
 
 /* ---------- one look for every public page (the one-theme backlog, PR 1): Disclaimer, Privacy and Terms on the
@@ -527,6 +549,7 @@ ul{margin:0;padding:0;list-style:none}
   .chip[aria-pressed="true"]{forced-color-adjust:none;background:Highlight;color:HighlightText;border-color:Highlight}
   .status-reading .tick,.status-reading .tick.bear,.status-reading .tick.bull,.tally b,.tally .bear,.tally .bull,.tally .flat{forced-color-adjust:none;background:CanvasText}
   .status-reading .tick{outline:2px solid Canvas}
+  .a-pic,.a-pic::after{forced-color-adjust:none}.a-pic{border-color:CanvasText}.a-pic::after{border-bottom-color:CanvasText}
 }
 
 /* ---------- Sign in (the one-theme backlog, PR 4; owner decision 4: the dark look), which is also the studio's 403

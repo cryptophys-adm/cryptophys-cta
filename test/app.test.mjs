@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule } from "../src/app.mjs";
+import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule, cardPathOf } from "../src/app.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
 import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus } from "../src/desk.mjs";
@@ -154,6 +154,13 @@ test("publishing on: an approved Telegram draft goes out with the channel's secr
   assert.equal(getDraft(d.sql, "t1").remote_id, "77");
   assert.deepEqual(await publishDraft(e, getDraft(d.sql, "y1"), { fetcher }), { status: "approved", held: "account_not_configured" }, "YouTube is built; without its OAuth app it waits");
   assert.deepEqual(await (await handle(req("/api/public/archive"), e, opts)).json().then((a) => a.posts.map((p) => p.id)), ["t1"], "the archive shows what was published");
+  // the digest (owner 2026-11-23): each post carries its card's path, or null; never the stored URL
+  const one = (await (await handle(req("/api/public/archive"), e, opts)).json()).posts[0];
+  assert.equal(one.image, null, "a post without a card");
+  assert.equal("image_url" in one, false, "the stored URL is not passed on");
+  assert.equal(cardPathOf("https://cta.cryptophys.work/media/0123456789abcdef0123456789abcdef.jpg"), "/media/0123456789abcdef0123456789abcdef.jpg");
+  assert.equal(cardPathOf("https://cta.cryptophys.work/media/0123456789abcdef0123456789abcdef.webm"), null, "a video has no card here");
+  for (const bad of [null, "", "https://evil.example/x.jpg", "/media/../secret.jpg", "javascript:alert(1)"]) assert.equal(cardPathOf(bad), null, String(bad));
 });
 
 test("X and Telegram publishers: the token only in the header (X), a dry run shows no secret; planned channels refuse", async () => {
@@ -259,6 +266,13 @@ test("Instagram cards: rendered for drafts that need one, then served publicly o
   assert.equal(pub.status, 200);
   assert.deepEqual([...new Uint8Array(await pub.arrayBuffer())].slice(0, 2), [0xff, 0xd8]);
   assert.equal((await handle(req(`/media/${"0".repeat(32)}.jpg`), e, opts)).status, 404);
+  // Published, the Archive names its card by path (the digest, owner 2026-11-23; orchestrator review of #73), never the stored URL.
+  recordPublish(d.sql, { id: ok.id, remoteId: "ig1" });
+  const [post] = (await (await handle(req("/api/public/archive"), e, opts)).json()).posts;
+  assert.equal(post.id, ok.id);
+  assert.equal(post.image, `/media/${m[1]}.jpg`, "the published post's own JPEG card");
+  assert.equal("image_url" in post, false, "the stored URL is not passed on");
+  assert.equal((await handle(req(post.image), e, opts)).status, 200, "the path the page fetches is served");
 });
 
 test("the studio's render-now: a person only, same origin", async () => {

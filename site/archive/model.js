@@ -1,4 +1,4 @@
-// Pure: the Archive page's model (frontend mockup 2026-11-22, owner approved): the published posts grouped by their UTC
+// Pure: the Archive page's model (since 2026-11-23 a digest, owner: one line per post, the card on click) (frontend mockup 2026-11-22, owner approved): the published posts grouped by their UTC
 // day, newest first, filtered by kind, with the kind tabs and their counts. The words are the ones the page always
 // showed (the kind names, "All posts", the empty lines); a post's text is shown as published, its first line set as
 // the headline. No network, no DOM.
@@ -11,6 +11,8 @@ const DAY = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', 
 const DATE = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' });
 const TIME = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'UTC' });
 const valid = (iso) => typeof iso === 'string' && Number.isFinite(Date.parse(iso));
+const CARD = /^\/media\/[0-9a-f]{32}\.jpg$/;
+const TIME_ONLY = (iso) => (valid(iso) ? `${TIME.format(new Date(iso))} UTC`.replace(/\u202f/g, ' ') : '');
 
 /** "Friday, 20 November 2026" (UTC). */
 export const dayOf = (iso) => (valid(iso) ? DAY.format(new Date(iso)) : '');
@@ -58,7 +60,7 @@ export function archiveModel(posts, kind = '', { label = {}, timeZone } = {}) {
   for (const p of shown) {
     const d = dayOf(p.published_at);
     if (!days.length || days.at(-1).day !== d) days.push({ day: d, posts: [] });
-    days.at(-1).posts.push({ id: p.id, channel: label[p.channel] || p.channel, kind: KIND[p.kind] ?? '', utc: whenUtc(p.published_at), local: whenLocal(p.published_at, timeZone), at: p.published_at, ...splitText(p.text) });
+    days.at(-1).posts.push({ id: p.id, channel: label[p.channel] || p.channel, kind: KIND[p.kind] ?? '', utc: whenUtc(p.published_at), time: TIME_ONLY(p.published_at), local: whenLocal(p.published_at, timeZone), at: p.published_at, ...splitText(p.text), image: CARD.test(String(p.image ?? '')) ? p.image : null });
   }
   return { days, empty: '' };
 }

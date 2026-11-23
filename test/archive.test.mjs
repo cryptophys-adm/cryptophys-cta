@@ -73,3 +73,33 @@ test("AR3 the Archive bundle is built from site/archive", () => {
   const b = JSON.parse(read("public/room/build.json"));
   assert.equal(b.archive, createHash("sha256").update(readFileSync(new URL("../public/archive.js", import.meta.url))).digest("hex"), "run npm run build:room");
 });
+
+test("AR4 the digest (owner 2026-11-23): one line per post, opened in place; the card only when the post has one, fetched on opening", async () => {
+  const posts = [
+    { id: "a", kind: "key_levels", channel: "threads", text: "Education · XAUUSD key-level map\nPrice when read: 3607.41", published_at: "2026-11-20T00:15:31.367Z", image: "/media/0123456789abcdef0123456789abcdef.jpg" },
+    { id: "b", kind: "pattern", channel: "youtube", text: "Education · Pattern breakout", published_at: "2026-11-19T11:49:50.999Z", image: null },
+    { id: "c", kind: "pattern", channel: "threads", text: "Education · x", published_at: "2026-11-19T10:00:00Z", image: "https://evil.example/x.jpg" }
+  ];
+  const m = archiveModel(posts, "", { label: { threads: "Threads" }, timeZone: "Asia/Jakarta" });
+  const [a] = m.days[0].posts, [b, c] = m.days[1].posts;
+  assert.equal(a.image, "/media/0123456789abcdef0123456789abcdef.jpg");
+  assert.equal(a.time, "12:15 AM UTC", "the line's time: UTC in 12-hour form, the day is the column's");
+  assert.equal(b.image, null);
+  assert.equal(c.image, null, "only our own card path");
+  const src = read("site/archive/archive.js");
+  assert.match(src, /make\('details', 'a-post'\)/, "each post a details element: a click or Enter opens it in place");
+  assert.match(src, /box\.addEventListener\('toggle', \(\) => \{\n\s*if \(!box\.open \|\| box\.querySelector\('img'\)\) return;/, "the card is fetched only when the line is opened, once");
+  assert.match(src, /img\.alt = "The post's card"; img\.width = 1080; img\.height = 1350;/, "the card's text alternative and its size (no shift as it loads)");
+  assert.match(src, /make\('p', 'a-body', p\.body\)/, "the text as published");
+  assert.doesNotMatch(src, /innerHTML/, "text goes in as text");
+  const css = read("public/home.css");
+  assert.match(css, /\.a-head\{[^}]*text-overflow:ellipsis/, "one line per post when closed");
+  assert.match(css, /\.a-post\[open\] \.a-head\{white-space:normal/);
+  // a tablet (orchestrator review of #73): at 1100 px and narrower the date stands over its posts, so a line and its card take the width
+  assert.match(css, /@media \(max-width:1100px\)\{\n\s*\.a-day\{grid-template-columns:1fr;gap:6px\}/);
+  assert.match(css, /@media \(max-width:860px\)\{\n\s*\.a-open\{grid-template-columns:1fr;gap:16px\}\n\s*\.a-card\{max-width:300px\}/);
+  // a phone, as the mockup: the time in its own column over two rows, the channel and kind beside it, the first line under them
+  assert.match(css, /\.a-post summary\{grid-template-columns:min-content auto minmax\(0,1fr\) 20px;grid-template-areas:"t c k p" "t h h h"/);
+  // forced colours keep the picture mark's triangle (its transparent sides would be repainted into a bar)
+  assert.match(css, /@media \(forced-colors:active\)\{[^@]*\.a-pic,\.a-pic::after\{forced-color-adjust:none\}/);
+});
