@@ -95,4 +95,11 @@ test("AR4 the digest (owner 2026-11-23): one line per post, opened in place; the
   const css = read("public/home.css");
   assert.match(css, /\.a-head\{[^}]*text-overflow:ellipsis/, "one line per post when closed");
   assert.match(css, /\.a-post\[open\] \.a-head\{white-space:normal/);
+  // a tablet (orchestrator review of #73): at 1100 px and narrower the date stands over its posts, so a line and its card take the width
+  assert.match(css, /@media \(max-width:1100px\)\{\n\s*\.a-day\{grid-template-columns:1fr;gap:6px\}/);
+  assert.match(css, /@media \(max-width:860px\)\{\n\s*\.a-open\{grid-template-columns:1fr;gap:16px\}\n\s*\.a-card\{max-width:300px\}/);
+  // a phone, as the mockup: the time in its own column over two rows, the channel and kind beside it, the first line under them
+  assert.match(css, /\.a-post summary\{grid-template-columns:min-content auto minmax\(0,1fr\) 20px;grid-template-areas:"t c k p" "t h h h"/);
+  // forced colours keep the picture mark's triangle (its transparent sides would be repainted into a bar)
+  assert.match(css, /@media \(forced-colors:active\)\{[^@]*\.a-pic,\.a-pic::after\{forced-color-adjust:none\}/);
 });

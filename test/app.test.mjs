@@ -266,6 +266,13 @@ test("Instagram cards: rendered for drafts that need one, then served publicly o
   assert.equal(pub.status, 200);
   assert.deepEqual([...new Uint8Array(await pub.arrayBuffer())].slice(0, 2), [0xff, 0xd8]);
   assert.equal((await handle(req(`/media/${"0".repeat(32)}.jpg`), e, opts)).status, 404);
+  // Published, the Archive names its card by path (the digest, owner 2026-11-23; orchestrator review of #73), never the stored URL.
+  recordPublish(d.sql, { id: ok.id, remoteId: "ig1" });
+  const [post] = (await (await handle(req("/api/public/archive"), e, opts)).json()).posts;
+  assert.equal(post.id, ok.id);
+  assert.equal(post.image, `/media/${m[1]}.jpg`, "the published post's own JPEG card");
+  assert.equal("image_url" in post, false, "the stored URL is not passed on");
+  assert.equal((await handle(req(post.image), e, opts)).status, 200, "the path the page fetches is served");
 });
 
 test("the studio's render-now: a person only, same origin", async () => {
