@@ -243,7 +243,7 @@ export function kindCountsSince(sql, kind, sinceIso) {
 export function publishedPosts(sql, { limit = 30 } = {}) {
   ensureDesk(sql);
   const n = Math.min(100, Math.max(1, Number(limit) || 30));
-  return rows(sql, "SELECT id, kind, channel, text, published_at, remote_id FROM drafts WHERE status = 'published' ORDER BY published_at DESC LIMIT ?", n);
+  return rows(sql, "SELECT id, kind, channel, text, published_at, remote_id, image_url FROM drafts WHERE status = 'published' ORDER BY published_at DESC LIMIT ?", n);
 }
 
 /** A card is tried this many times; then its draft waits for a person (the studio's "render now" still retries). */

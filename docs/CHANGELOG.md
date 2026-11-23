@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-23 (archive digest)
+- feat(archive): the Archive as a digest (owner 2026-11-23: "Archive seharusnya dalam bentuk digest, ketika diklik akan muncul gambar jika memang ada gambar"; mockup approved, "ya di tempat"). Each post is one line under its day: the UTC time (12-hour) and local time, the channel, the kind, the first line and a picture mark when it has a card; a click or Enter opens it in place with the text as published and its card, fetched only on opening. `GET /api/public/archive` adds `image` per post: its own card's `/media/<id>.jpg` path or null (videos and posts without a card); the stored URL is not passed on. No public text changed. Tests AR4 and the archive API test; screenshots `docs/screenshots/archive-digest/`.
+
 ## 2026-11-22 (mannequin lock settings)
 - test(room): RM12 also holds `scripts/mannequin.lock.json`'s `quantize` and `simplify` to `QUANTIZE` and `SIMPLIFY` in `scripts/mannequin.mjs`, so a hand-edited lock fails; the #64 entry states its sizes in KiB like the rest (orchestrator review of #65).
 

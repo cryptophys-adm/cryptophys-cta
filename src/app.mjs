@@ -437,6 +437,8 @@ const STUDIO_ROUTES = ["/api/studio/connections", "/api/studio/connect/app", "/a
 /** The public origin of the cards Instagram fetches (GET /media/<id>.jpg). */
 export const originOf = (env) => String(env?.PUBLIC_ORIGIN || "https://cta.cryptophys.work").replace(/\/+$/, "");
 const MEDIA_PATH = /^\/media\/([0-9a-f]{32})\.(jpg|webm)$/;
+/** A published post's card as a path on this site, or null (a video, or no card). */
+export const cardPathOf = (imageUrl) => { const m = /\/media\/([0-9a-f]{32})\.jpg$/.exec(String(imageUrl ?? "")); return m ? `/media/${m[1]}.jpg` : null; };
 const randomHex = (n) => [...crypto.getRandomValues(new Uint8Array(n))].map((b) => b.toString(16).padStart(2, "0")).join("");
 
 /**
@@ -506,7 +508,9 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
   // The simulated track record (the Performance page and the home's average box): aggregates in R, cached 10 minutes.
   if (route === "GET /api/public/track-record") return trackRecord(env, request, cache);
   if (route === "GET /api/public/archive") {
-    return rpc(async () => ({ posts: await desk(env).archive(Number(url.searchParams.get("limit")) || 30) }), "archive_failed");
+    // Each post with its card's path (owner 2026-11-23, the Archive as a digest: the card on click), only when it is our
+    // own JPEG card (/media/<id>.jpg, public once the post is published); a video or no card: null. Never the stored URL.
+    return rpc(async () => ({ posts: (await desk(env).archive(Number(url.searchParams.get("limit")) || 30)).map(({ image_url, ...p }) => ({ ...p, image: cardPathOf(image_url) })) }), "archive_failed");
   }
 
   if (isStudio(path)) {

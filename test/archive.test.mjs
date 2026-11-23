@@ -73,3 +73,26 @@ test("AR3 the Archive bundle is built from site/archive", () => {
   const b = JSON.parse(read("public/room/build.json"));
   assert.equal(b.archive, createHash("sha256").update(readFileSync(new URL("../public/archive.js", import.meta.url))).digest("hex"), "run npm run build:room");
 });
+
+test("AR4 the digest (owner 2026-11-23): one line per post, opened in place; the card only when the post has one, fetched on opening", async () => {
+  const posts = [
+    { id: "a", kind: "key_levels", channel: "threads", text: "Education · XAUUSD key-level map\nPrice when read: 3607.41", published_at: "2026-11-20T00:15:31.367Z", image: "/media/0123456789abcdef0123456789abcdef.jpg" },
+    { id: "b", kind: "pattern", channel: "youtube", text: "Education · Pattern breakout", published_at: "2026-11-19T11:49:50.999Z", image: null },
+    { id: "c", kind: "pattern", channel: "threads", text: "Education · x", published_at: "2026-11-19T10:00:00Z", image: "https://evil.example/x.jpg" }
+  ];
+  const m = archiveModel(posts, "", { label: { threads: "Threads" }, timeZone: "Asia/Jakarta" });
+  const [a] = m.days[0].posts, [b, c] = m.days[1].posts;
+  assert.equal(a.image, "/media/0123456789abcdef0123456789abcdef.jpg");
+  assert.equal(a.time, "12:15 AM UTC", "the line's time: UTC in 12-hour form, the day is the column's");
+  assert.equal(b.image, null);
+  assert.equal(c.image, null, "only our own card path");
+  const src = read("site/archive/archive.js");
+  assert.match(src, /make\('details', 'a-post'\)/, "each post a details element: a click or Enter opens it in place");
+  assert.match(src, /box\.addEventListener\('toggle', \(\) => \{\n\s*if \(!box\.open \|\| box\.querySelector\('img'\)\) return;/, "the card is fetched only when the line is opened, once");
+  assert.match(src, /img\.alt = "The post's card"; img\.width = 1080; img\.height = 1350;/, "the card's text alternative and its size (no shift as it loads)");
+  assert.match(src, /make\('p', 'a-body', p\.body\)/, "the text as published");
+  assert.doesNotMatch(src, /innerHTML/, "text goes in as text");
+  const css = read("public/home.css");
+  assert.match(css, /\.a-head\{[^}]*text-overflow:ellipsis/, "one line per post when closed");
+  assert.match(css, /\.a-post\[open\] \.a-head\{white-space:normal/);
+});

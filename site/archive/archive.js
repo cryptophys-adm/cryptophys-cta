@@ -1,4 +1,4 @@
-// The Archive page (frontend mockup 2026-11-22, owner approved): every published post in the home and Performance look,
+// The Archive page (frontend mockup 2026-11-22, owner approved; a digest since 2026-11-23): every published post in the home and Performance look,
 // the date beside its posts, from GET /api/public/archive (preloaded in the page's head). The header as on the other
 // pages: the links, the average strip and the UTC and local clock. The list keeps its height while it loads
 // (aria-busy), so nothing below it jumps; the empty line shows only once the answer is empty.
@@ -40,6 +40,29 @@ function drawTabs() {
   $('archive').tabIndex = 0;
 }
 
+// The digest (owner 2026-11-23: "Archive seharusnya dalam bentuk digest, ketika diklik akan muncul gambar"; "di
+// tempat"): one line per post, its time, channel, kind and first line; a click (or Enter) opens it in place with the
+// text as published and, when the post had one, its card, which is fetched only then.
+function postLine(p) {
+  const box = make('details', 'a-post');
+  const sum = make('summary');
+  const t = make('time', 'a-time'); t.dateTime = p.at;
+  t.append(make('span', null, p.time));
+  if (p.local) t.append(make('span', 'a-local', p.local));
+  sum.append(t, make('b', 'a-ch', p.channel), make('span', 'a-kind', p.kind), make('span', 'a-head', p.head));
+  if (p.image) { const mark = make('span', 'a-pic'); mark.setAttribute('role', 'img'); mark.setAttribute('aria-label', 'has a card'); sum.append(mark); }
+  const open = make('div', p.image ? 'a-open' : 'a-open noimg');
+  open.append(make('p', 'a-body', p.body));
+  box.append(sum, open);
+  if (p.image) box.addEventListener('toggle', () => {
+    if (!box.open || box.querySelector('img')) return;
+    const fig = make('figure', 'a-card'), img = make('img');
+    img.src = p.image; img.alt = "The post's card"; img.width = 1080; img.height = 1350; img.decoding = 'async';
+    fig.append(img); open.append(fig);
+  });
+  return box;
+}
+
 function render() {
   drawTabs();
   const m = archiveModel(state.posts, state.kind, { label: state.label });
@@ -51,20 +74,8 @@ function render() {
     const sec = make('section', 'a-day');
     const h2 = make('h2', null, d.day); h2.id = `day-${i}`;
     sec.setAttribute('aria-labelledby', h2.id);
-    const list = make('div', 'a-posts');
-    for (const p of d.posts) {
-      const art = make('article', 'a-post');
-      const hd = make('div', 'a-meta');
-      hd.append(make('b', null, p.channel));
-      if (p.kind) hd.append(make('span', 'a-kind', p.kind));
-      const t = make('time', 'a-time'); t.dateTime = p.at;
-      t.append(make('span', null, p.utc));
-      if (p.local) t.append(make('span', 'a-local', p.local));
-      hd.append(t);
-      art.append(hd, make('p', 'a-head', p.head));
-      if (p.body) art.append(make('p', 'a-body', p.body));
-      list.append(art);
-    }
+    const list = make('ul', 'a-posts');
+    for (const p of d.posts) { const li = make('li'); li.append(postLine(p)); list.append(li); }
     sec.append(h2, list);
     box.append(sec);
   });
