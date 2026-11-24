@@ -351,7 +351,8 @@ test("the bridge deploy workflow: main or by hand, no Worker secret, no delete, 
   assert.match(code, /if: needs\.credentials\.outputs\.ready == 'true'/, "skipped, not red, without the token");
   assert.match(code, /CONTENT_PUBLISH/);
   const deploys = [...code.matchAll(/wrangler@[\d.]+ deploy([^\n]*)/g)].map((m) => m[1].trim());
-  assert.deepEqual(deploys, ["--dry-run", ""], "the deploy runs exactly what the dry run validated (wrangler 4.45.0 has no --tag or --message)");
+  assert.deepEqual(deploys, ["--dry-run", '--tag "${GITHUB_SHA:0:12}" --message "commit ${GITHUB_SHA}"'], "the deploy runs what the dry run validated, its version named by the commit (owner 2026-11-24)");
+  assert.doesNotMatch(code, /--var/, "no variable is set from the workflow: wrangler.jsonc is the Worker's whole config");
   assert.match(code, /deploy\.health/);
   assert.match(code, /deploy\.smoke/);
   const cfg = JSON.parse(readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8").replace(/^\s*\/\/.*$/gm, ""));

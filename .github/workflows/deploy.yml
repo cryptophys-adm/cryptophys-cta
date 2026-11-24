@@ -72,12 +72,14 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Validate the Worker bundle
-        run: npx --yes wrangler@4.45.0 deploy --dry-run
+        run: npx --yes wrangler@4.156.2 deploy --dry-run
 
+      # Each version names the commit it was built from (orchestrator, owner 2026-11-24), as the xauusd Workers do, so a
+      # version uploaded from outside this workflow shows in the Worker's deployments as one without a commit.
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: npx --yes wrangler@4.45.0 deploy
+        run: npx --yes wrangler@4.156.2 deploy --tag "${GITHUB_SHA:0:12}" --message "commit ${GITHUB_SHA}"
 
       - name: Health and smoke checks (organism.json deploy)
         run: |

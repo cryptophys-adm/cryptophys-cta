@@ -261,8 +261,9 @@ in `cryptophys-cloud-platform` (its own PRs and consensus):
   custom domain for a new hostname).
 - Until then, the bridge (owner 2026-11-16: "setuju, buatkan PR workflow deploy CTA"): `.github/workflows/deploy.yml`
   deploys from `main` with the repository secret `CLOUDFLARE_API_TOKEN` (skipped with a warning without it), runs the
-  tests, refuses unless `CONTENT_PUBLISH` is "off" or "on" with a named `PUBLISH_CHANNELS` list, sets no Worker secret, and runs `organism.json` `deploy`'s health
-  and smoke checks against `cta.cryptophys.work`. Once the Worker exists, the platform adds the `EXT_ORGANISM_CTA` and
+  tests, refuses unless `CONTENT_PUBLISH` is "off" or "on" with a named `PUBLISH_CHANNELS` list, sets no Worker secret, tags each version with its commit (wrangler 4.156.2, the xauusd Workers' version: `--tag` the
+  short SHA, `--message "commit <sha>"`; owner 2026-11-24, so a version uploaded from outside the workflow shows without a
+  commit), and runs `organism.json` `deploy`'s health and smoke checks against `cta.cryptophys.work`. Once the Worker exists, the platform adds the `EXT_ORGANISM_CTA` and
   `EXT_CRYPTOPHYS_CTA` bindings and the Access paths (the owner approves the Access change). The workflow is removed
   in the change that hands the deploy to the Forge.
 Until the Forge registers the agents, the Worker does not bind the kernel (`AGENTS`).
