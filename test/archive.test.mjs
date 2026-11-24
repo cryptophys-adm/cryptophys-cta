@@ -18,15 +18,17 @@ test("AR1 the model: posts by UTC day in the answer's order, the first line as t
   assert.deepEqual(m.days.map((d) => [d.day, d.posts.map((p) => p.id)]), [["Friday, 20 November 2026", ["a"]], ["Thursday, 19 November 2026", ["b", "c"]]]);
   const [a] = m.days[0].posts;
   assert.deepEqual([a.channel, a.kind, a.utc, a.local, a.head, a.body], ["Threads", "Key-level map", "20 Nov 2026, 12:15 AM UTC", "7:15 AM GMT+7", "Education · XAUUSD key-level map", "Price when read: 3607.41\n\nNot financial advice."]);
-  assert.equal(m.days[1].posts[0].kind, "", "a kind without a name shows no label, as before");
+  assert.equal(m.days[1].posts[0].kind, "War Room", "the War Room posts carry their name (owner 2026-11-24: \"setuju, pakai label War Room\")");
+  assert.equal(archiveModel([{ ...POSTS[0], kind: "something_new" }], "").days[0].posts[0].kind, "", "a kind without a name shows no label, as before");
   assert.equal(m.days[1].posts[0].body, "Bias on the daily chart: Bearish.", "the blank line under the headline is not repeated");
   assert.equal(m.days[1].posts[1].channel, "telegram", "a channel without a public link keeps its id, as before");
   for (const p of POSTS) { const s = splitText(p.text); assert.equal(`${s.head}\n${s.body}`.replace(/\s+/g, " ").trim(), p.text.replace(/\s+/g, " ").trim(), "no word changed"); }
   assert.deepEqual(archiveModel([], ""), { days: [], empty: EMPTY });
   assert.deepEqual(archiveModel(POSTS, "daily_recap"), { days: [], empty: EMPTY_KIND });
   assert.deepEqual(archiveModel(POSTS, "pattern").days.flatMap((d) => d.posts.map((p) => p.id)), ["c"]);
-  assert.deepEqual(tabsOf(POSTS, "pattern").map((t) => [t.label, t.count, t.selected]), [["All posts", 3, false], ["Key-level map", 1, false], ["Chart pattern", 1, true], ["Daily recap", 0, false], ["Post", 0, false]]);
-  assert.deepEqual(KIND, { key_levels: "Key-level map", pattern: "Chart pattern", daily_recap: "Daily recap", custom: "Post" }, "the tab names as before");
+  assert.deepEqual(tabsOf(POSTS, "pattern").map((t) => [t.label, t.count, t.selected]), [["All posts", 3, false], ["Key-level map", 1, false], ["Chart pattern", 1, true], ["Daily recap", 0, false], ["War Room", 1, false], ["Post", 0, false]]);
+  assert.deepEqual(KIND, { key_levels: "Key-level map", pattern: "Chart pattern", daily_recap: "Daily recap", warroom: "War Room", custom: "Post" }, "the tab names as before, and War Room after Daily recap (owner 2026-11-24)");
+  assert.deepEqual(archiveModel(POSTS, "warroom").days.flatMap((d) => d.posts.map((p) => p.id)), ["b"], "the War Room tab lists the warroom posts");
   assert.equal(whenUtc("nope"), ""); assert.equal(whenLocal("nope"), ""); assert.equal(dayOf(undefined), "");
   assert.equal(whenLocal("2026-11-19T22:00:00Z", "Asia/Jakarta"), "Fri 5:00 AM GMT+7", "the local weekday when the local day is not the UTC day");
   assert.equal(whenLocal("2026-11-20T00:15:00Z", "America/New_York"), "Thu 7:15 PM EST");

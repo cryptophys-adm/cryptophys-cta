@@ -1,0 +1,16 @@
+# XAUUSD AI by Cryptophys
+
+> Gold (XAUUSD) argued every fifteen minutes: sixteen AI analysts meet when a candle closes, and a moderator writes down what the room concluded. Analysis, not a signal.
+
+## Pages
+
+- [Home](https://cta.cryptophys.work/)
+- [Performance](https://cta.cryptophys.work/performance): What the rooms' plans would have returned, simulated in R: win rate, expectancy, net R and profit factor, followed three ways. Not advice.
+- [Archive](https://cta.cryptophys.work/archive): Every published Cryptophys XAUUSD post: key-level maps, chart patterns and daily recaps. Education, not financial advice.
+- [About the system](https://cta.cryptophys.work/about): How Cryptophys makes its XAUUSD posts: from the system's analysis to fixed templates, automatic checks and a person's approval.
+
+## Policies
+
+- [Disclaimer](https://cta.cryptophys.work/disclaimer): The Cryptophys XAUUSD disclaimer: education and analysis only, not financial advice and not an invitation to buy or sell.
+- [Privacy](https://cta.cryptophys.work/privacy)
+- [Terms](https://cta.cryptophys.work/terms)

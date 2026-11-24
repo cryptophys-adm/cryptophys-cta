@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-24 (share card, llms.txt, War Room tab)
+- feat(site): three owner items, built as the mockup "CTA: share image, llms.txt, War Room tab" shows (owner 2026-11-24: "setuju, pakai label War Room").
+  - Share card: `public/og.png`, a 1200 × 630 PNG (about 100 KB) for every public page, with `og:image` and its type, size and alt text. `twitter:card` is now `summary_large_image`. The card uses only the home page's own words, with a ring of sixteen seats round the gold brand mark; it shows no price, level or reading. `scripts/og-image.mjs` draws it from `scripts/og/card.html`.
+  - `/llms.txt`: each line is a page's own meta description, word for word. It names no internal system.
+  - Archive: a War Room tab after Daily recap, for the posts of kind `warroom` (two on 19 Nov). Their lines now carry the name.
+  - Tests MD1, AR1 and the new MD4. Screenshots `docs/screenshots/warroom-tab/`.
+
 ## 2026-11-24 (deploy names its commit)
 - ci(deploy): each deploy names the commit it was built from: `wrangler deploy --tag <short sha> --message "commit <sha>"`, as the xauusd Workers do (Orchestrator's proposal, owner 2026-11-24). A version uploaded from outside the workflow then shows in the Worker's deployments without a commit. wrangler 4.45.0 has neither flag, so the workflows move to 4.156.2, xauusd's version; the dry run with 4.156.2 validates the same bindings. No Worker variable is added. The deploy workflow test holds the flags and the single wrangler version.
 
