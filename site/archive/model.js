@@ -3,7 +3,7 @@
 // showed (the kind names, "All posts", the empty lines); a post's text is shown as published, its first line set as
 // the headline. No network, no DOM.
 export const ARCHIVE_URL = '/api/public/archive?limit=100';
-export const KIND = Object.freeze({ key_levels: 'Key-level map', pattern: 'Chart pattern', daily_recap: 'Daily recap', custom: 'Post' });
+export const KIND = Object.freeze({ key_levels: 'Key-level map', pattern: 'Chart pattern', daily_recap: 'Daily recap', warroom: 'War Room', custom: 'Post' });
 export const EMPTY = 'No posts published yet.';
 export const EMPTY_KIND = 'No posts of this type yet.';
 
