@@ -16,6 +16,7 @@ import { dueSlots, nextSlots } from "./scheduler.mjs";
 import { PROVIDERS, BOT_CHANNELS, CONNECT_SECRETS, appOf, newAttempt, authorizeUrl, exchangeCode, refreshX, identify, checkTelegram, telegramChatIdProblem, TELEGRAM_CHAT_NOT_FOUND, redirectUri, sealToken, openToken, encryptionReady, STATE_RE, CALLBACK_PATH } from "./oauth.mjs";
 import { bestTimes, abResult, evergreen, EVERGREEN_MIN_DAYS } from "./growth.mjs";
 import { agentChecks } from "./agent/checks.mjs";
+import { auditThreads, planThreads } from "./agent/audit.mjs";
 import { linkHosts, normalizeLink, randomSlug, shortUrl, redirectTarget, GO_PATH, normalizeHashtagSet, MAX_SETS, normalizeMix, DEFAULT_MIX, MIX_KINDS, wibWeek, mixReport } from "./marketing.mjs";
 import { templateTexts, checkPost, composeDrafts, overlayFor, recapWindow, COMPOSE_KINDS, COMPOSE_KIND_NAMES } from "./compose.mjs";
 import { sourceOf } from "./warroom-drafts.mjs";
@@ -683,7 +684,18 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
       }
       // The CTA agent (owner 2026-11-25: "setuju semua, mulai dari Checks"): the Threads drafts' checks (src/agent/checks.mjs).
       // Read only; posts still come from the xauusd templates and nothing here changes a draft.
-      if (route === "GET /api/studio/agent") return rpc(async () => agentChecks(await desk(env).list({ channel: "threads", limit: 30 })), "agent_failed");
+      // Audit and Plan (src/agent/audit.mjs): the last complete WIB week on Threads against our own median, and the
+      // week's suggested mix and slots; a suggested slot is added by a person through POST /api/studio/settings.
+      if (route === "GET /api/studio/agent") {
+        return rpc(async () => {
+          const at = now ? now * 1000 : Date.now();
+          const d = desk(env);
+          const posts = await d.measuredPosts();
+          const audit = auditThreads(posts, { now: at });
+          const schedule = (await channelSettings(env)).settings.threads?.schedule ?? [];
+          return { ...agentChecks(await d.list({ channel: "threads", limit: 30 })), audit, plan: planThreads(audit, posts, { now: at, schedule }), can_edit: role === "approver" };
+        }, "agent_failed");
+      }
       // Growth (src/growth.mjs): A/B results, best posting times per channel, evergreen suggestions.
       if (route === "GET /api/studio/growth") {
         return rpc(async () => {

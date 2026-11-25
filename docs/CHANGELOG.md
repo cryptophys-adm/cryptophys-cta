@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-25 (the CTA agent, PR 2: Audit and Plan)
+- feat(agent): the Agent page gets Audit and Plan for Threads (`src/agent/audit.mjs`, after ig-audit and ig-plan, MIT). The owner approved them with "setuju semua".
+  - Audit: the last full WIB week, each post by its views over our own 28-day median, by post and by kind. A finding needs 3 posts behind it.
+  - Plan: the kinds ranked from the audit, and daily slots at the WIB hours with the most views (at least 2 measured posts each).
+  - An approver adds the slots with one click, through the existing settings route; the page warns that analysis drafts expire after 2 hours.
+  - Computed from the stored metrics. No model yet, no new write route.
+  - Test AG5; screenshots of both tabs.
+
 ## 2026-11-25 (the CTA agent, PR 1: Checks)
 - feat(agent): the CTA agent's first skills for Threads, adopted from instagram-agent-skill (MIT, credited). The owner, 25 Nov: "post sementara tetap dari xauusd, yg dideploy sekarang adalah skills seperti instagram agents" and "setuju semua, mulai dari Checks".
   - Threads linter (`src/agent/threads-lint.mjs`): 500 characters (an emoji counts its UTF-8 bytes), the first line, one topic tag, links, mentions, emoji, invisible characters and the em dash.

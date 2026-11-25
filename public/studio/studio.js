@@ -1171,7 +1171,54 @@
         item.appendChild(make("div", "meta", `Humanizer ${c.human.score} (${c.human.verdict.toLowerCase()}): ${Object.entries(c.human.checks).map(([k, v]) => `${HUMAN[k] ?? k} ${v.score}`).join(" · ")}`));
         box.appendChild(item);
       }
+      renderAudit(a.audit);
+      renderPlan(a.plan, a.can_edit);
     } catch (e) { showErr(e); }
+  }
+  // Audit: the last complete WIB week on Threads against our own median (src/agent/audit.mjs).
+  function renderAudit(au) {
+    const box = $("agentaudit"); box.textContent = "";
+    if (!au) return;
+    box.appendChild(make("div", "meta", `Week ${au.week.from.slice(0, 10)} to ${au.week.to.slice(0, 10)} (WIB, Monday to Sunday) · median ${fmt(au.median_views)} views over the ${au.baseline_days} days before · ${au.measured} measured posts`));
+    for (const f of au.findings) box.appendChild(make("p", null, f));
+    if (!au.posts.length) return;
+    const table = make("table", "data");
+    const head = make("tr");
+    for (const [h, n] of [["Post"], ["Kind"], ["Views", 1], ["× median", 1], ["Replies", 1], ["Reposts", 1]]) head.appendChild(make("th", n ? "num" : null, h));
+    table.appendChild(make("thead")).appendChild(head);
+    const body = table.appendChild(make("tbody"));
+    for (const p of au.posts) {
+      const tr = make("tr");
+      tr.append(make("td", null, p.head), make("td", null, KIND[p.kind] ?? p.kind), make("td", "num", fmt(p.views)), make("td", "num", p.multiple == null ? "–" : `${p.multiple}×`), make("td", "num", String(p.replies)), make("td", "num", String(p.reposts)));
+      body.appendChild(tr);
+    }
+    box.appendChild(table);
+  }
+  // Plan: the mix and the slots; "Add these slots" saves them into Threads' posting schedule (approvers only).
+  function renderPlan(pl, canEdit) {
+    const box = $("agentplan"); box.textContent = "";
+    if (!pl) return;
+    box.appendChild(make("h3", null, "Mix"));
+    if (!pl.mix.length) box.appendChild(make("div", "empty", "No measured kind yet."));
+    for (const m of pl.mix) box.appendChild(make("div", "meta", `${m.name}: ${m.advice} (${m.why})`));
+    box.appendChild(make("h3", null, "Posting slots (WIB, every day)"));
+    if (!pl.slots.length) { box.appendChild(make("div", "empty", pl.note || "No new slot to suggest.")); return; }
+    for (const s of pl.slots) box.appendChild(make("div", "meta", `${s.time} · ${s.why}`));
+    box.appendChild(make("div", "meta warn", "A key-level map or a pattern expires 2 hours after it is made: one still waiting when its slot is more than 2 hours away is not posted."));
+    const b = make("button", "btn primary sm", "Add these slots to Threads"); b.type = "button"; b.disabled = !canEdit;
+    if (!canEdit) b.title = "Approvers only";
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      try {
+        const cfg = await call("/api/studio/settings");
+        const cur = cfg.settings.threads;
+        const have = new Set(cur.schedule.map((s) => `${s.days.join(",")}@${s.time}`));
+        const schedule = [...cur.schedule, ...pl.slots.map((s) => ({ days: s.days, time: s.time })).filter((s) => !have.has(`${s.days.join(",")}@${s.time}`))].slice(0, cfg.max_slots ?? 12);
+        await call("/api/studio/settings", "POST", { channel: "threads", settings: { ...cur, schedule } });
+        await loadAgent();
+      } catch (e) { showErr(e); b.disabled = false; }
+    });
+    box.appendChild(b);
   }
 
   // ---- performance ----
