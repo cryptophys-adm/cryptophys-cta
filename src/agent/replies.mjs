@@ -17,7 +17,7 @@
 // the studio's switch (studio setting `agent_replies`, an approver, logged) and the Worker var AGENT_REPLIES ("off"
 // stops it at the next deploy) turn it off.
 import { checkContentDraft } from "../guardian.mjs";
-import { cleanInvisible } from "./humanizer.mjs";
+import { cleanInvisible, humanize } from "./humanizer.mjs";
 
 export const REPLY_CHANNELS = Object.freeze(["threads"]);
 export const REPLY_CAPS = Object.freeze({ hour: 10, day: 40, per_person_per_thread: 1 });
@@ -180,6 +180,7 @@ export async function runReplies(channel, mode, deps, { now = Date.now() } = {})
         answer = shapeAnswer(m.text); fromModel = true;
         if (!answer) { await deps.record({ ...row, status: "model_skipped" }); skip("model_skipped"); continue; }
       }
+      answer = humanize(answer).text;
       const c = checkReply(answer, { fromModel });
       if (!c.ok) { await deps.record({ ...row, answer, status: "blocked", detail: c.failures.join(",") }); skip("blocked"); continue; }
       if (mode.mode === "dry_run") { await deps.record({ ...row, answer, status: "dry_run" }); out.logged += 1; continue; }

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-25 (the CTA agent: ig-caption and ig-human in full)
+- feat(agent): the humanizer now rewrites every post before it goes out, templates included, and the linter runs all of caption.py's checks.
+  - Owner, 25 Nov: "lengkapi semua tidak boleh ada sebagian, tiru semuanya", and for the rewrite "Everything, templates too".
+  - `humanize` ports humanize.py in full: URLs and hashtags are kept, then invisible characters, typography, the lexicon with its clean-up, and restored capitals. `scanStructures` flags what it cannot rewrite.
+  - Visible effect on posts: "·" and "•" become "-", an en dash in a price range becomes a hyphen, an em dash becomes a comma, and a slop word is swapped (e.g. "robust" becomes "solid").
+  - `publishDraft` runs it on every channel. If the guardian fails on the new text, the approved text goes out unchanged. The Archive stores the text that went out.
+  - Replies are humanized before their checks.
+  - The linter adds HOOK IS CONCRETE, TAG PLACEMENT, ONE ASK and SEARCH TERMS (XAUUSD, gold). These are advisory: a template with no call to action now reads REVIEW.
+  - The Agent page's Checks show each draft as it will go out, with the flagged shapes.
+  - Test AG13; AG2, AG4, AG8 and the Telegram publishing test updated.
+
 ## 2026-11-25 (the CTA agent: key-level maps per chart)
 - feat(agent): a key-level map at each H1, H4 and D1 close; charts that close at the same time share one post.
   - Owner, 25 Nov: "pull keymap dari xauusd per 1h dan 4h dan 1D", and "Jika waktunya sama berarti digabung".

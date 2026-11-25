@@ -2,9 +2,11 @@
 // Agent page). A JavaScript port of instagram-agent-skill's skills/ig-human (detect.py, and humanize.py's invisible
 // pass), MIT License, Copyright (c) 2026 Jake Schincariol: src/agent/LICENSE-instagram-agent-skill. Pure, no network.
 //
-// Posts still come from the xauusd templates (owner 2026-11-25: "post sementara tetap dari xauusd"), so the humanizer
-// never rewrites a post's words: it removes only characters a keyboard does not type (invisible format characters,
-// which change nothing a reader sees) and scores the text on five checks, higher is more human, as detect.py does.
+// In full since 2026-11-25 (owner: "lengkapi semua tidak boleh ada sebagian, tiru semuanya"; the humanizer's rewrite on
+// "Everything, templates too"): `humanize` is humanize.py's four passes on every post before it goes out (URLs
+// protected; invisible characters; typography: em dash to comma, en dash to hyphen, curly quotes, ellipsis, middle dot
+// and bullet to hyphen, arrow; the 154-term lexicon; capitals restored) and its structural flags; `humanScore` is
+// detect.py's five checks, higher is more human.
 import { SLOP } from "./slop.mjs";
 
 const clamp = (n) => Math.max(0, Math.min(100, n));
@@ -115,4 +117,102 @@ export function humanScore(text) {
   const verdict = overall >= 70 && Math.min(...scores) >= 55 ? "PASS" : overall >= 50 ? "REVIEW" : "FLAGGED";
   const round = (n) => Math.round(n * 10) / 10;
   return { checks: Object.fromEntries(HUMAN_CHECKS.map((k) => [k, { score: round(checks[k].score), detail: checks[k].detail }])), score: round(overall), verdict };
+}
+
+// ---- humanize.py, in full ----
+const URL_RE = /https?:\/\/\S+|www\.\S+|\S+@\S+\.\S+/g;
+const SENT_RE = /[^.!?\n]+[.!?]*/g;
+const matchCase = (src, repl) => {
+  if (!repl) return repl;
+  if (src.length > 1 && src === src.toUpperCase() && /[A-Z]/.test(src)) return repl.toUpperCase();
+  if (/^[A-Z]/.test(src)) return repl[0].toUpperCase() + repl.slice(1);
+  return repl;
+};
+const LEXICON = [...SLOP.phrases, ...SLOP.words].sort((a, b) => b.find.length - a.find.length)
+  .map((e) => ({ ...e, re: new RegExp(`\\b${escapeRe(e.find).replace(/\\? /g, "\\s+")}\\b`, "giu") }));
+
+function passTypographic(text) {
+  const hits = [];
+  for (const e of SLOP.typographic) {
+    const n = text.split(e.from).length - 1;
+    if (!n) continue;
+    hits.push({ name: `${e.from} ${e.name}`, count: n, to: e.to.trim() || "(space)" });
+    if (e.from === "—") text = text.replace(/\s*—\s*/g, ", ");
+    else if (e.from === "–") text = text.replace(/\s*–\s*(?=\d)/g, "-").replace(/\s+–\s+/g, ", ").split("–").join("-");
+    else text = text.split(e.from).join(e.to);
+  }
+  text = text.replace(/,\s*([,.;:!?])/g, "$1").replace(/,\s*\n/g, "\n");
+  return { text, hits };
+}
+function passLexical(text) {
+  const hits = [];
+  for (const e of LEXICON) {
+    const found = text.match(e.re);
+    if (!found) continue;
+    hits.push({ find: e.find, replace: e.replace || "(deleted)", count: found.length, family: e.family });
+    text = text.replace(e.re, (m) => matchCase(m, e.replace));
+  }
+  text = text.replace(/[ \t]{2,}/g, " ")
+    .replace(/^[ \t]*(?:[,.;:]+[ \t]*)+/gm, "")
+    .replace(/^[ \t](?=\S)/gm, "")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/,\s*([,.;:!?])/g, "$1")
+    .split("...").join("\u0000ELL\u0000")
+    .replace(/\.\s*\.+/g, ".")
+    .replace(/([!?])\s*\./g, "$1")
+    .split("\u0000ELL\u0000").join("...")
+    .replace(/^[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/,\s*(also|so|still|basically|in the end)\s*,\s*/g, (_, w) => `. ${w[0].toUpperCase()}${w.slice(1)}, `);
+  return { text, hits };
+}
+/** Restores sentence capitals a deletion lowered, for a writer who capitalises (humanize.py's restore_capitals). */
+function restoreCapitals(original, text) {
+  const starts = [...String(original).matchAll(/(?:^|[.!?]\s+|\n)\s*([A-Za-z])/g)].map((m) => m[1]);
+  if (!starts.length || starts.filter((c) => c === c.toUpperCase()).length * 2 < starts.length) return text;
+  return text.replace(/(^|[.!?] |[.!?]\n|\n)(\s*)([a-z])/g, (_, a, b, c) => `${a}${b}${c.toUpperCase()}`);
+}
+/** humanize.py's structural flags: the shapes a script cannot rewrite, and uniform sentence length. */
+export function scanStructures(text) {
+  const flags = [];
+  for (const s of SLOP.structures) { const n = (String(text).match(jsRegex(s.regex)) || []).length; if (n) flags.push({ id: s.id, name: s.name, count: n, fix: s.fix }); }
+  const lens = (String(text).match(SENT_RE) || []).map((x) => x.trim().split(/\s+/).length).filter((n) => n > 2);
+  if (lens.length >= 4) {
+    const m = mean(lens), cv = m ? pstdev(lens) / m : 0;
+    if (cv < 0.35) flags.push({ id: "uniform-length", name: `Uniform sentence length (variation ${cv.toFixed(2)})`, count: lens.length, fix: "Break one sentence in half. Let another run long. Machines write even." });
+  }
+  return flags;
+}
+/**
+ * humanize.py in full: URLs kept as they are; invisible characters, typography and the lexicon rewritten; capitals
+ * restored. Returns { text, report: { invisible, typographic, lexical, structures } }. Hashtag words are left alone.
+ */
+export function humanize(text) {
+  const raw = String(text ?? "");
+  const urls = [];
+  let t = raw.replace(URL_RE, (u) => { urls.push(u); return `\u0001URL${urls.length - 1}\u0001`; });
+  const tags = [];
+  t = t.replace(/#[A-Za-z0-9_]+/g, (h) => { tags.push(h); return `\u0001TAG${tags.length - 1}\u0001`; });
+  const inv = cleanInvisible(t);
+  t = inv.text;
+  const typo = passTypographic(t); t = typo.text;
+  const lex = passLexical(t); t = lex.text;
+  t = restoreCapitals(raw, t);
+  t = t.replace(/\u0001TAG(\d+)\u0001/g, (_, i) => tags[Number(i)]).replace(/\u0001URL(\d+)\u0001/g, (_, i) => urls[Number(i)]);
+  const out = t.replace(/\s+$/, "").replace(/^\s+/, "");
+  return { text: out, report: { invisible: inv.removed, typographic: typo.hits, lexical: lex.hits, structures: scanStructures(out) } };
+}
+
+/**
+ * The text a draft goes out with (owner 2026-11-25, "Everything, templates too"): the humanized text when it still passes
+ * the guardian (`check(draft)` returns { pass }), else the text that was approved, unchanged. Pure.
+ * Returns { text, changed, kept, report }: `kept` is true when the humanized text failed the guardian.
+ */
+export function publishText(draft, check) {
+  const original = String(draft?.text ?? "");
+  const h = humanize(original);
+  if (h.text === original) return { text: original, changed: false, kept: false, report: h.report };
+  const g = check ? check({ ...draft, text: h.text }) : { pass: true };
+  if (!g?.pass) return { text: original, changed: false, kept: true, report: h.report, failures: g?.failures ?? [] };
+  return { text: h.text, changed: true, kept: false, report: h.report };
 }

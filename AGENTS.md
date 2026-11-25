@@ -58,7 +58,9 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
    RPC). Adding a model-written step needs the owner's approval and a guardian check after it. Approved so far: the
    agent's replies (owner 2026-11-25, rule 2's exception), written by the model behind `src/agent/router.mjs` and kept
    from any number, price, level, direction, forecast or advice by `checkReply` and the guardian, or not sent; and the
-   weekly audit summary, which is studio-only text.
+   weekly audit summary, which is studio-only text. The humanizer's rewrite at publish (`src/agent/humanizer.mjs`,
+   owner 2026-11-25: "Everything, templates too") is a fixed script, not a model: the guardian checks its text again,
+   and the approved text goes out if it fails.
 5. **Kernel.** This is an external organ (tier 1, no council seat, `signals.observe` and `reports.publish` only),
    declared in `organism.json` and read by the platform Forge over `EXT_ORGANISM_CTA`. Platform-side changes (the
    origin entry, the bindings, Access paths) go through the platform's own repository and its consensus.

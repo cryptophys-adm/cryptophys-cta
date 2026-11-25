@@ -16,6 +16,7 @@ import { dueSlots, nextSlots } from "./scheduler.mjs";
 import { PROVIDERS, BOT_CHANNELS, CONNECT_SECRETS, appOf, newAttempt, authorizeUrl, exchangeCode, refreshX, identify, checkTelegram, telegramChatIdProblem, TELEGRAM_CHAT_NOT_FOUND, redirectUri, sealToken, openToken, encryptionReady, STATE_RE, CALLBACK_PATH } from "./oauth.mjs";
 import { bestTimes, abResult, evergreen, EVERGREEN_MIN_DAYS } from "./growth.mjs";
 import { agentChecks } from "./agent/checks.mjs";
+import { publishText } from "./agent/humanizer.mjs";
 import { auditChannel, planChannel } from "./agent/audit.mjs";
 import { AGENT_CHANNELS, agentChannels } from "./agent/rules.mjs";
 import { modelStatus, askModel } from "./agent/router.mjs";
@@ -178,10 +179,14 @@ export async function publishDraft(env, draft, { now = Date.now(), fetcher, slot
   if (CHANNEL_SPECS[draft.channel]?.publisher !== "built") return { status: "approved", held: "publisher_not_built" };
   const account = await accountFor(env, draft.channel, { now, fetcher });
   if (!account) return { status: "approved", held: "account_not_configured" };
+  // Every post goes out humanized (humanize.py in full; owner: "Everything, templates too"), checked by the guardian
+  // again; the Archive keeps the text that went out.
+  const out = publishText(draft, (d) => recheck(d, { delayHours: delayOf(env), now }));
+  const sending = out.changed ? { ...draft, text: out.text } : draft;
   try {
-    const r = await publishTo(draft.channel, { account, draft, fetcher, media: () => mediaBytes(env, draft),
+    const r = await publishTo(draft.channel, { account, draft: sending, fetcher, media: () => mediaBytes(env, draft),
       saveToken: (token) => saveTokenSealed(env, draft.channel, token, now), tiktokAudited: String(env.TIKTOK_AUDITED ?? "").trim().toLowerCase() === "yes" });
-    return desk(env).published({ id: draft.id, remoteId: r.remote_id }, now);
+    return desk(env).published({ id: draft.id, remoteId: r.remote_id, ...(out.changed ? { text: out.text } : {}) }, now);
   } catch (error) {
     return desk(env).published({ id: draft.id, error: String(error?.message ?? error) }, now);
   }

@@ -148,14 +148,15 @@ test("publishing on: an approved Telegram draft goes out with the channel's secr
   assert.deepEqual(await accountOf(e, "telegram"), { bot_token: "123:SECRET", chat_id: "@xauusd_ai_cta", refreshed_at: null });
   assert.equal(await accountOf(e, "threads"), null);
   assert.equal(await accountOf(e, "youtube"), null);
-  addDrafts(d.sql, [{ id: "t1", channel: "telegram", kind: "daily_recap", text: "Education only. Not financial advice.", status: "pending" }, { id: "y1", channel: "youtube", kind: "daily_recap", text: "Education only. Not financial advice.", status: "pending" }]);
+  addDrafts(d.sql, [{ id: "t1", channel: "telegram", kind: "daily_recap", text: "Education only — moreover, a robust day. Not financial advice.", status: "pending" }, { id: "y1", channel: "youtube", kind: "daily_recap", text: "Education only. Not financial advice.", status: "pending" }]);
   for (const id of ["t1", "y1"]) decideDraft(d.sql, { id, decision: "approve", actor: "owner" });
   const calls = [];
   const fetcher = async (url, init) => { calls.push({ url, body: JSON.parse(init.body) }); return Response.json({ ok: true, result: { message_id: 77 } }); };
   const r = await publishDraft(e, getDraft(d.sql, "t1"), { fetcher });
   assert.equal(r.status, "published");
-  assert.deepEqual(calls[0].body, { chat_id: "@xauusd_ai_cta", text: "Education only. Not financial advice.", disable_web_page_preview: true });
+  assert.deepEqual(calls[0].body, { chat_id: "@xauusd_ai_cta", text: "Education only. Also, a solid day. Not financial advice.", disable_web_page_preview: true }, "humanized before it goes out (owner: \"Everything, templates too\")");
   assert.equal(getDraft(d.sql, "t1").remote_id, "77");
+  assert.equal(getDraft(d.sql, "t1").text, "Education only. Also, a solid day. Not financial advice.", "the archive keeps the text that went out");
   assert.deepEqual(await publishDraft(e, getDraft(d.sql, "y1"), { fetcher }), { status: "approved", held: "account_not_configured" }, "YouTube is built; without its OAuth app it waits");
   assert.deepEqual(await (await handle(req("/api/public/archive"), e, opts)).json().then((a) => a.posts.map((p) => p.id)), ["t1"], "the archive shows what was published");
   // the digest (owner 2026-11-23): each post carries its card's path, or null; never the stored URL
