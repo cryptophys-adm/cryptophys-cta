@@ -9,7 +9,7 @@ import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, r
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
 import { AGENT_SECRETS } from "../src/agent/router.mjs";
-import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates } from "../src/desk.mjs";
+import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
@@ -53,6 +53,7 @@ function deskStub() {
     addLink: async (i, now) => addLink(sql, i, { now }), link: async (s) => getLink(sql, s), click: async (i, now) => { countClick(sql, i, { now }); return true; },
     links: async () => listLinks(sql), hashtagSets: async () => listHashtagSets(sql), saveHashtagSet: async (i, now) => saveHashtagSet(sql, i, { now }),
     autoCandidates: async (i) => autoCandidates(sql, i),
+    writeCandidates: async (i) => writeCandidates(sql, i), recordWrite: async (i, now) => recordWrite(sql, i, { now }), recentWrites: async (n) => recentWrites(sql, { limit: n }),
     replySeen: async (id) => replySeen(sql, id), answeredInThread: async (p, a) => answeredInThread(sql, p, a), repliesSentSince: async (s) => repliesSentSince(sql, s), recordReply: async (r) => recordReply(sql, r), recentReplies: async (n) => recentReplies(sql, { limit: n }), forgetReplies: async (b) => forgetReplies(sql, b),
     recordModelCall: async (i, now) => recordModelCall(sql, i, { now }), modelSpendSince: async (s) => modelSpendSince(sql, s), recentModelCalls: async (n) => recentModelCalls(sql, { limit: n }),
     studioSetting: async (k) => studioSetting(sql, k), saveStudioSetting: async (i, now) => saveStudioSetting(sql, i, { now }), kindMix: async (f, t) => kindMixSince(sql, f, t),
@@ -953,4 +954,65 @@ test("auto-approve end to end (owner 2026-11-25): a Threads pattern draft goes o
   assert.equal(getDraft(d.sql, "pattern:a:threads").decided_by, "auto-approve");
   assert.equal(posted.length, 1);
   assert.deepEqual([getDraft(d.sql, "pattern:b:threads").status, getDraft(d.sql, "pattern:a:telegram").status, getDraft(d.sql, "custom:x:threads").status], ["pending", "pending", "pending"], "edited, another channel without the rule, a custom post: they wait");
+});
+
+test("cta-write end to end (rule 4 amended): the switch, a written post auto-approved 15 minutes after the write, a failed guard keeps the template, the kill switch", async () => {
+  resetKeyCacheForTests();
+  const { env: e, d } = env({ CONTENT_PUBLISH: "on", PUBLISH_CHANNELS: "threads", THREADS_ACCESS_TOKEN: "T", THREADS_USER_ID: "77", REFLECTION_API_KEY: "rk-test" });
+  const T0 = Date.parse("2026-11-25T06:00:00Z");
+  const TEMPLATE = "Education · Pattern breakout · XAUUSD H1\nRounding Top · direction down\n\nBreakout line 3570.54\nThe pattern fails if an H1 candle closes back above 3689.87.\nPrice when read: 3555.10 · 12:09 AM UTC\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.";
+  const GOOD = "The H1 Rounding Top broke down through its breakout line at 3570.54.\nIt fails if an H1 candle closes back above 3689.87.\nPrice when read: 3555.10 at 12:09 AM UTC.";
+  addDrafts(d.sql, [
+    { id: "pattern:a:threads", channel: "threads", kind: "pattern", text: TEMPLATE, status: "pending" },
+    { id: "pattern:b:threads", channel: "threads", kind: "pattern", text: TEMPLATE.replace("Rounding Top", "Double Top"), status: "pending" }
+  ], { now: T0 });
+  const answers = [GOOD, GOOD.replace("Rounding Top", "Double Top") + " Target 3427.31."];
+  const posted = [];
+  const fetcher = async (url, init) => {
+    const u = String(url);
+    if (u.startsWith("https://api.reflection.ai/")) return Response.json({ choices: [{ message: { content: answers.shift() } }], usage: { prompt_tokens: 300, completion_tokens: 60 } }, { headers: { "reflection-data-retention": "zero" } });
+    if (u.includes("/me?")) return Response.json({ id: "77" });
+    if (u.endsWith("/77/threads")) { posted.push(Object.fromEntries(new URLSearchParams(String(init.body)))); return Response.json({ id: "c1" }); }
+    if (u.includes("/c1?")) return Response.json({ status: "FINISHED" });
+    if (u.endsWith("/threads_publish")) return Response.json({ id: "p1" });
+    if (u.includes("threads_publishing_limit")) return Response.json({ data: [{ quota_usage: 0, config: { quota_total: 250 } }] });
+    throw new Error(`unexpected ${u}`);
+  };
+  const person = await jwt({ email: "owner@example.com", sub: "u1" });
+  const post = (path, body, at) => handle(req(path, { method: "POST", body, token: person }), e, { ...opts, now: at / 1000 });
+  // off by default: the template stays and nothing is asked of the model
+  const a0 = await (await handle(req("/api/studio/agent", { token: person }), e, opts)).json();
+  assert.deepEqual([a0.write.mode, a0.write.enabled], ["off", false]);
+  assert.equal((await post("/api/studio/agent/write", { enabled: "yes" }, T0)).status, 400);
+  assert.equal((await post("/api/studio/agent/write", { enabled: true, kinds: ["custom"] }, T0)).status, 400, "never a custom post");
+  assert.equal((await post("/api/studio/agent/model", { enabled: true }, T0)).status, 200);
+  assert.equal((await post("/api/studio/agent/write", { enabled: true }, T0)).status, 200);
+  assert.equal((await runSchedule(e, { now: T0 + 60_000, fetcher })).written, undefined, "still off: About's sentence about the model is not in (about_lede_ok)");
+  assert.equal(getDraft(d.sql, "pattern:a:threads").text, TEMPLATE);
+  assert.equal((await post("/api/studio/agent/replies", { about_lede_ok: true }, T0)).status, 200);
+  const r = await runSchedule(e, { now: T0 + 5 * 60_000, fetcher });
+  assert.deepEqual([r.written.written, r.written.kept], [1, 1], JSON.stringify(r.written));
+  const a = getDraft(d.sql, "pattern:a:threads"), b = getDraft(d.sql, "pattern:b:threads");
+  assert.ok(a.text.startsWith("Education - Pattern breakout - XAUUSD H1\nThe H1 Rounding Top broke down"), a.text);
+  assert.equal(a.guardian.pass, true);
+  assert.equal(b.text, TEMPLATE.replace("Rounding Top", "Double Top"), "an added number: the template stays");
+  assert.deepEqual(draftEvents(d.sql, "pattern:b:threads").map((x) => x.action).sort(), ["drafted", "write_kept"]);
+  assert.match(draftEvents(d.sql, "pattern:b:threads").find((x) => x.action === "write_kept").detail, /number_added/);
+  assert.match(draftEvents(d.sql, "pattern:a:threads").find((x) => x.action === "written").detail, /template: Education · Pattern breakout/, "the template is kept in the history");
+  assert.equal((await runSchedule(e, { now: T0 + 10 * 60_000, fetcher })).written, undefined, "each draft is tried once");
+  // auto-approve counts 15 minutes from the write (05 min), not from the draft (00 min)
+  assert.equal((await runSchedule(e, { now: T0 + 16 * 60_000, fetcher })).auto?.find((x) => x.id === "pattern:a:threads"), undefined);
+  const later = await runSchedule(e, { now: T0 + 21 * 60_000, fetcher });
+  assert.deepEqual(later.auto.find((x) => x.id === "pattern:a:threads"), { channel: "threads", id: "pattern:a:threads", status: "approved", publish: "published" });
+  assert.ok(posted.find((p) => p.text?.includes("The H1 Rounding Top broke down")), "the written text went out");
+  const page = await (await handle(req("/api/studio/agent", { token: person }), e, { ...opts, now: (T0 + 22 * 60_000) / 1000 })).json();
+  assert.equal(page.write.mode, "on");
+  assert.deepEqual(page.write.recent.map((x) => x.action).sort(), ["write_kept", "written"]);
+  assert.ok(page.model.today.calls >= 2, "each call counts against the model's daily cap");
+  // the kill switch: off, and the next fresh draft keeps its template without a model call
+  assert.equal((await post("/api/studio/agent/write", { enabled: false }, T0 + 23 * 60_000)).status, 200);
+  addDrafts(d.sql, [{ id: "pattern:c:threads", channel: "threads", kind: "pattern", text: TEMPLATE, status: "pending" }], { now: T0 + 24 * 60_000 });
+  answers.push("should never be asked");
+  await runSchedule(e, { now: T0 + 25 * 60_000, fetcher });
+  assert.deepEqual([getDraft(d.sql, "pattern:c:threads").text, answers.length], [TEMPLATE, 1]);
 });

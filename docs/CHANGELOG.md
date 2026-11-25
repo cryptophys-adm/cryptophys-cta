@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-25 (the CTA agent: cta-write and cta-hook)
+- feat(agent): cta-write lets the model reword a fresh template post's body from its own facts, behind rule 4's guards; cta-hook scores each post's opening line.
+  - Owner, 25 Nov: model posts "Yes, with the same guards"; then "lanjutkan PR B setelah xauusd selesai".
+  - `src/agent/write.mjs` keeps the template's first line and closing block and sends only the body. It runs every 5 minutes before auto-approve, on at most 3 fresh drafts per run, each tried once.
+  - It accepts the model's body only if the numbers match exactly, with no link, mention, hashtag or emoji, no advice or forecast word the template does not use, within the length, and passing the guardian and the linter after the humanizer. Otherwise the template stays and the reason is logged.
+  - The auto-approve window starts again after a write.
+  - Off by default. An approver turns it on (`POST /api/studio/agent/write`); it also waits for `about_lede_ok`. `AGENT_WRITE` "off" stops it. Each call counts against the model's daily cap.
+  - `src/agent/hook.mjs` ports hookscore.py's five checks and hooks.json's 26 formulas. It is advisory and appears in Checks.
+  - Agent page: a Writing block with its switch and the latest outcomes. cta-write and cta-hook are now listed as live.
+  - AGENTS.md rule 4 lists cta-write as approved. Tests AG14, AG15 and the cta-write end-to-end test.
+
 ## 2026-11-25 (the CTA agent: cta-lint and cta-human in full; rule 4 amended)
 - feat(agent): the humanizer now rewrites every post before it goes out, templates included, and the linter runs all of caption.py's checks.
   - Owner, 25 Nov: "lengkapi semua tidak boleh ada sebagian, tiru semuanya", and for the rewrite "Everything, templates too".

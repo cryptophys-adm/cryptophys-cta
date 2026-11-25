@@ -6,6 +6,7 @@
 import { lintPost, textFor } from "./lint.mjs";
 import { humanScore, humanize } from "./humanizer.mjs";
 import { rulesOf } from "./rules.mjs";
+import { hookScore, openingLine } from "./hook.mjs";
 
 /**
  * The CTA agent's skills, under the CTA's own names (owner 2026-11-25: "gunakan nama cta lebih general"), and where each
@@ -18,8 +19,8 @@ export const AGENT_SKILLS = Object.freeze([
   { id: "cta-audit", name: "Audit", what: "Which posts of the last full week worked, against the channel's own median", runs: "each WIB week (Monday to Sunday)", model: "Beam writes the week's summary (studio only), once a week", live: true },
   { id: "cta-plan", name: "Plan", what: "The week's mix and posting slots, from the audit; a person adds a slot", runs: "each WIB week", model: "none: the reasons are the audit's numbers", live: true },
   { id: "cta-reply", name: "Reply", what: "Sorts replies under our posts and answers them without approval, within the caps; the first 72 hours a dry run", runs: "every 15 min", model: "Beam answers questions; buy or sell questions get a fixed answer; every answer checked", live: true },
-  { id: "cta-write", name: "Write", what: "Writes a post from the xauusd facts behind rule 4's guards; the fixed template when it fails them", runs: "each draft", model: "Beam", live: false },
-  { id: "cta-hook", name: "Hook", what: "Scores a post's opening against the hook formulas and suggests a stronger one", runs: "each draft", model: "none", live: false },
+  { id: "cta-write", name: "Write", what: "Rewords a fresh template post's body from its own facts, behind rule 4's guards (the same numbers, no advice or forecast word, the humanizer, the guardian, the linter); the template when any fails. Off until an approver turns it on", runs: "every 5 min, each fresh draft once", model: "Beam", live: true },
+  { id: "cta-hook", name: "Hook", what: "Scores a post's opening line on five properties and names the hook formula it follows (26 formulas)", runs: "each draft", model: "none", live: true },
   { id: "cta-carousel", name: "Carousel", what: "Turns an analysis into a multi-image post, one point a card", runs: "each analysis", model: "Beam, behind rule 4's guards", live: false },
   { id: "cta-repurpose", name: "Repurpose", what: "One analysis in every channel's own form", runs: "each analysis", model: "Beam, behind rule 4's guards", live: false },
   { id: "cta-profile", name: "Profile", what: "Reviews each channel's profile against a 12-part rubric", runs: "each month", model: "none", live: false },
@@ -35,7 +36,7 @@ export function agentChecks(drafts = [], { channel = "threads" } = {}) {
   const checks = (drafts || []).filter((d) => d?.channel === channel && typeof d.text === "string").map((d) => {
     const h = d.status === "published" ? { text: d.text, report: null } : humanize(d.text);
     const text = textFor(channel, h.text);
-    return { id: d.id, kind: d.kind, status: d.status, created_at: d.created_at ?? null, text, humanized: h.text !== d.text, structures: h.report?.structures ?? [], lint: lintPost(channel, text), human: humanScore(text) };
+    return { id: d.id, kind: d.kind, status: d.status, created_at: d.created_at ?? null, text, humanized: h.text !== d.text, structures: h.report?.structures ?? [], lint: lintPost(channel, text), human: humanScore(text), hook: hookScore(openingLine(text)) };
   });
   const by = (v) => checks.filter((c) => c.lint.verdict === v).length;
   return { channel, topic_tag: rulesOf(channel)?.topic_tag ?? null, skills: AGENT_SKILLS, checks, summary: { checked: checks.length, ready: by("READY"), review: by("REVIEW"), fix: by("FIX"), human_pass: checks.filter((c) => c.human.verdict === "PASS").length } };

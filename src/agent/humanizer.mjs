@@ -21,6 +21,7 @@ export function jsRegex(python, extra = "g") {
   const lead = /^\(\?([a-z]+)\)/.exec(src);
   if (lead) { src = src.slice(lead[0].length); for (const f of lead[1]) if ("ims".includes(f)) flags.add(f); }
   src = src.replace(/\\U([0-9A-Fa-f]{8})/g, (_, h) => `\\u{${h.replace(/^0+/, "") || "0"}}`);
+  src = src.replace(/\\(["'\u201c\u201d\u2018\u2019])/g, "$1"); // Python's \" is a plain quote; JavaScript's u flag refuses it
   return new RegExp(src, [...flags].join(""));
 }
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
