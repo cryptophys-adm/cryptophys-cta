@@ -22,7 +22,7 @@ import { triage, checkReply, shapeAnswer, replyMode, runReplies, roomReply, room
 import { autoAt, dueNow, AUTO_WINDOW_MINUTES } from "../src/agent/auto-approve.mjs";
 import { AUTO_KINDS, AUTO_DEFAULTS, normalizeSettings } from "../src/settings.mjs";
 import { chartOf } from "../src/card.mjs";
-import { draftedPatterns, analysisDrafts, dueChartMaps, chartMapText, chartsOfId, MAP_FRESH_MINUTES } from "../src/analysis-drafts.mjs";
+import { draftedPatterns, analysisDrafts, dueChartMaps, chartMapText, chartsOfId, chartMapId, zoneRange, zoneLine, MAP_FRESH_MINUTES } from "../src/analysis-drafts.mjs";
 import { publishThreads } from "../src/publishers.mjs";
 import { HASHTAGS } from "../src/channels.mjs";
 import { keyLevelsText } from "../src/analysis-drafts.mjs";
@@ -390,7 +390,7 @@ test("AG12 key-level maps per chart (owner 2026-11-25): each chart's map once pe
   assert.deepEqual(dueChartMaps(day, { now: Date.parse("2026-11-25T22:09:00Z") }), [{ charts: ["D1", "H4", "H1"], closed: "2026-11-25T22:00:00.000Z" }]);
   const single = chartMapText(next, { charts: ["H1"], closed: "2026-11-25T05:00:00.000Z" }, { channel: "threads" });
   assert.match(single, /4050\.00–4051\.00/, "one chart: two a side");
-  assert.deepEqual(chartsOfId("levels:D1+H4+H1:20261125T220000Z:threads"), { charts: ["D1", "H4", "H1"], closed: "20261125T220000Z" });
+  assert.deepEqual(chartsOfId("levels:D1+H4+H1:20261125T220000Z:threads"), { charts: ["D1", "H4", "H1"], closed: "20261125T220000Z", at: Date.parse("2026-11-25T22:00:00Z") });
   assert.equal(chartsOfId("levels:2026-11-24:threads"), null, "the old daily map's id is not a chart map");
   // without zones_by_chart (before xauusd KM1): the daily map of 06:09 as before
   assert.deepEqual(analysisDrafts({ ...A, zones_by_chart: undefined, closed: undefined, zones: [{ role: "supply", low: 4060, high: 4062, strength: "strong", metrics: [] }] }, { now: Date.parse("2026-11-25T06:09:00Z"), channels: ["threads"], levelsRun: true }).map((d) => d.id), ["levels:2026-11-25:threads"]);
@@ -538,4 +538,22 @@ test("AG15 cta-write: the template's own facts reworded behind rule 4's guards, 
   rec.length = 0;
   const r2 = await runWrite("threads", deps([{ ok: false, skipped: "budget" }]));
   assert.deepEqual([r2.stopped, rec.length], ["budget", 0]);
+});
+
+test("AG16 a zero-width zone is one price (owner 2026-11-25: \"1. Yes\"); map ids carry one close width and compare as times (orchestrator review of #87)", () => {
+  assert.equal(zoneRange(3546.64, 3546.64), "3546.64");
+  assert.equal(zoneRange(3546.641, 3546.6449), "3546.64", "equal after rounding to two decimals");
+  assert.equal(zoneRange(3539.3, 3544.62), "3539.30–3544.62", "a normal zone is unchanged");
+  assert.equal(zoneLine({ low: 3546.64, high: 3546.64, strength: "weak", metrics: ["1H swing low"] }), "• 3546.64 (weak: 1H swing low)", "the label stays");
+  const analysis = { at: "2026-11-25T09:09:00Z", price: 3535.84, closed: { H1: "2026-11-25T09:00:00Z" },
+    zones_by_chart: { H1: [{ role: "supply", low: 3546.64, high: 3546.64, strength: "weak", metrics: ["1H swing low"] }, { role: "demand", low: 3511.38, high: 3513.6, strength: "medium", metrics: ["1H Camarilla L3"] }] } };
+  const text = chartMapText(analysis, { charts: ["H1"], closed: "2026-11-25T09:00:00Z" }, { channel: "threads" });
+  assert.match(text, /\n• Supply \(sell area\) 3546\.64 \(weak: 1H swing low\)\n/);
+  assert.match(text, /\n• Demand \(buy area\) 3511\.38–3513\.60 \(medium: 1H Camarilla L3\)/);
+  assert.equal(lintPost("threads", threadsText(humanize(text).text)).verdict !== "FIX", true, "the linter still passes it");
+  assert.match(read("src/card.mjs"), /f2\(z\.low\) === f2\(z\.high\) \? f2\(z\.low\)/, "the card's label too");
+  // one width: a close always written with seconds; an older four-digit id reads the same and compares as a time
+  assert.equal(chartMapId(["H1"], "2026-11-25T09:00Z", "threads"), "levels:H1:20261125T090000Z:threads");
+  assert.deepEqual(chartsOfId("levels:H1:20261125T0900Z:threads"), { charts: ["H1"], closed: "20261125T090000Z", at: Date.parse("2026-11-25T09:00:00Z") });
+  assert.ok(chartsOfId("levels:H1:20261125T0900Z:threads").at < chartsOfId("levels:H1:20261125T100000Z:threads").at, "T0900Z is not newer than T100000Z");
 });

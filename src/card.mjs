@@ -201,7 +201,8 @@ const ZONE_STYLE = {
 const GOLD = "#d4af37";
 /** "Supply zone · sell area 3898.00–3902.40": on the chart the zone only (owner 2026-11-15: "di chart cukup zone tidak
  * perlu membawa metrics"); the metric names stay in the text. */
-const zoneLabel = (z) => `${ZONE_STYLE[z.role]?.label ?? "Zone"} ${f2(z.low)}–${f2(z.high)}`;
+// One price for a zero-width zone, as in the post's text (src/analysis-drafts.mjs zoneRange; owner 2026-11-25: "1. Yes").
+const zoneLabel = (z) => `${ZONE_STYLE[z.role]?.label ?? "Zone"} ${f2(z.low) === f2(z.high) ? f2(z.low) : `${f2(z.low)}–${f2(z.high)}`}`;
 /** A text label with a dark backing (SVG has no text background); placed later by layoutLabels. */
 function tag(x, y, text, { color = "#e6e9ef", anchor = "start", size = 19, weight = 600, alts = [] } = {}) {
   const w = Math.round(text.length * size * 0.56) + 16, h = size + 12;

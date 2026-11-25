@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-25 (key-level maps: a zero-width zone as one price; map ids compared as times)
+- fix(analysis): a zone whose low and high round to the same price now shows one price, in the post's text and on the card. Owner, 25 Nov: "1. Yes". Example: "Supply (sell area) 3546.64 (weak: 1H swing low)", where it used to read "3546.64-3546.64".
+  - A normal zone still shows "low–high". Only the rendering changes; xauusd's data is untouched.
+  - `zoneRange` is used by `zoneLine`, by "Price is inside the zone", and by the card's zone label.
+- fix(schedule): a chart map's id always writes its close as six digits, and `supersedeMaps` compares closes as times. From the orchestrator's review of #87: an old four-digit "T0900Z" sorted as newer than "T100000Z".
+- Tests AG16 and scheduler.test.mjs.
+
 ## 2026-11-25 (the CTA agent: newest map wins at a slot; auto-approve in the log)
 - fix(schedule): a slot never sends an older key-level map when a newer approved one for the same chart is waiting.
   - From the orchestrator's ruling after the 10:12 UTC check. The 2-hour expiry and the 2-hour Threads slots stay as they are.

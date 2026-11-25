@@ -8,6 +8,7 @@
 // Each change is an event with who and why. An approval runs the guardian again on the stored text.
 import { checkContentDraft } from "./guardian.mjs";
 import { initialStatus, mediaStatusOf } from "./channels.mjs";
+import { chartsOfId } from "./analysis-drafts.mjs";
 
 export const DESK_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS drafts (
@@ -461,8 +462,6 @@ export function nextApproved(sql, channel, { now = Date.now() } = {}) {
   supersedeMaps(sql, channel, { now });
   return rows(sql, "SELECT * FROM drafts WHERE status = 'approved' AND channel = ? ORDER BY COALESCE(decided_at, created_at) ASC, id LIMIT 1", channel).map(shape)[0] ?? null;
 }
-// A per-chart key-level map's id: "levels:<charts>:<close>:<channel>" (src/analysis-drafts.mjs chartMapId).
-const CHART_MAP_ID = /^levels:((?:D1|H4|H1)(?:\+(?:D1|H4|H1))*):(\d{8}T\d{4,6}Z):/;
 /**
  * Newest wins (orchestrator review, 2026-11-25): of the approved per-chart maps of a channel, only the newest close of
  * each chart key ("H1", "H4+H1", ...) may go out; each older one is marked expired with error "superseded:<newer id>"
@@ -472,10 +471,10 @@ export function supersedeMaps(sql, channel, { now = Date.now() } = {}) {
   ensureDesk(sql);
   const newest = new Map(), out = [];
   const maps = rows(sql, "SELECT id FROM drafts WHERE status = 'approved' AND channel = ? AND kind = 'key_levels' AND id LIKE 'levels:%'", String(channel))
-    .map((r) => ({ id: r.id, m: CHART_MAP_ID.exec(r.id) })).filter((x) => x.m)
-    .sort((a, b) => (a.m[2] < b.m[2] ? 1 : a.m[2] > b.m[2] ? -1 : 0));
-  for (const { id, m } of maps) {
-    const key = m[1];
+    .map((r) => ({ id: r.id, c: chartsOfId(r.id) })).filter((x) => x.c)
+    .sort((a, b) => b.c.at - a.c.at); // the close as a time (orchestrator review of #87), not as text
+  for (const { id, c } of maps) {
+    const key = c.charts.join("+");
     if (!newest.has(key)) { newest.set(key, id); continue; }
     const by = `superseded:${newest.get(key)}`;
     sql.exec("UPDATE drafts SET status = 'expired', error = ? WHERE id = ? AND status = 'approved'", by, id);
