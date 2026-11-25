@@ -557,3 +557,22 @@ test("AG16 a zero-width zone is one price (owner 2026-11-25: \"1. Yes\"); map id
   assert.deepEqual(chartsOfId("levels:H1:20261125T0900Z:threads"), { charts: ["H1"], closed: "20261125T090000Z", at: Date.parse("2026-11-25T09:00:00Z") });
   assert.ok(chartsOfId("levels:H1:20261125T0900Z:threads").at < chartsOfId("levels:H1:20261125T100000Z:threads").at, "T0900Z is not newer than T100000Z");
 });
+
+test("AG17 the analysis run's log (orchestrator review after the 07:09 UTC miss): per chart its close and zone count; each draft left out with why", async () => {
+  const { applySettings, defaultSettings } = await import("../src/settings.mjs");
+  const { analysisRead } = await import("../src/app.mjs");
+  const on = { ...defaultSettings("threads"), max_per_day: 1 };
+  const d = (id, kind = "key_levels", channel = "threads") => ({ id, kind, channel, text: "Education. Not financial advice.", status: "pending" });
+  const dropped = [];
+  const out = applySettings([d("a"), d("b"), d("c", "custom_kind"), d("t", "key_levels", "telegram")], { threads: on, telegram: { ...defaultSettings("telegram"), enabled: false } }, { today: {}, dropped });
+  assert.deepEqual(out.map((x) => x.id), ["a"]);
+  assert.deepEqual(dropped, [{ id: "b", channel: "threads", reason: "max_per_day", max: 1 }, { id: "c", channel: "threads", reason: "kind_off" }, { id: "t", channel: "telegram", reason: "channel_off" }]);
+  assert.deepEqual(applySettings([d("a")], { threads: on }).map((x) => x.id), ["a"], "without a collector it works as before");
+  assert.deepEqual(analysisRead({ closed: { H1: "2026-11-25T07:00:00Z", H4: "2026-11-25T04:00:00Z" }, zones_by_chart: { H1: [{}, {}], H4: [] } }),
+    { closed: { H1: "2026-11-25T07:00:00Z", H4: "2026-11-25T04:00:00Z", D1: null }, zones_by_chart: { H1: 2, H4: 0, D1: null } });
+  assert.deepEqual(analysisRead(null), { closed: { H1: null, H4: null, D1: null }, zones_by_chart: { H1: null, H4: null, D1: null } });
+  assert.match(read("src/index.mjs"), /\n\s+console\.log\("cta_analysis_drafts", JSON\.stringify\(drafted\)\);/, "every run is logged, not only one that added");
+  assert.match(read("src/app.mjs"), /\.\.\.read, drafts: drafts\.map\(\(x\) => \(\{ id: x\.id, status: x\.status \}\)\), added, \.\.\.\(dropped\.length \? \{ dropped \} : \{\}\)/);
+  assert.match(read("AGENTS.md"), /held: owner 2026-11-25, dynamic-worker budget/);
+  assert.match(read("docs/SSOT.md"), /\*\*held: owner 2026-11-25, dynamic-worker budget\*\*/);
+});

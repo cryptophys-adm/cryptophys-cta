@@ -27,6 +27,13 @@
   - `site/home/live.js`: every minute while the tab is shown, and once when it is shown again, the pages read again. Never two reads at once; a failed or empty read keeps what is on screen. The average strip on every page, the Performance table, the home's latest post and the Archive's list.
   - No public text changes here. The Performance line above the table now comes from one function, `basisOf`, with the same words; the words for a delay of 0 wait for the owner.
 - Tests TK4, TK-D, TK-L and TH9; `test/fixtures/track-heights.json` measured again (the heights unchanged).
+## 2026-11-25 (the analysis run's log; the Forge deploy held)
+- feat(log): every hourly analysis run now logs `cta_analysis_drafts`, even when it adds nothing.
+  - Each line has, per chart (H1, H4, D1), the latest close and the zone count, then the drafts added, then `dropped`: each draft the channel settings left out, with the reason (`channel_off`, `kind_off`, or `max_per_day` with the cap).
+  - From the orchestrator's review after the 07:09 UTC miss, which could not be explained from the log.
+  - `applySettings` takes an optional `dropped` collector; its output is unchanged.
+- docs: the Forge deploy (ADR-0018 X1/X2/X2b) is marked "held: owner 2026-11-25, dynamic-worker budget". Owner: "cancel cta sekarang jangn pakai forge dulu karena isu budget dynamic worker". The deploy stays `deploy.yml`.
+- Test AG17.
 
 ## 2026-11-25 (key-level maps: a zero-width zone as one price; map ids compared as times)
 - fix(analysis): a zone whose low and high round to the same price now shows one price, in the post's text and on the card. Owner, 25 Nov: "1. Yes". Example: "Supply (sell area) 3546.64 (weak: 1H swing low)", where it used to read "3546.64-3546.64".

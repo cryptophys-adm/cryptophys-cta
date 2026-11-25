@@ -129,14 +129,18 @@ export function draftingChannels(channels, settings) {
  * Applies the settings to fresh drafts: drops a kind the channel does not take and anything over its daily maximum
  * (`today`: drafts already made today per channel), and puts the channel's hashtag line in place of the default one.
  * `recheck(draft)` runs the guardian on a changed text; if it fails, the draft keeps its default hashtags. Pure.
+ * `dropped`, when given, collects each draft left out with why ({ id, channel, reason }: "channel_off", "kind_off",
+ * "max_per_day"), for the run's log (orchestrator review, 2026-11-25: a miss must be visible).
  */
-export function applySettings(drafts, settings, { today = {}, recheck = null } = {}) {
+export function applySettings(drafts, settings, { today = {}, recheck = null, dropped = null } = {}) {
   const count = { ...today };
   const out = [];
   for (const d of drafts) {
     const s = settings[d.channel];
-    if (!s || !s.enabled || !s.kinds.includes(d.kind)) continue;
-    if ((count[d.channel] ?? 0) >= s.max_per_day) continue;
+    const drop = (reason) => dropped?.push({ id: d.id, channel: d.channel, reason, ...(reason === "max_per_day" ? { max: s.max_per_day } : {}) });
+    if (!s || !s.enabled) { drop("channel_off"); continue; }
+    if (!s.kinds.includes(d.kind)) { drop("kind_off"); continue; }
+    if ((count[d.channel] ?? 0) >= s.max_per_day) { drop("max_per_day"); continue; }
     let draft = d;
     // A draft the guardian held is queued as it is (the studio shows why); only a passing draft gets the hashtags.
     const base = HASHTAGS[d.channel];
