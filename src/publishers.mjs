@@ -9,7 +9,7 @@
 // dry run and one real post on a test account confirm them. The daily publishing limit is read from Meta's own
 // limit endpoint at run time, never assumed.
 export const THREADS_BASE = "https://graph.threads.net/v1.0";
-import { threadsText, validTopicTag, THREADS_TOPIC_TAG } from "./agent/threads-lint.mjs";
+import { threadsText, validTopicTag, THREADS_TOPIC_TAG } from "./agent/lint.mjs";
 export const INSTAGRAM_BASE = "https://graph.instagram.com";
 // Instagram takes two kinds of token (owner 2026-11-17: Meta's "API setup with Unified login" gives a system-user
 // token). An Instagram-login token (IGAA...) talks to graph.instagram.com, renews every 60 days, and /me names the
@@ -73,7 +73,7 @@ async function waitReady(fetcher, url, token, field, { sleep, polls = STATUS_POL
 export async function publishThreads({ account, text: draftText, imageUrl = null, topicTag = THREADS_TOPIC_TAG, fetcher = (...a) => fetch(...a), dryRun = false, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const uid = String(account?.user_id ?? "");
   // One topic tag through the API and no in-text hashtag line, no invisible character (owner 2026-11-25, the CTA
-  // agent's Checks; src/agent/threads-lint.mjs): a draft made before the topic tag loses its "#XAUUSD #gold #education".
+  // agent's Checks; src/agent/lint.mjs): a draft made before the topic tag loses its "#XAUUSD #gold #education".
   const text = threadsText(draftText);
   const tag = validTopicTag(topicTag) ? { topic_tag: topicTag } : {};
   // With the card (owner 2026-11-17, Threads set to Image): an IMAGE container from the card's public JPEG URL,

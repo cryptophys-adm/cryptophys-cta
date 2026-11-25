@@ -16,9 +16,10 @@ import { dueSlots, nextSlots } from "./scheduler.mjs";
 import { PROVIDERS, BOT_CHANNELS, CONNECT_SECRETS, appOf, newAttempt, authorizeUrl, exchangeCode, refreshX, identify, checkTelegram, telegramChatIdProblem, TELEGRAM_CHAT_NOT_FOUND, redirectUri, sealToken, openToken, encryptionReady, STATE_RE, CALLBACK_PATH } from "./oauth.mjs";
 import { bestTimes, abResult, evergreen, EVERGREEN_MIN_DAYS } from "./growth.mjs";
 import { agentChecks } from "./agent/checks.mjs";
-import { auditThreads, planThreads } from "./agent/audit.mjs";
+import { auditChannel, planChannel } from "./agent/audit.mjs";
+import { AGENT_CHANNELS, agentChannels } from "./agent/rules.mjs";
 import { modelStatus } from "./agent/router.mjs";
-import { weeklySummary, SUMMARY_KEY } from "./agent/weekly.mjs";
+import { weeklySummary, summaryKey } from "./agent/weekly.mjs";
 import { linkHosts, normalizeLink, randomSlug, shortUrl, redirectTarget, GO_PATH, normalizeHashtagSet, MAX_SETS, normalizeMix, DEFAULT_MIX, MIX_KINDS, wibWeek, mixReport } from "./marketing.mjs";
 import { templateTexts, checkPost, composeDrafts, overlayFor, recapWindow, COMPOSE_KINDS, COMPOSE_KIND_NAMES } from "./compose.mjs";
 import { sourceOf } from "./warroom-drafts.mjs";
@@ -686,18 +687,24 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
       }
       // The CTA agent (owner 2026-11-25: "setuju semua, mulai dari Checks"): the Threads drafts' checks (src/agent/checks.mjs).
       // Read only; posts still come from the xauusd templates and nothing here changes a draft.
-      // Audit and Plan (src/agent/audit.mjs): the last complete WIB week on Threads against our own median, and the
+      // Audit and Plan (src/agent/audit.mjs): the last complete WIB week on the channel against its own median, and the
       // week's suggested mix and slots; a suggested slot is added by a person through POST /api/studio/settings.
+      // One agent for every channel (owner 2026-11-25): `?channel=`; it manages AGENT_CHANNELS (phase 1: Threads), and a
+      // channel it does not manage yet shows as such, with no data.
       if (route === "GET /api/studio/agent") {
         return rpc(async () => {
           const at = now ? now * 1000 : Date.now();
+          const asked = url.searchParams.get("channel");
+          const channel = CHANNELS.includes(asked) ? asked : AGENT_CHANNELS[0];
+          const base = { channel, active: AGENT_CHANNELS.includes(channel), channels: agentChannels(), model: await modelStatus(env, modelStore(env, at), { now: at }), can_edit: role === "approver" };
+          if (!base.active) return { ...base, skills: agentChecks([], { channel }).skills };
           const d = desk(env);
           const posts = await d.measuredPosts();
-          const audit = auditThreads(posts, { now: at });
-          const schedule = (await channelSettings(env)).settings.threads?.schedule ?? [];
-          const summary = (await d.studioSetting(SUMMARY_KEY))?.value ?? null;
-          return { ...agentChecks(await d.list({ channel: "threads", limit: 30 })), audit: { ...audit, summary: summary?.week === audit.week.from ? summary.text : null },
-            plan: planThreads(audit, posts, { now: at, schedule }), model: await modelStatus(env, modelStore(env, at), { now: at }), can_edit: role === "approver" };
+          const audit = auditChannel(posts, { channel, now: at });
+          const schedule = (await channelSettings(env)).settings[channel]?.schedule ?? [];
+          const summary = (await d.studioSetting(summaryKey(channel)))?.value ?? null;
+          return { ...base, ...agentChecks(await d.list({ channel, limit: 30 }), { channel }), audit: { ...audit, summary: summary?.week === audit.week.from ? summary.text : null },
+            plan: planChannel(audit, posts, { now: at, schedule }) };
         }, "agent_failed");
       }
       // The model's switch (src/agent/router.mjs): an approver turns it off or on; the studio's event log keeps who and when.
@@ -1025,8 +1032,11 @@ export const modelStore = (env, now = Date.now()) => {
   const d = desk(env);
   return { setting: (k) => d.studioSetting(k), saveSetting: (i) => d.saveStudioSetting(i, now), record: (c) => d.recordModelCall(c, now), spendSince: (s) => d.modelSpendSince(s), recent: (n) => d.recentModelCalls(n) };
 };
-/** The Audit's weekly summary (src/agent/weekly.mjs), at the daily run: once a WIB week, only with the model's key. */
+/** The Audit's weekly summary (src/agent/weekly.mjs), at the daily run: once a WIB week per channel the agent manages, only with the model's key. */
 export async function agentWeekly(env, { now = Date.now(), fetcher } = {}) {
   if (!String(env?.REFLECTION_API_KEY ?? "").trim()) return { status: "no_key" };
-  return weeklySummary(env, modelStore(env, now), await desk(env).measuredPosts(), { now, ...(fetcher ? { fetcher } : {}) });
+  const posts = await desk(env).measuredPosts();
+  const out = {};
+  for (const channel of AGENT_CHANNELS) out[channel] = await weeklySummary(env, modelStore(env, now), posts, { channel, now, ...(fetcher ? { fetcher } : {}) });
+  return { status: Object.values(out).every((r) => r.status === "done_already") ? "done_already" : "ran", channels: out };
 }

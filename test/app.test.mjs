@@ -850,6 +850,9 @@ test("the Agent page's API (owner 2026-11-25, the CTA agent's Checks): a person 
   assert.equal((await handle(req("/api/studio/agent"), e, opts)).status, 403, "behind Access");
   const a = await (await handle(req("/api/studio/agent", { token: await jwt({ email: "owner@example.com" }) }), e, opts)).json();
   assert.deepEqual(a.checks.map((c) => c.id), ["th1"], "Threads only");
+  assert.deepEqual([a.channel, a.active, a.channels.filter((c) => c.active).map((c) => c.id)], ["threads", true, ["threads"]]);
+  const tg = await (await handle(req("/api/studio/agent?channel=telegram", { token: await jwt({ email: "owner@example.com" }) }), e, opts)).json();
+  assert.deepEqual([tg.channel, tg.active, "checks" in tg, "audit" in tg], ["telegram", false, false, false], "a channel the agent does not manage yet: no data");
   assert.equal(a.checks[0].text.endsWith("Not financial advice."), true, "what Threads gets: no hashtag line");
   assert.equal(a.topic_tag, "XAUUSD");
   assert.equal(getDraft(d.sql, "th1").text.endsWith("#education"), true, "the draft itself is unchanged");
