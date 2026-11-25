@@ -179,16 +179,18 @@ test("TK-H the header's four codes: the mean over the scenarios shown, with Nexu
   assert.deepEqual(headline({ available: false }), []);
 });
 
-test("TK-D the line above the table comes from one function over the record's delay_hours (its wording for 0 waits for the owner)", async () => {
-  const { basisOf } = await import("../site/home/track.js");
+test("TK-D the line above the table reads the record's delay_hours: at 0 (or without a record) the proposed live line, never \"0 hours behind\"", async () => {
+  const { basisOf, LIVE_BASIS } = await import("../site/home/track.js");
+  assert.equal(LIVE_BASIS, "Simulated. Updated as each trade closes.");
+  assert.equal(trackModel(record({ delay_hours: 0 })).basis, LIVE_BASIS);
+  for (const b of [null, {}, { delay_hours: 0 }, { delay_hours: "24" }, { delay_hours: -1 }]) assert.equal(basisOf(b), LIVE_BASIS, JSON.stringify(b));
   assert.equal(basisOf({ delay_hours: 24 }), "Simulated. Updated daily, a day behind.");
   assert.equal(basisOf({ delay_hours: 6 }), "Simulated. Updated daily, 6 hours behind.");
-  assert.equal(basisOf(null), "Simulated. Updated daily, a day behind.", "without a record: the words the page always showed");
-  assert.equal(trackModel(record({ delay_hours: 6 })).basis, basisOf({ delay_hours: 6 }));
   assert.equal(publicTrackRecord(record({ delay_hours: 0 })).delay_hours, 0, "the route passes a zero delay on");
   const page = read("site/performance/performance.js");
   assert.match(page, /basisOf\(null\)/);
   assert.doesNotMatch(page, /a day behind|24 hours/, "the page's own script names no delay; basisOf does");
+  assert.deepEqual(checkContentDraft({ text: LIVE_BASIS }).failures.filter((f) => !["capacity", "disclaimer"].includes(f.check)), [], "the new line through the guardian");
 });
 
 test("TK-L the pages read again every minute while shown, once when shown again, never two at once; a failed read keeps the last good numbers", async () => {

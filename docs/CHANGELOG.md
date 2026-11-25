@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 (the Performance line at a delay of 0; pending the owner)
+- feat(performance): the line above the table at a delay of 0, or without a record. Proposed to the owner, not yet answered.
+  - Before: "Simulated. Updated daily, a day behind." (at 0 it would have read "Simulated. Updated daily, 0 hours behind.") After: "Simulated. Updated as each trade closes."
+  - A delay still set keeps the old words. Only `basisOf` in `site/home/track.js` changes. Test TK-D.
+
 ## 2026-11-25 (the pages' recap sentences without a delay)
 - fix(public): the sentences about recaps no longer name a 24-hour delay. Owner, 25 Nov: "Everything realtime", confirmed through the orchestrator for all public recaps.
   - Home, "It is posted on Threads". Before: "What the system did with a meeting is shared only as a recap, a day later." After: "What the system did with a meeting is shared only as a recap."
