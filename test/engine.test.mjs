@@ -229,3 +229,31 @@ test("UTC clock times read in 12-hour form (owner 2026-11-17: AM/PM)", async () 
   const { clock12 } = await import("../src/drafts.mjs");
   assert.deepEqual(["2026-11-17T00:05:00Z", "2026-11-17T06:09:00Z", "2026-11-17T12:00:00Z", "2026-11-17T17:27:00Z", "bad"].map(clock12), ["12:05 AM", "6:09 AM", "12:00 PM", "5:27 PM", "?"]);
 });
+
+test("RT1 posts without a delay (owner 2026-11-25: \"Posts juga realtime\"): PUBLIC_DELAY_HOURS 0 lets a fresh decision through too_recent; every other check stays", async () => {
+  const { checkContentDraft } = await import("../src/guardian.mjs");
+  const { delayOf } = await import("../src/app.mjs");
+  const now = Date.parse("2026-11-25T12:00:00Z");
+  const fresh = ["2026-11-25T11:59:00Z"]; // a decision closed a minute ago
+  const ok = "Education · XAUUSD recap\n\nThe room read the 15-minute chart as bearish.\n\nNot financial advice.";
+  const fails = (o) => checkContentDraft({ text: ok, now, decisionTimes: fresh, ...o }).failures.map((f) => f.check);
+  assert.deepEqual(fails({ delayHours: 0 }), [], "delay 0: a decision a minute old passes");
+  assert.deepEqual(fails({ delayHours: 24 }), ["too_recent"], "24 restores the old hold");
+  for (const bad of [undefined, null, "", "x", -1, NaN]) assert.deepEqual(fails({ delayHours: bad }), ["too_recent"], `invalid ${String(bad)}: 24`);
+  assert.deepEqual(fails({ delayHours: 0, decisionTimes: ["2026-11-25T12:30:00Z"] }), ["too_recent"], "a decision from the future still fails");
+  assert.deepEqual(fails({ delayHours: 0, decisionTimes: ["not a time"] }), ["too_recent"], "an unreadable time still fails");
+  // With no delay, the price, signal-word, instruction and account checks still fail as before.
+  const at0 = (text) => checkContentDraft({ text: `Education · ${text}\n\nNot financial advice.`, now, decisionTimes: fresh, delayHours: 0 }).failures.map((f) => f.check);
+  assert.ok(at0("Gold closed near 4021.5 today.").includes("price_level"));
+  assert.ok(at0("Entry at the zone, SL below it.").includes("signal_words"));
+  assert.ok(at0("BUY gold now.").includes("signal_words"));
+  assert.ok(at0("Buy now before it runs.").includes("instruction"));
+  assert.ok(at0("Our account balance grew.").includes("account_data"));
+  // The var: "0" is 0, "24" is 24, unset, empty or invalid is 24.
+  assert.equal(delayOf({ PUBLIC_DELAY_HOURS: "0" }), 0);
+  assert.equal(delayOf({ PUBLIC_DELAY_HOURS: "24" }), 24);
+  for (const v of [undefined, null, "", " ", "x", "-1"]) assert.equal(delayOf({ PUBLIC_DELAY_HOURS: v }), 24, `"${v}"`);
+  assert.equal(delayOf(undefined), 24);
+  const cfg = JSON.parse((await import("node:fs")).readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8").replace(/^\s*\/\/.*$/gm, ""));
+  assert.equal(cfg.vars.PUBLIC_DELAY_HOURS, "0", "the deployed var: no delay");
+});

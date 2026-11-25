@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-11-25 (posts without a delay)
+- feat(guardian): a decision may be posted as a recap without the 24-hour hold. Owner, 25 Nov, through the orchestrator: "Posts juga realtime".
+  - `PUBLIC_DELAY_HOURS` is "0" in `wrangler.jsonc`. "24" restores the old hold; unset, empty or invalid is 24.
+  - `delayOf` accepts 0 (it was at least 1). The guardian's `too_recent` accepts 0 too: then only a future or unreadable decision time fails.
+  - Every other check is unchanged: price level, signal words (entry, SL, TP, BUY, SELL as a signal), instruction, account data, promised return, internal names, secrets, attribution.
+  - The daily recap still covers the trading day that ended 24 hours before its run.
+  - The comment on the track record's route in `handle()` now says it is cached a minute.
+- Test RT1.
+
+## 2026-11-25 (the Performance line at a delay of 0)
+- feat(performance): the line above the table at a delay of 0, or without a record. Owner, 25 Nov, through the orchestrator: "Setuju semua" (this sentence and the three in the entry below).
+  - Before: "Simulated. Updated daily, a day behind." (at 0 it would have read "Simulated. Updated daily, 0 hours behind.") After: "Simulated. Updated as each trade closes."
+  - A delay still set keeps the old words. Only `basisOf` in `site/home/track.js` changes. Test TK-D.
+
+## 2026-11-25 (the pages' recap sentences without a delay)
+- fix(public): the sentences about recaps no longer name a 24-hour delay. Owner, 25 Nov: "Everything realtime", confirmed through the orchestrator for all public recaps.
+  - Home, "It is posted on Threads". Before: "What the system did with a meeting is shared only as a recap, a day later." After: "What the system did with a meeting is shared only as a recap."
+  - About, Daily recap. Before: "What the system decided yesterday and how it played out, published after 24 hours so it can never be used as a live signal." After: "What the system decided yesterday and how it played out, published as a recap, never as a live signal."
+  - Disclaimer. Before: "Decisions appear only as recaps, 24 hours later." After: "Decisions appear only as recaps."
+  - `test/fixtures/legal-words.json` holds the new words. The posts' guardian delay (`PUBLIC_DELAY_HOURS`, 24) is unchanged.
+
+## 2026-11-25 (the public pages read again every minute; the track record a minute at the edge)
+- feat(public): the track record is as live as Nexus's. Owner, 25 Nov: "harus realtime"; then "Everything realtime".
+  - `TRACK_TTL_S` 600 to 60: the edge and the browser keep `/api/public/track-record` a minute. An empty record is still not cached. The War Room scene was already 60; the profile and the archive are not cached.
+  - `site/home/live.js`: every minute while the tab is shown, and once when it is shown again, the pages read again. Never two reads at once; a failed or empty read keeps what is on screen. The average strip on every page, the Performance table, the home's latest post and the Archive's list.
+  - No public text changes here. The Performance line above the table now comes from one function, `basisOf`, with the same words; the words for a delay of 0 wait for the owner.
+- Tests TK4, TK-D, TK-L and TH9; `test/fixtures/track-heights.json` measured again (the heights unchanged).
 ## 2026-11-25 (the analysis run's log; the Forge deploy held)
 - feat(log): every hourly analysis run now logs `cta_analysis_drafts`, even when it adds nothing.
   - Each line has, per chart (H1, H4, D1), the latest close and the zone count, then the drafts added, then `dropped`: each draft the channel settings left out, with the reason (`channel_off`, `kind_off`, or `max_per_day` with the cap).

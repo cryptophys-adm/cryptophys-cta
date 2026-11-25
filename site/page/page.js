@@ -5,10 +5,12 @@
 import { startClock } from '../home/header.js';
 import { renderAvgStrip } from '../home/avg-strip.js';
 import { TRACK_URL } from '../home/track.js';
+import { liveTrack } from '../home/live.js';
 import { applyProfile, PROFILE_URL } from './profile.js';
 
 startClock();
 
 const json = (url) => fetch(url, { headers: { accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
 json(PROFILE_URL).then((p) => applyProfile(p));
-json(TRACK_URL).then((body) => renderAvgStrip(body));
+// The strip is read again every minute while the tab is shown (../home/live.js); a failed read keeps its numbers.
+json(TRACK_URL).then((body) => { renderAvgStrip(body); liveTrack(renderAvgStrip, { first: body }); });

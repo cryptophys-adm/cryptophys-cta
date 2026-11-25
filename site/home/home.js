@@ -8,6 +8,7 @@ import { startClock } from './header.js';
 import { initPanels } from './panels.js';
 import { TRACK_URL } from './track.js';
 import { renderAvgStrip } from './avg-strip.js';
+import { liveTrack, everyMinute, readAgain } from './live.js';
 import { tvQuoteSrc, quoteTop } from './gold.js';
 import { lowEnd, mannequinUrl } from '../room/quality.js';
 
@@ -142,16 +143,23 @@ startFeed();
 const json = (u) => fetch(u).then((r) => r.json()).catch(() => ({}));
 
 /* ---------- the header's average strip (owner 2026-11-20: in the header, Nexus colours) ---------- */
-json(TRACK_URL).then((body) => renderAvgStrip(body));
-Promise.all([json('/api/public/profile'), json('/api/public/archive?limit=30')]).then(([p, a]) => {
-  const threads = (p?.links ?? []).find((l) => l.channel === 'threads')?.url;
-  if (threads && /^https:\/\/www\.threads\.(net|com)\//.test(threads)) document.querySelectorAll('[data-threads]').forEach((el) => { el.href = threads; });
-  if (p?.brand?.disclaimer && $('disclaimer-text')) $('disclaimer-text').textContent = p.brand.disclaimer;
+// Read again every minute while the tab is shown (owner 2026-11-25: "Everything realtime"; ./live.js): the strip and
+// the latest post; a failed or empty read keeps what is on screen.
+json(TRACK_URL).then((body) => { renderAvgStrip(body); liveTrack(renderAvgStrip, { first: body }); });
+const LATEST_URL = '/api/public/archive?limit=30';
+const showLatest = (a) => {
   const post = latestPost(a?.posts, 'threads');
   if (!post) return;
   $('latest-headline').textContent = post.headline || 'The latest post';
   $('latest-time').textContent = `Posted ${whenOf(post.at)}`;
   $('latest').hidden = false;
+};
+Promise.all([json('/api/public/profile'), json(LATEST_URL)]).then(([p, a]) => {
+  const threads = (p?.links ?? []).find((l) => l.channel === 'threads')?.url;
+  if (threads && /^https:\/\/www\.threads\.(net|com)\//.test(threads)) document.querySelectorAll('[data-threads]').forEach((el) => { el.href = threads; });
+  if (p?.brand?.disclaimer && $('disclaimer-text')) $('disclaimer-text').textContent = p.brand.disclaimer;
+  showLatest(a);
+  everyMinute(async () => showLatest(await readAgain(LATEST_URL)));
 });
 
 /* ---------- after the page's load event: the scene and the TradingView quote, never before first paint ---------- */

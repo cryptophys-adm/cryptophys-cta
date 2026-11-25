@@ -47,7 +47,9 @@
     // Instagram Business or Creator account connected in the studio; until then an approved post waits ("account not connected").
     "PUBLISH_CHANNELS": "telegram,threads,instagram,tiktok,youtube",
     "CONTENT_CHANNELS": "threads,instagram,x,telegram,youtube,tiktok",
-    "PUBLIC_DELAY_HOURS": "24",
+    // The guardian's public delay for decisions in a post, in hours. Owner 2026-11-25 ("Posts juga realtime"): 0, a
+    // decision may be posted as a recap at once; "24" restores the old 24-hour hold. Unset or invalid: 24.
+    "PUBLIC_DELAY_HOURS": "0",
     "ACCESS_TEAM_DOMAIN": "cryptophys.cloudflareaccess.com",
     // The audience tag of the platform's Access application (the one that covers nexus., ai. and the studio paths
     // here); read from its login redirect (kid). Not a secret. A plain var, so the deploy needs no Access read right.

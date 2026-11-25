@@ -67,7 +67,7 @@ test("TK3 no record yet: the page says the numbers are not available, the home b
   assert.match(read("public/index.html"), /id="avg-strip"[^>]*hidden/, "hidden until there are numbers");
 });
 
-test("TK4 GET /api/public/track-record: the documented fields from PROJECTION.trackRecord, R only, cached 10 minutes at the edge", async () => {
+test("TK4 GET /api/public/track-record: the documented fields from PROJECTION.trackRecord, R only, cached a minute at the edge", async () => {
   const store = new Map();
   const cache = { match: async (k) => store.get(k.url)?.clone() ?? null, put: async (k, r) => { store.set(k.url, r); } };
   let calls = 0;
@@ -76,7 +76,7 @@ test("TK4 GET /api/public/track-record: the documented fields from PROJECTION.tr
   const r = await handle(req(), env, { cache });
   assert.equal(r.status, 200);
   assert.equal(r.headers.get("cache-control"), `public, max-age=${TRACK_TTL_S}`);
-  assert.equal(TRACK_TTL_S, 600);
+  assert.equal(TRACK_TTL_S, 60, "owner 2026-11-25: \"harus realtime\", a minute at the edge and in the browser");
   const body = await r.json();
   assert.equal(body.available, true);
   assert.equal(body.unit, "R");
@@ -84,7 +84,7 @@ test("TK4 GET /api/public/track-record: the documented fields from PROJECTION.tr
   assert.deepEqual(Object.keys(body.scenarios[0]).sort(), ["avg_loss_r", "avg_win_r", "count", "even", "expectancy_r", "id", "label", "lost", "net_r", "profit_factor", "shown", "since", "win_rate", "won"]);
   assert.doesNotMatch(JSON.stringify(body), /omega|trade_plan|price|extra/i, "nothing beyond the documented aggregates; never the internal name");
   assert.equal(body.scenarios[2].label, null);
-  // A second visitor is answered from the edge cache, with the browser's 10 minutes set again.
+  // A second visitor is answered from the edge cache, with the browser's minute set again.
   const [k] = store.keys(); const h = new Headers(store.get(k).headers); h.set("cache-control", "public, max-age=14400");
   store.set(k, new Response(await store.get(k).clone().text(), { status: 200, headers: h }));
   const again = await handle(req(), env, { cache });
@@ -177,4 +177,67 @@ test("TK-H the header's four codes: the mean over the scenarios shown, with Nexu
     { id: "managed", shown: false, note: "x" }] };
   assert.deepEqual(headline(body).map((h) => [h.code, h.value, h.tone]), [["WR", "34%", "wait"], ["EXP", "+0.27R", "pos"], ["NETR", "+17.2R", "pos"], ["PF", "2.09", "pf"]]);
   assert.deepEqual(headline({ available: false }), []);
+});
+
+test("TK-D the line above the table reads the record's delay_hours: at 0 (or without a record) the proposed live line, never \"0 hours behind\"", async () => {
+  const { basisOf, LIVE_BASIS } = await import("../site/home/track.js");
+  assert.equal(LIVE_BASIS, "Simulated. Updated as each trade closes.");
+  assert.equal(trackModel(record({ delay_hours: 0 })).basis, LIVE_BASIS);
+  for (const b of [null, {}, { delay_hours: 0 }, { delay_hours: "24" }, { delay_hours: -1 }]) assert.equal(basisOf(b), LIVE_BASIS, JSON.stringify(b));
+  assert.equal(basisOf({ delay_hours: 24 }), "Simulated. Updated daily, a day behind.");
+  assert.equal(basisOf({ delay_hours: 6 }), "Simulated. Updated daily, 6 hours behind.");
+  assert.equal(publicTrackRecord(record({ delay_hours: 0 })).delay_hours, 0, "the route passes a zero delay on");
+  const page = read("site/performance/performance.js");
+  assert.match(page, /basisOf\(null\)/);
+  assert.doesNotMatch(page, /a day behind|24 hours/, "the page's own script names no delay; basisOf does");
+  assert.deepEqual(checkContentDraft({ text: LIVE_BASIS }).failures.filter((f) => !["capacity", "disclaimer"].includes(f.check)), [], "the new line through the guardian");
+});
+
+test("TK-L the pages read again every minute while shown, once when shown again, never two at once; a failed read keeps the last good numbers", async () => {
+  const { everyMinute, liveTrack, readAgain, LIVE_MS } = await import("../site/home/live.js");
+  assert.equal(LIVE_MS, 60000);
+  const fake = () => {
+    const doc = { visibilityState: "visible", on: [], addEventListener(t, f) { if (t === "visibilitychange") this.on.push(f); } };
+    const win = { ticks: [], setInterval(f, ms) { this.ticks.push([f, ms]); } };
+    const show = async (state) => { doc.visibilityState = state; for (const f of doc.on) await f(); };
+    return { doc, win, show, tick: () => win.ticks[0][0]() };
+  };
+  // The schedule: a minute, visible tabs only, once on being shown, no overlap, a throw swallowed.
+  {
+    const f = fake();
+    let calls = 0, release;
+    everyMinute(() => { calls++; return new Promise((r) => { release = r; }); }, { doc: f.doc, win: f.win });
+    assert.equal(f.win.ticks[0][1], 60000);
+    const a = f.tick(); const b = f.tick();
+    assert.equal(calls, 1, "a read never starts while the one before it runs");
+    release(); await a; await b;
+    f.doc.visibilityState = "hidden"; await f.tick();
+    assert.equal(calls, 1, "a hidden tab reads nothing");
+    await f.show("hidden"); assert.equal(calls, 1);
+    const shown = f.show("visible"); assert.equal(calls, 2, "once when the tab is shown again"); release(); await shown;
+    const g = fake(); everyMinute(() => { throw new Error("down"); }, { doc: g.doc, win: g.win }); await g.tick();
+  }
+  // The record: drawn only when it has numbers and changed; a failed, empty or thrown read draws nothing.
+  {
+    const f = fake();
+    const answers = [record(), { ok: false }, { available: false, unit: "R", scenarios: [] }, "throw", record({ count: 73 }), record({ count: 73 })];
+    const asked = [];
+    const fetchImpl = async (url, init) => {
+      asked.push([url, init.cache]);
+      const a = answers.shift();
+      if (a === "throw") throw new Error("offline");
+      if (a.ok === false) return { ok: false, json: async () => ({}) };
+      return { ok: true, json: async () => JSON.parse(JSON.stringify(a)) };
+    };
+    const drawn = [];
+    liveTrack((b) => drawn.push(b.count), { first: record(), fetchImpl, doc: f.doc, win: f.win });
+    for (let i = 0; i < 6; i++) await f.tick();
+    assert.deepEqual(drawn, [73], "the same record, a 502, an empty record and a failure keep the page as it is; a new record redraws it once");
+    assert.deepEqual(asked[0], ["/api/public/track-record", "no-store"], "past the browser's copy; the edge keeps it a minute");
+    assert.equal(await readAgain("/x", async () => { throw new Error("offline"); }), null);
+  }
+  // Every page with the strip, the Performance table, the home's latest post and the Archive read again.
+  for (const f of ["site/performance/performance.js", "site/home/home.js", "site/archive/archive.js", "site/page/page.js"]) assert.match(read(f), /liveTrack\(/, f);
+  for (const f of ["site/home/home.js", "site/archive/archive.js"]) assert.match(read(f), /everyMinute\(/, f);
+  assert.match(read("site/room/feed.js"), /POLL_MS = 60000/, "the rooms' feed already reads every minute");
 });
