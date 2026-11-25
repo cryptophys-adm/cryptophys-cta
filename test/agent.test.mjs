@@ -6,11 +6,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { SLOP } from "../src/agent/slop.mjs";
 import { cleanInvisible, humanScore, jsRegex, HUMAN_CHECKS } from "../src/agent/humanizer.mjs";
-import { lintThreads, threadsText, threadsLength, validTopicTag, THREADS_TOPIC_TAG, THREADS_LIMIT } from "../src/agent/threads-lint.mjs";
+import { lintThreads, threadsText, threadsLength, validTopicTag, THREADS_TOPIC_TAG, THREADS_LIMIT } from "../src/agent/lint.mjs";
 import { agentChecks, AGENT_SKILLS } from "../src/agent/checks.mjs";
-import { auditThreads, planThreads, bestHours, wibWeekStart, MIN_FINDING } from "../src/agent/audit.mjs";
+import { auditChannel, planChannel, bestHours, wibWeekStart, MIN_FINDING } from "../src/agent/audit.mjs";
+import { rulesOf, agentChannels, AGENT_CHANNELS, TOPIC_TAGS } from "../src/agent/rules.mjs";
+import { lintPost, textFor } from "../src/agent/lint.mjs";
+import { CHANNELS } from "../src/channels.mjs";
 import { askModel, modelConfig, costOf, wibDayStartIso, MODEL_DEFAULTS, AGENT_SECRETS } from "../src/agent/router.mjs";
-import { weeklySummary, summaryOk, SUMMARY_KEY } from "../src/agent/weekly.mjs";
+import { weeklySummary, summaryOk, summaryKey } from "../src/agent/weekly.mjs";
 import { publishThreads } from "../src/publishers.mjs";
 import { HASHTAGS } from "../src/channels.mjs";
 import { keyLevelsText } from "../src/analysis-drafts.mjs";
@@ -24,7 +27,7 @@ test("AG1 the humanizer: the lexicon as taken (MIT, credited), every pattern com
   for (const s of SLOP.structures) assert.ok(jsRegex(s.regex) instanceof RegExp, s.id);
   assert.match(jsRegex("[\\U0001F680\\U0001F525]").source, /\\u\{1F680\}/, "Python's \\U escapes become \\u{...}");
   assert.match(read("src/agent/LICENSE-instagram-agent-skill"), /MIT License[\s\S]*Copyright \(c\) 2026 Jake Schincariol/);
-  for (const f of ["src/agent/slop.mjs", "src/agent/humanizer.mjs", "src/agent/threads-lint.mjs"]) assert.match(read(f), /LICENSE-instagram-agent-skill/, `${f} credits the source`);
+  for (const f of ["src/agent/slop.mjs", "src/agent/humanizer.mjs", "src/agent/lint.mjs"]) assert.match(read(f), /LICENSE-instagram-agent-skill/, `${f} credits the source`);
   assert.deepEqual(cleanInvisible("gold​ held its⁠ range﻿"), { text: "gold held its range", removed: 4 });
   assert.deepEqual(cleanInvisible(POST), { text: POST, removed: 0 }, "a template post is untouched");
   const bad = humanScore("Stop scrolling! In today's video I'm going to show you how to delve into gold — it's not just a metal, it's a robust, seamless and crucial asset.​ #viral #fyp #gold #a #b #c");
@@ -99,7 +102,7 @@ test("AG4 the Agent page: Threads drafts only, read only, each with its Threads 
   assert.match(html, /<a href="#agent" data-view="agent">/);
   assert.match(html, /id="view-agent"/);
   assert.match(js, /"performance", "agent", "channels"\]/);
-  assert.match(js, /call\("\/api\/studio\/agent"\)/);
+  assert.match(js, /call\(`\/api\/studio\/agent\?channel=\$\{encodeURIComponent\(agentChannel\)\}`\)/);
   assert.match(app, /route === "GET \/api\/studio\/agent"/, "a GET: it changes nothing");
   assert.doesNotMatch(js, /innerHTML/, "text goes in as text");
 });
@@ -118,7 +121,7 @@ test("AG5 Audit and Plan: the last full WIB week against our own median, finding
     // this week, not audited yet; and another channel
     post("now", "warroom", "2026-11-24T12:30:00Z", 99999), { ...post("tg", "warroom", "2026-11-18T12:30:00Z", 50000), channel: "telegram" }
   ];
-  const a = auditThreads(posts, { now: NOW });
+  const a = auditChannel(posts, { now: NOW });
   assert.deepEqual([a.week.from, a.week.to], ["2026-11-15T17:00:00.000Z", "2026-11-22T17:00:00.000Z"]);
   assert.equal(a.median_views, 1000, "the median of the 28 days before the week ended, Threads only");
   assert.deepEqual(a.posts.map((p) => p.id), ["w3", "w1", "w2", "k3", "k1", "k2", "r1"], "by multiple; this week's and Telegram's left out");
@@ -126,14 +129,15 @@ test("AG5 Audit and Plan: the last full WIB week against our own median, finding
   assert.deepEqual(a.kinds.map((k) => [k.kind, k.posts, k.median_multiple]), [["warroom", 3, 4], ["key_levels", 3, 1], ["daily_recap", 1, 0.3]]);
   assert.equal(MIN_FINDING, 3);
   assert.deepEqual(a.findings, ["War Room: 4× the median over 3 posts, 11 replies and 0 reposts.", "Key-level map: 1× the median over 3 posts.", "Daily recap: 1 post, too few to call.", "7 posts this week, 15 replies in all."]);
-  assert.deepEqual(auditThreads([], { now: NOW }).findings, ["No measured Threads post yet: the audit starts once the daily metrics have read some."]);
+  assert.deepEqual(auditChannel([], { now: NOW }).findings, ["No measured post on this channel yet: the audit starts once the daily metrics have read some."]);
+  assert.deepEqual(auditChannel(posts, { channel: "telegram", now: NOW }).posts.map((p) => p.id), ["tg"], "the same audit for another channel");
   assert.deepEqual(bestHours(posts, { now: NOW }).map((h) => [h.time, h.posts]), [["19:00", 4], ["08:00", 9]], "WIB hours with 2 or more posts in the last 28 days, by median views");
-  const p = planThreads(a, posts, { now: NOW, schedule: [{ days: ["mon"], time: "08:00" }] });
+  const p = planChannel(a, posts, { now: NOW, schedule: [{ days: ["mon"], time: "08:00" }] });
   assert.deepEqual(p.mix.map((m) => [m.kind, m.advice]), [["warroom", "post more"], ["key_levels", "keep"], ["daily_recap", "keep"]]);
   assert.deepEqual(p.slots.map((s) => [s.time, s.days.length]), [["19:00", 7]], "08:00 is already a slot");
-  assert.match(planThreads(auditThreads([], { now: NOW }), [], { now: NOW }).note, /No hour has 2 measured posts/);
+  assert.match(planChannel(auditChannel([], { now: NOW }), [], { now: NOW }).note, /No hour has 2 measured posts/);
   const js = read("public/studio/studio.js");
-  assert.match(js, /call\("\/api\/studio\/settings", "POST", \{ channel: "threads", settings: \{ \.\.\.cur, schedule \} \}\)/, "a slot is added through the settings route (approver, same origin)");
+  assert.match(js, /call\("\/api\/studio\/settings", "POST", \{ channel, settings: \{ \.\.\.cur, schedule \} \}\)/, "a slot is added to the shown channel through the settings route (approver, same origin)");
 });
 
 test("AG6 the model router: the key, the switch, the daily cap, Reflection's refusals, retention, and a log without text", async () => {
@@ -186,12 +190,35 @@ test("AG7 the weekly summary: once a week, only the audit's facts, no added numb
   const fetcher = async () => new Response(JSON.stringify({ choices: [{ message: { content: "War Room held the median over 3 posts." } }], usage: { prompt_tokens: 10, completion_tokens: 10 } }), { headers: { "reflection-data-retention": "zero" } });
   const env = { REFLECTION_API_KEY: "rk" };
   assert.equal((await weeklySummary(env, store, posts, { now: NOW, fetcher })).status, "written");
-  assert.deepEqual(saved[SUMMARY_KEY], { week: "2026-11-15T17:00:00.000Z", text: "War Room held the median over 3 posts.", model: "beam" });
+  assert.deepEqual(saved[summaryKey("threads")], { week: "2026-11-15T17:00:00.000Z", text: "War Room held the median over 3 posts.", model: "beam" });
   assert.equal((await weeklySummary(env, store, posts, { now: NOW, fetcher: () => { throw new Error("no second call"); } })).status, "done_already");
   const bad = async () => new Response(JSON.stringify({ choices: [{ message: { content: "Sell gold now, 9× better." } }] }), { headers: { "reflection-data-retention": "zero" } });
   const other = { agent_model: { enabled: true } };
   const store2 = { ...store, setting: async (k) => (other[k] ? { value: other[k] } : null), saveSetting: async (i) => { other[i.key] = i.value; } };
   assert.equal((await weeklySummary(env, store2, posts, { now: NOW, fetcher: bad })).status, "summary_refused");
-  assert.equal(other[SUMMARY_KEY], undefined, "nothing kept");
+  assert.equal(other[summaryKey("threads")], undefined, "nothing kept");
   assert.equal((await weeklySummary(env, store2, [], { now: NOW, fetcher: bad })).status, "nothing_to_sum_up");
+});
+
+test("AG8 one agent for every channel (owner 2026-11-25): each channel's own rules, phase 1 manages Threads only", () => {
+  assert.deepEqual(AGENT_CHANNELS, ["threads"], "phase 1: Threads; a channel joins in its own owner PR");
+  assert.deepEqual(agentChannels().map((c) => [c.id, c.active]), CHANNELS.map((c) => [c, c === "threads"]));
+  for (const c of CHANNELS) assert.ok(rulesOf(c)?.limit > 0, `${c} has rules`);
+  assert.equal(rulesOf("nope"), null);
+  assert.deepEqual(TOPIC_TAGS, { threads: "XAUUSD" });
+  assert.deepEqual([rulesOf("threads").limit, rulesOf("instagram").limit, rulesOf("x").limit, rulesOf("telegram").limit], [500, 2200, 280, 4096], "from src/channels.mjs");
+  const st = (c, t, check) => lintPost(c, t).checks.find((k) => k.check === check)?.status;
+  assert.equal(st("instagram", "Education\n#a #b #c #d #e #f", "HASHTAGS"), "FAIL", "Instagram's cap of 5");
+  assert.equal(st("instagram", "Education\n#a #b #c #d #e", "HASHTAGS"), "PASS");
+  assert.equal(st("instagram", "x".repeat(130), "FIRST LINE"), "WARN", "Instagram's feed cuts the first line at 125");
+  assert.equal(st("instagram", "Education https://cta.cryptophys.work/archive", "LINKS"), "WARN", "an Instagram caption shows links as text");
+  assert.equal(st("x", "x".repeat(281), "LENGTH"), "FAIL");
+  assert.equal(st("telegram", "Education\n#XAUUSD #gold", "HASHTAGS"), "PASS");
+  assert.equal(st("threads", "Education\n#XAUUSD", "TOPIC TAG"), "WARN");
+  assert.equal(lintPost("telegram", "x").topic_tag, undefined, "only Threads takes a topic tag");
+  assert.equal(textFor("telegram", "a\n#XAUUSD #gold"), "a\n#XAUUSD #gold", "the other channels' text as drafted");
+  assert.equal(textFor("threads", "a\n#XAUUSD #gold"), "a");
+  const c = agentChecks([{ id: "t", channel: "telegram", kind: "custom", status: "pending", text: "Education\n#XAUUSD #gold" }], { channel: "telegram" });
+  assert.deepEqual([c.channel, c.topic_tag, c.checks.length, c.checks[0].lint.verdict], ["telegram", null, 1, "READY"]);
+  assert.match(read("public/studio/studio.js"), /inactive\.appendChild\(make\("p", null, `The agent does not manage/);
 });

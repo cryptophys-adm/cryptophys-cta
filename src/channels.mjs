@@ -14,7 +14,7 @@ export const CHANNELS = Object.freeze(Object.keys(CHANNEL_SPECS));
 export const TEXT_LIMITS = Object.freeze(Object.fromEntries(Object.entries(CHANNEL_SPECS).map(([k, v]) => [k, v.text_limit])));
 export const HASHTAGS = Object.freeze({
   // Threads: no in-text hashtag; each post carries one topic tag through the API instead (owner 2026-11-25, the CTA
-  // agent's Checks: "setuju semua"; THREADS_TOPIC_TAG in src/agent/threads-lint.mjs).
+  // agent's Checks: "setuju semua"; THREADS_TOPIC_TAG in src/agent/lint.mjs).
   threads: "",
   instagram: "#XAUUSD #gold #goldprice #technicalanalysis #education",
   x: "#XAUUSD #gold",

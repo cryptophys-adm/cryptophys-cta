@@ -1133,14 +1133,36 @@
       $(`agent-${b.dataset.tab}`).hidden = !on;
     }
   }
+  let agentChannel = "threads";
+  function renderAgentChannels(a) {
+    const box = $("agentchannels"); box.textContent = "";
+    for (const c of a.channels ?? []) {
+      const on = c.id === a.channel;
+      const b = make("button", `tab${on ? " on" : ""}`); b.type = "button";
+      b.setAttribute("role", "tab"); b.setAttribute("aria-selected", String(on)); b.tabIndex = on ? 0 : -1;
+      b.append(c.name, c.active ? "" : " ", c.active ? "" : badge("", "Next"));
+      b.addEventListener("click", () => { agentChannel = c.id; loadAgent(); });
+      box.appendChild(b);
+    }
+  }
   async function loadAgent() {
     try {
-      const a = await call("/api/studio/agent");
+      const a = await call(`/api/studio/agent?channel=${encodeURIComponent(agentChannel)}`);
+      renderAgentChannels(a);
+      const inactive = $("agentinactive");
+      inactive.hidden = a.active;
+      $("agentbody").hidden = !a.active;
+      if (!a.active) {
+        inactive.textContent = "";
+        inactive.appendChild(make("p", null, `The agent does not manage ${(a.channels ?? []).find((c) => c.id === a.channel)?.name ?? a.channel} yet. Phase 1 is Threads; each channel joins in its own change.`));
+        return;
+      }
+      agentTab([...$("agenttabs").querySelectorAll("[role=tab]")].find((b) => b.classList.contains("on"))?.dataset.tab ?? "overview");
       const t = $("agenttiles"); t.textContent = "";
-      t.appendChild(tile("Threads drafts checked", String(a.summary.checked), "the latest 30"));
+      t.appendChild(tile("Drafts checked", String(a.summary.checked), "the latest 30 on this channel"));
       t.appendChild(tile("Ready", String(a.summary.ready), `${a.summary.review} to review · ${a.summary.fix} to fix`));
       t.appendChild(tile("Humanizer pass", String(a.summary.human_pass), "five checks; information only"));
-      t.appendChild(tile("Topic tag", a.topic_tag, "one per post, set through the API"));
+      if (a.topic_tag) t.appendChild(tile("Topic tag", a.topic_tag, "one per post, set through the API"));
       renderModel(a.model, a.can_edit);
       const sk = $("agentskills"); sk.textContent = "";
       // A list, not a table: it fits a phone (each skill, its state, then what it does, when and with which model).
@@ -1154,7 +1176,7 @@
       }
       sk.appendChild(list);
       const box = $("agentchecks"); box.textContent = "";
-      if (!a.checks.length) { box.appendChild(make("div", "empty", "No Threads draft yet.")); return; }
+      if (!a.checks.length) box.appendChild(make("div", "empty", "No draft on this channel yet."));
       for (const c of a.checks) {
         const item = make("div", "draft");
         const top = make("div", "meta");
@@ -1173,7 +1195,7 @@
         box.appendChild(item);
       }
       renderAudit(a.audit);
-      renderPlan(a.plan, a.can_edit);
+      renderPlan(a.plan, a.can_edit, a.channel, (a.channels ?? []).find((c) => c.id === a.channel)?.name ?? a.channel);
     } catch (e) { showErr(e); }
   }
   // The model router (src/agent/router.mjs): today's spend against the cap, the switch, the latest calls.
@@ -1203,20 +1225,17 @@
     box.appendChild(make("div", "meta", `Week ${au.week.from.slice(0, 10)} to ${au.week.to.slice(0, 10)} (WIB, Monday to Sunday) · median ${fmt(au.median_views)} views over the ${au.baseline_days} days before · ${au.measured} measured posts`));
     for (const f of au.findings) box.appendChild(make("p", null, f));
     if (!au.posts.length) return;
-    const table = make("table", "data");
-    const head = make("tr");
-    for (const [h, n] of [["Post"], ["Kind"], ["Views", 1], ["× median", 1], ["Replies", 1], ["Reposts", 1]]) head.appendChild(make("th", n ? "num" : null, h));
-    table.appendChild(make("thead")).appendChild(head);
-    const body = table.appendChild(make("tbody"));
+    // A list, not a table: it fits a phone (each post, its kind, then its numbers against the median).
+    const list = make("div", "list");
     for (const p of au.posts) {
-      const tr = make("tr");
-      tr.append(make("td", null, p.head), make("td", null, KIND[p.kind] ?? p.kind), make("td", "num", fmt(p.views)), make("td", "num", p.multiple == null ? "–" : `${p.multiple}×`), make("td", "num", String(p.replies)), make("td", "num", String(p.reposts)));
-      body.appendChild(tr);
+      const item = make("div", "draft");
+      item.append(make("div", null, p.head), make("div", "meta", `${KIND[p.kind] ?? p.kind} · ${fmt(p.views)} views · ${p.multiple == null ? "–" : `${p.multiple}× the median`} · ${p.replies} replies · ${p.reposts} reposts`));
+      list.appendChild(item);
     }
-    box.appendChild(table);
+    box.appendChild(list);
   }
   // Plan: the mix and the slots; "Add these slots" saves them into Threads' posting schedule (approvers only).
-  function renderPlan(pl, canEdit) {
+  function renderPlan(pl, canEdit, channel, name) {
     const box = $("agentplan"); box.textContent = "";
     if (!pl) return;
     box.appendChild(make("h3", null, "Mix"));
@@ -1226,16 +1245,16 @@
     if (!pl.slots.length) { box.appendChild(make("div", "empty", pl.note || "No new slot to suggest.")); return; }
     for (const s of pl.slots) box.appendChild(make("div", "meta", `${s.time} · ${s.why}`));
     box.appendChild(make("div", "meta warn", "A key-level map or a pattern expires 2 hours after it is made: one still waiting when its slot is more than 2 hours away is not posted."));
-    const b = make("button", "btn primary sm", "Add these slots to Threads"); b.type = "button"; b.disabled = !canEdit;
+    const b = make("button", "btn primary sm", `Add these slots to ${name}`); b.type = "button"; b.disabled = !canEdit;
     if (!canEdit) b.title = "Approvers only";
     b.addEventListener("click", async () => {
       b.disabled = true;
       try {
         const cfg = await call("/api/studio/settings");
-        const cur = cfg.settings.threads;
+        const cur = cfg.settings[channel];
         const have = new Set(cur.schedule.map((s) => `${s.days.join(",")}@${s.time}`));
         const schedule = [...cur.schedule, ...pl.slots.map((s) => ({ days: s.days, time: s.time })).filter((s) => !have.has(`${s.days.join(",")}@${s.time}`))].slice(0, cfg.max_slots ?? 12);
-        await call("/api/studio/settings", "POST", { channel: "threads", settings: { ...cur, schedule } });
+        await call("/api/studio/settings", "POST", { channel, settings: { ...cur, schedule } });
         await loadAgent();
       } catch (e) { showErr(e); b.disabled = false; }
     });

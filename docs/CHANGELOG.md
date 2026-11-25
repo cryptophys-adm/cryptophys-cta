@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-25 (the CTA agent for every channel; phase 1 Threads)
+- refactor(agent): one agent for every channel. Owner, 25 Nov: "Agent jangan dedicated ke thread, harus untuk semua channel jadi menghandle semua channel, hanya fase 1 ini thread dulu nanti dikembangkan berikutnya".
+  - `src/agent/rules.mjs` holds each channel's rules: its limit from `src/channels.mjs`; Threads' topic tag, emoji bytes and 5 links; Instagram's 5 hashtags, 125-character first-line window and links shown as plain text; YouTube's 60 hashtags.
+  - `AGENT_CHANNELS` is `["threads"]`.
+  - `src/agent/threads-lint.mjs` became `src/agent/lint.mjs`, with `lintPost(channel, text)` and `textFor(channel, text)`.
+  - Audit, Plan and the weekly summary take a channel: `auditChannel`, `planChannel`, and summary keys `agent_audit_summary:<channel>`.
+  - `GET /api/studio/agent?channel=` lists every channel with whether the agent manages it; a channel not managed yet returns no data.
+  - The studio's Agent page gets a tab per channel, with "Next" on the others. The audit becomes a list, so it fits a phone.
+  - Behaviour on Threads is unchanged.
+  - Test AG8 and the channel-switch API test.
+
 ## 2026-11-25 (the CTA agent, PR 3: the model router)
 - feat(agent): the CTA agent's model router to Reflection's Beam (owner, 25 Nov: "agent cta pakai router", https://platform.reflection.ai/; "setuju semua").
   - `src/agent/router.mjs`: one OpenAI-compatible endpoint (`MODEL_BASE_URL`, `MODEL_ID`), with the key in the Worker secret `REFLECTION_API_KEY` set through the platform.
@@ -21,7 +32,7 @@
 
 ## 2026-11-25 (the CTA agent, PR 1: Checks)
 - feat(agent): the CTA agent's first skills for Threads, adopted from instagram-agent-skill (MIT, credited). The owner, 25 Nov: "post sementara tetap dari xauusd, yg dideploy sekarang adalah skills seperti instagram agents" and "setuju semua, mulai dari Checks".
-  - Threads linter (`src/agent/threads-lint.mjs`): 500 characters (an emoji counts its UTF-8 bytes), the first line, one topic tag, links, mentions, emoji, invisible characters and the em dash.
+  - Threads linter (`src/agent/lint.mjs`): 500 characters (an emoji counts its UTF-8 bytes), the first line, one topic tag, links, mentions, emoji, invisible characters and the em dash.
   - Humanizer (`src/agent/humanizer.mjs`): a port of detect.py's five checks, plus humanize.py's removal of invisible characters, over the lexicon as published.
   - A read-only Agent page in the studio (`GET /api/studio/agent`, `#agent`): Overview and Checks for the latest 30 Threads drafts.
   - Threads posts carry the topic tag XAUUSD through the API instead of the in-text "#XAUUSD #gold #education". A draft's closing hashtag-only line and any invisible characters are dropped when it goes to Threads; no word changes.

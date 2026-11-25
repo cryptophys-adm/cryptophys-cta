@@ -126,8 +126,11 @@
 
     <section class="view" id="view-agent" aria-labelledby="h-agent" hidden>
       <div class="crumbs">CTA Studio / Agent</div>
-      <div class="pagehead"><div><h1 id="h-agent">Agent · Threads</h1><p>The CTA agent's skills for Threads. Posts still come from the xauusd analysis templates; the agent checks each one before it goes out. Nothing here posts or changes a draft.</p></div></div>
+      <div class="pagehead"><div><h1 id="h-agent">Agent</h1><p>The CTA agent's skills, one agent for every channel; phase 1 manages Threads, and the others join one at a time. Posts still come from the xauusd analysis templates; the agent checks each one before it goes out. Nothing here posts or changes a draft.</p></div></div>
       <div class="card">
+        <div class="tabs chtabs" id="agentchannels" role="tablist" aria-label="Channel"></div>
+        <div class="pad" id="agentinactive" hidden></div>
+        <div id="agentbody">
         <div class="tabs" id="agenttabs" role="tablist" aria-label="Agent">
           <button class="tab on" type="button" role="tab" aria-selected="true" aria-controls="agent-overview" id="agenttab-overview" data-tab="overview">Overview</button>
           <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="agent-checks" id="agenttab-checks" data-tab="checks" tabindex="-1">Checks</button>
@@ -138,6 +141,7 @@
         <div id="agent-checks" role="tabpanel" aria-labelledby="agenttab-checks" hidden><div class="list" id="agentchecks"></div></div>
         <div id="agent-audit" role="tabpanel" aria-labelledby="agenttab-audit" hidden><div class="pad" id="agentaudit"></div></div>
         <div id="agent-plan" role="tabpanel" aria-labelledby="agenttab-plan" hidden><div class="pad" id="agentplan"></div></div>
+        </div>
       </div>
     </section>
 
