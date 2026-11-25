@@ -1,7 +1,10 @@
 # Changelog
 
 ## 2026-11-25 (Beam: CTA's share of the free plan)
-- chore(router): CTA's share of the organisation's free Beam plan is set as the defaults: 4,000,000 input and 400,000 output tokens a day (`MODEL_DAILY_TOKENS_IN`, `MODEL_DAILY_TOKENS_OUT`), and 20 calls a minute (`MODEL_RPM`). The organisation's plan is 10M input, 1M output and 60 calls a minute; the orchestrator set CTA's share on 25 Nov. Tests AG6 and AG18 follow.
+- chore(router): CTA's share of the organisation's free Beam plan is set as the defaults: 1,000,000 input and 200,000 output tokens a day (`MODEL_DAILY_TOKENS_IN`, `MODEL_DAILY_TOKENS_OUT`), and 20 calls a minute (`MODEL_RPM`).
+  - The organisation's plan is 10M input, 1M output and 60 calls a minute. The orchestrator set CTA's share on 25 Nov.
+  - That is about ten times CTA's estimated use (≤50k input and ≤75k output a day). It stops a runaway loop early and leaves the rest for Cerebrum.
+  - Tests AG6 and AG18 follow.
 
 ## 2026-11-25 (Beam free-only guards; publish failures logged; a longer Threads wait)
 - feat(router): Beam is used on the free plan only, with CTA's own limits. Owner, 25 Nov: "tetap siapkan callback jika beam tidak bisa dijangkau atau menjadi berbayar atau lebih dari batasan".
