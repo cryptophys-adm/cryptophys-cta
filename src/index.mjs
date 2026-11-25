@@ -114,7 +114,7 @@ export default {
     // Every 5 minutes: the channels' posting slots (nothing while publishing is off; no Desk call then).
     if (event?.cron === SCHEDULE_CRON) {
       const r = await runSchedule(env, { now: event.scheduledTime || Date.now() }).catch(fail);
-      if (r?.slots?.length || r?.status === "error" || r?.written) console.log("cta_schedule", JSON.stringify(r));
+      if (r?.slots?.length || r?.auto?.length || r?.status === "error" || r?.written) console.log("cta_schedule", JSON.stringify(r));
       // The CTA agent's Replies, every 15 minutes (src/agent/replies.mjs).
       const at = event.scheduledTime || Date.now();
       if (new Date(at).getUTCMinutes() % 15 === 0) {

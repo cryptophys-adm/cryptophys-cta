@@ -1006,7 +1006,7 @@ test("cta-write end to end (rule 4 amended): the switch, a written post auto-app
   // auto-approve counts 15 minutes from the write (05 min), not from the draft (00 min)
   assert.equal((await runSchedule(e, { now: T0 + 16 * 60_000, fetcher })).auto?.find((x) => x.id === "pattern:a:threads"), undefined);
   const later = await runSchedule(e, { now: T0 + 21 * 60_000, fetcher });
-  assert.deepEqual(later.auto.find((x) => x.id === "pattern:a:threads"), { channel: "threads", id: "pattern:a:threads", status: "approved", publish: "published" });
+  assert.deepEqual(later.auto.find((x) => x.id === "pattern:a:threads"), { channel: "threads", id: "pattern:a:threads", kind: "pattern", decided_by: "auto-approve", status: "approved", publish: "published" });
   assert.ok(posted.find((p) => p.text?.includes("The breakout line is at 3570.54.")), "the written text went out");
   const page = await (await handle(req("/api/studio/agent", { token: person }), e, { ...opts, now: (T0 + 22 * 60_000) / 1000 })).json();
   assert.equal(page.write.mode, "on");

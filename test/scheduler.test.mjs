@@ -3,7 +3,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { slotMs, slotsBetween, dueSlots, nextSlots, MISSED_AFTER_MS, SCHEDULE_CRON } from "../src/scheduler.mjs";
-import { claimSlot, slotOutcome, recentSlots, addDrafts, decideDraft, nextApproved, approvedCounts } from "../src/desk.mjs";
+import { readFileSync } from "node:fs";
+import { claimSlot, slotOutcome, recentSlots, addDrafts, decideDraft, nextApproved, approvedCounts, supersedeMaps, getDraft, draftEvents, recordPublish } from "../src/desk.mjs";
 
 const S = [{ days: ["mon", "tue", "wed", "thu", "fri"], time: "19:00" }, { days: ["sat"], time: "06:30" }];
 const MON = Date.parse("2026-11-16T12:00:00Z"); // Monday 19:00 WIB
@@ -36,4 +37,29 @@ test("the desk: a slot is claimed once; the oldest approved draft is next; outco
   assert.equal(nextApproved(sql, "threads").id, "b", "approved first, posted first");
   assert.equal(nextApproved(sql, "x"), null);
   assert.deepEqual(approvedCounts(sql), { threads: 2 });
+});
+
+test("newest wins (orchestrator, 2026-11-25): a slot sends the newest approved map of each chart; older ones of the same chart are superseded, other kinds keep their order", () => {
+  const db = new DatabaseSync(":memory:");
+  const sql = { exec(q, ...b) { const s = db.prepare(q); const out = /^\s*SELECT/i.test(q) ? s.all(...b) : (s.run(...b), []); return { toArray: () => out.map((r) => ({ ...r })) }; } };
+  const T = Date.parse("2026-11-25T10:00:00Z");
+  const text = "Education · XAUUSD key-level map\nx\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.";
+  const map = (id) => ({ id, channel: "threads", kind: "key_levels", text, status: "pending" });
+  addDrafts(sql, [map("levels:H1:20261125T080000Z:threads"), map("levels:H1:20261125T090000Z:threads"), map("levels:H4+H1:20261125T080000Z:threads"),
+    { id: "daily:2026-11-24:threads", channel: "threads", kind: "daily_recap", text: "Education only. Not financial advice.", status: "pending" }], { now: T - 3_000_000 });
+  for (const [id, at] of [["daily:2026-11-24:threads", T - 2_900_000], ["levels:H1:20261125T080000Z:threads", T - 2_800_000], ["levels:H4+H1:20261125T080000Z:threads", T - 2_700_000], ["levels:H1:20261125T090000Z:threads", T - 2_600_000]])
+    decideDraft(sql, { id, decision: "approve", actor: "auto-approve" }, { now: at });
+  assert.equal(nextApproved(sql, "threads", { now: T }).id, "daily:2026-11-24:threads", "other kinds keep their order");
+  const older = getDraft(sql, "levels:H1:20261125T080000Z:threads");
+  assert.deepEqual([older.status, older.error], ["expired", "superseded:levels:H1:20261125T090000Z:threads"], "the older H1 map never goes out");
+  assert.ok(draftEvents(sql, "levels:H1:20261125T080000Z:threads").some((e) => e.action === "superseded" && e.detail === "superseded:levels:H1:20261125T090000Z:threads"));
+  assert.equal(getDraft(sql, "levels:H4+H1:20261125T080000Z:threads").status, "approved", "another chart key stays");
+  assert.deepEqual(supersedeMaps(sql, "threads", { now: T }), [], "nothing left to supersede");
+  recordPublish(sql, { id: "daily:2026-11-24:threads", remoteId: "r1" }, { now: T });
+  assert.equal(nextApproved(sql, "threads", { now: T }).id, "levels:H4+H1:20261125T080000Z:threads", "then the maps in approval order: H4+H1, then H1 09:00");
+  recordPublish(sql, { id: "levels:H4+H1:20261125T080000Z:threads", remoteId: "r2" }, { now: T });
+  assert.equal(nextApproved(sql, "threads", { now: T }).id, "levels:H1:20261125T090000Z:threads");
+  // the log of each scheduler run names every auto-approve (orchestrator: answerable from telemetry)
+  assert.match(readFileSync("src/index.mjs", "utf8"), /r\?\.auto\?\.length/);
+  assert.match(readFileSync("src/app.mjs", "utf8"), /const row = \{ channel, id: c\.id, kind: c\.kind, decided_by: AUTO_ACTOR, status:/);
 });

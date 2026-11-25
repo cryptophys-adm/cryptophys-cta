@@ -286,7 +286,7 @@ export async function autoApprove(env, settings, { now = Date.now(), fetcher } =
     if (!kinds.length) continue;
     for (const c of dueNow(await d.autoCandidates({ channel, kinds }), now)) {
       const r = await d.decide({ id: c.id, decision: "approve", actor: AUTO_ACTOR, reason: `rule: ${channel} approves ${c.kind} after 15 minutes` }, now);
-      const row = { channel, id: c.id, status: r?.status ?? "unknown" };
+      const row = { channel, id: c.id, kind: c.kind, decided_by: AUTO_ACTOR, status: r?.status ?? "unknown" };
       if (r?.status === "approved") {
         const p = await publishDraft(env, await d.get(c.id), { now, ...(fetcher ? { fetcher } : {}) });
         row.publish = p?.status ?? null; if (p?.held) row.held = p.held;

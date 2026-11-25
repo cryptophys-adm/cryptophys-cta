@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-25 (the CTA agent: newest map wins at a slot; auto-approve in the log)
+- fix(schedule): a slot never sends an older key-level map when a newer approved one for the same chart is waiting.
+  - From the orchestrator's ruling after the 10:12 UTC check. The 2-hour expiry and the 2-hour Threads slots stay as they are.
+  - `supersedeMaps` runs in `nextApproved`. Of the approved per-chart maps, it keeps the newest per chart key (H1, H4+H1, …). Each older one becomes expired with error `superseded:<newer id>` and gets a "superseded" event.
+  - Other kinds keep their oldest-first order.
+  - `cta_schedule` now also logs runs with auto-approves: each one's id, kind, `decided_by` and publish result.
+  - Test in scheduler.test.mjs.
+
 ## 2026-11-25 (the CTA agent: cta-write and cta-hook)
 - feat(agent): cta-write lets the model reword a fresh template post's body from its own facts, behind rule 4's guards; cta-hook scores each post's opening line.
   - Owner, 25 Nov: model posts "Yes, with the same guards"; then "lanjutkan PR B setelah xauusd selesai".
