@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-25 (the pages' recap sentences without a delay)
+- fix(public): the sentences about recaps no longer name a 24-hour delay. Owner, 25 Nov: "Everything realtime", confirmed through the orchestrator for all public recaps.
+  - Home, "It is posted on Threads". Before: "What the system did with a meeting is shared only as a recap, a day later." After: "What the system did with a meeting is shared only as a recap."
+  - About, Daily recap. Before: "What the system decided yesterday and how it played out, published after 24 hours so it can never be used as a live signal." After: "What the system decided yesterday and how it played out, published as a recap, never as a live signal."
+  - Disclaimer. Before: "Decisions appear only as recaps, 24 hours later." After: "Decisions appear only as recaps."
+  - `test/fixtures/legal-words.json` holds the new words. The posts' guardian delay (`PUBLIC_DELAY_HOURS`, 24) is unchanged.
+
 ## 2026-11-25 (the public pages read again every minute; the track record a minute at the edge)
 - feat(public): the track record is as live as Nexus's. Owner, 25 Nov: "harus realtime"; then "Everything realtime".
   - `TRACK_TTL_S` 600 to 60: the edge and the browser keep `/api/public/track-record` a minute. An empty record is still not cached. The War Room scene was already 60; the profile and the archive are not cached.
