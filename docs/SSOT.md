@@ -255,7 +255,9 @@ in `cryptophys-cloud-platform` (its own PRs and consensus):
 - the drift binding `EXT_CRYPTOPHYS_CTA` → `cryptophys-cta` `CtaHealth`;
 - Access paths `cta.cryptophys.work/studio*` and `cta.cryptophys.work/api/studio/*` in the platform's native Access
   definition (`native-access.ts`, gate 9; `provision-access.yml` is retired at cut-over), applied on the owner's click.
-- the native deploy of an external organ (owner 2026-11-15: "gunakan native deployment pakai forge"): the Forge
+- **held: owner 2026-11-25, dynamic-worker budget** ("cancel cta sekarang jangn pakai forge dulu karena isu budget dynamic
+  worker"; ADR-0018 X1/X2/X2b on hold; the deploy stays `deploy.yml` on a merge into `main`). The native deploy of an
+  external organ (owner 2026-11-15: "gunakan native deployment pakai forge"): the Forge
   mirrors and checks this repository, and the Orchestrator does the first full script upload (the Durable Object
   migration `v1`, the custom domain, the assets), then code and config versions, keeping the Worker secrets.
   `organism.json` `deploy` is what it reads; the organ's own `deploy_unit` stays `null`, because the census refuses an

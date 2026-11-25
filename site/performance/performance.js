@@ -8,6 +8,7 @@ import { trackModel, TRACK_URL, NOT_YET } from '../home/track.js';
 import { renderAvgStrip } from '../home/avg-strip.js';
 import { startClock } from '../home/header.js';
 import { applyProfile, PROFILE_URL } from '../page/profile.js';
+import { pollWhileVisible, freshJson } from '../page/poll.js';
 
 // The header as on the home page: the four links and the UTC and local clock.
 startClock();
@@ -59,5 +60,8 @@ fetch(TRACK_URL)
     draw(body);
     renderAvgStrip(body);
     $('track-box').removeAttribute('aria-busy');
+    // Realtime (owner 2026-11-25: "harus realtime"): read again every minute while the tab is visible. A failed read
+    // keeps what is drawn.
+    pollWhileVisible(() => freshJson(TRACK_URL).then((b) => { if (b) { draw(b); renderAvgStrip(b); } }));
   });
 fetch(PROFILE_URL).then(json).catch(() => null).then((p) => applyProfile(p));

@@ -2,6 +2,7 @@
 // the date beside its posts, from GET /api/public/archive (preloaded in the page's head). The header as on the other
 // pages: the links, the average strip and the UTC and local clock. The list keeps its height while it loads
 // (aria-busy), so nothing below it jumps; the empty line shows only once the answer is empty.
+import { pollWhileVisible, freshJson } from '../page/poll.js';
 import { archiveModel, tabsOf, ARCHIVE_URL } from './model.js';
 import { startClock } from '../home/header.js';
 import { renderAvgStrip } from '../home/avg-strip.js';
@@ -108,5 +109,14 @@ const profile = json(PROFILE_URL).then((p) => {
 Promise.all([profile, fetch(ARCHIVE_URL).then((r) => (r.ok ? r.json() : null)).catch(() => null)]).then(([, a]) => {
   state.posts = Array.isArray(a?.posts) ? a.posts : [];
   render();
+  // Realtime (owner 2026-11-25: "Everything realtime"): the list and the strip read again every minute while visible;
+  // the chosen tab stays, and a failed read keeps what is shown.
+  pollWhileVisible(async () => {
+    const [list, track] = await Promise.all([freshJson(ARCHIVE_URL), freshJson(TRACK_URL)]);
+    // Drawn again only when the posts changed, so an open card and the focus stay as the reader left them.
+    const sig = (posts) => posts.map((p) => `${p.id}@${p.published_at}`).join('|');
+    if (Array.isArray(list?.posts) && sig(list.posts) !== sig(state.posts)) { state.posts = list.posts; render(); }
+    if (track) renderAvgStrip(track);
+  });
 });
 json(TRACK_URL).then((body) => renderAvgStrip(body));

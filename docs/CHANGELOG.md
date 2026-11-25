@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-25 (public pages realtime)
+- feat(public): the public record and posts are now kept fresh within a minute. Owner, 25 Nov: "Cek kenapa cta performance di public tidak update realtime dengan yang di nexus ?", "harus realtime", then "Everything realtime".
+  - `TRACK_TTL_S` is now 60 seconds (was 600) at the edge and in the browser. The War Room scene was already 60, and the archive is never cached (`no-store`).
+  - Performance, the home's average strip, About, Disclaimer, Privacy, Terms and Sign in (through page.js), and the Archive now read again every 60 seconds while the tab is visible (`site/page/poll.js`).
+    - They read once as soon as the tab is visible again, and never while it is hidden.
+    - They never have two reads in flight. A failed read keeps what is shown.
+    - The Archive redraws only when the posts changed, so an open card stays open.
+  - No public text changes. The timing on xauusd's side (delay 24 hours to 0, memo 60 seconds) is the Aether session's.
+  - The record box's heights were measured again (`test/fixtures/track-heights.json`), because the Performance script changed.
+  - Tests PL1 to PL3; TH9 and TK4 updated.
+- docs: the Forge deploy (ADR-0018 X1/X2/X2b) is marked "held: owner 2026-11-25, dynamic-worker budget" (owner: "cancel cta sekarang jangn pakai forge dulu karena isu budget dynamic worker"). The deploy stays `deploy.yml`.
+
 ## 2026-11-25 (key-level maps: a zero-width zone as one price; map ids compared as times)
 - fix(analysis): a zone whose low and high round to the same price now shows one price, in the post's text and on the card. Owner, 25 Nov: "1. Yes". Example: "Supply (sell area) 3546.64 (weak: 1H swing low)", where it used to read "3546.64-3546.64".
   - A normal zone still shows "low–high". Only the rendering changes; xauusd's data is untouched.

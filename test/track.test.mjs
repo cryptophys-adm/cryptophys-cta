@@ -67,7 +67,7 @@ test("TK3 no record yet: the page says the numbers are not available, the home b
   assert.match(read("public/index.html"), /id="avg-strip"[^>]*hidden/, "hidden until there are numbers");
 });
 
-test("TK4 GET /api/public/track-record: the documented fields from PROJECTION.trackRecord, R only, cached 10 minutes at the edge", async () => {
+test("TK4 GET /api/public/track-record: the documented fields from PROJECTION.trackRecord, R only, cached 60 seconds at the edge (owner 2026-11-25: \"harus realtime\")", async () => {
   const store = new Map();
   const cache = { match: async (k) => store.get(k.url)?.clone() ?? null, put: async (k, r) => { store.set(k.url, r); } };
   let calls = 0;
@@ -76,7 +76,7 @@ test("TK4 GET /api/public/track-record: the documented fields from PROJECTION.tr
   const r = await handle(req(), env, { cache });
   assert.equal(r.status, 200);
   assert.equal(r.headers.get("cache-control"), `public, max-age=${TRACK_TTL_S}`);
-  assert.equal(TRACK_TTL_S, 600);
+  assert.equal(TRACK_TTL_S, 60);
   const body = await r.json();
   assert.equal(body.available, true);
   assert.equal(body.unit, "R");

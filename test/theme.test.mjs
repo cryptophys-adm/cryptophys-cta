@@ -176,10 +176,10 @@ test("TH8 About, Disclaimer, Privacy, Terms and Sign in keep every word: <main> 
   for (const f of PORTED) assert.match(page(f), /not financial advice/i);
 });
 
-test("TH9 page.js: built from site/page, imports only the header, the strip, the record's URL and the profile; kept a year", () => {
+test("TH9 page.js: built from site/page, imports only the header, the strip, the record's URL, the profile and the realtime poll; kept a year", () => {
   const b = JSON.parse(read("public/room/build.json"));
   assert.equal(b.page, createHash("sha256").update(readFileSync(new URL("../public/page.js", import.meta.url))).digest("hex"), "run npm run build:room");
-  const allowed = new Set(["../home/header.js", "../home/avg-strip.js", "../home/track.js", "./profile.js"]);
+  const allowed = new Set(["../home/header.js", "../home/avg-strip.js", "../home/track.js", "./profile.js", "./poll.js"]);
   for (const n of readdirSync(new URL("../site/page/", import.meta.url)).filter((x) => x.endsWith(".js"))) {
     const src = read(`site/page/${n}`);
     for (const m of src.matchAll(/^\s*import\b[^'"]*['"]([^'"]+)['"]/gm)) assert.ok(allowed.has(m[1]), `site/page/${n} imports ${m[1]}`);

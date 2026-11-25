@@ -1049,8 +1049,11 @@ export async function warroomScene(env, request, cache) {
   return res;
 }
 
-/** How long the edge and the browser keep the track record (the AI Worker updates it daily, a day behind). */
-export const TRACK_TTL_S = 600;
+/**
+ * How long the edge and the browser keep the track record: 60 seconds (owner 2026-11-25: "harus realtime", "Everything
+ * realtime"; it was 600 while the AI Worker published it daily, a day behind).
+ */
+export const TRACK_TTL_S = 60;
 const TRACK_IDS = ["first", "second", "managed"];
 const TRACK_NUMBERS = ["count", "won", "lost", "even", "win_rate", "expectancy_r", "net_r", "avg_win_r", "avg_loss_r", "profit_factor"];
 const TRACK_NOTICE = "Simulated, in R. Not advice and not an invitation to trade.";

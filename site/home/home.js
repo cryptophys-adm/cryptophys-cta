@@ -8,6 +8,7 @@ import { startClock } from './header.js';
 import { initPanels } from './panels.js';
 import { TRACK_URL } from './track.js';
 import { renderAvgStrip } from './avg-strip.js';
+import { pollWhileVisible, freshJson } from '../page/poll.js';
 import { tvQuoteSrc, quoteTop } from './gold.js';
 import { lowEnd, mannequinUrl } from '../room/quality.js';
 
@@ -143,6 +144,8 @@ const json = (u) => fetch(u).then((r) => r.json()).catch(() => ({}));
 
 /* ---------- the header's average strip (owner 2026-11-20: in the header, Nexus colours) ---------- */
 json(TRACK_URL).then((body) => renderAvgStrip(body));
+// The strip stays realtime (owner 2026-11-25: "harus realtime"): read again every minute while visible.
+pollWhileVisible(() => freshJson(TRACK_URL).then((b) => { if (b && b.unit) renderAvgStrip(b); }));
 Promise.all([json('/api/public/profile'), json('/api/public/archive?limit=30')]).then(([p, a]) => {
   const threads = (p?.links ?? []).find((l) => l.channel === 'threads')?.url;
   if (threads && /^https:\/\/www\.threads\.(net|com)\//.test(threads)) document.querySelectorAll('[data-threads]').forEach((el) => { el.href = threads; });
