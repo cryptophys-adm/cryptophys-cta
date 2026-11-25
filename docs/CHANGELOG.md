@@ -10,6 +10,12 @@
   - `src/agent/hook.mjs` ports hookscore.py's five checks and hooks.json's 26 formulas. It is advisory and appears in Checks.
   - Agent page: a Writing block with its switch and the latest outcomes. cta-write and cta-hook are now listed as live.
   - AGENTS.md rule 4 lists cta-write as approved. Tests AG14, AG15 and the cta-write end-to-end test.
+## 2026-11-25 (About: the lede for model-worded posts)
+- content(about): the About page's lede changed, word for word, for cta-write. The owner replied "Ok" to this exact sentence.
+  - Before: "Every post starts as numbers from the Cryptophys system and ends as a short, checked text that a person approved. No post is written freely by a model."
+  - After: "Every post starts as numbers from the Cryptophys system. Some are worded by a model from those numbers only, then checked by the same rules; a person approves each post or sets the rule that approves it."
+  - Nothing else on the page changed. `test/fixtures/legal-words.json` holds the new words.
+  - Once this is live, an approver sets `about_lede_ok`. cta-write stays off until it is turned on separately.
 
 ## 2026-11-25 (the CTA agent: cta-lint and cta-human in full; rule 4 amended)
 - feat(agent): the humanizer now rewrites every post before it goes out, templates included, and the linter runs all of caption.py's checks.
