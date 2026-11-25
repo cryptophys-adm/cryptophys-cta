@@ -961,7 +961,7 @@ test("cta-write end to end (rule 4 amended): the switch, a written post auto-app
   const { env: e, d } = env({ CONTENT_PUBLISH: "on", PUBLISH_CHANNELS: "threads", THREADS_ACCESS_TOKEN: "T", THREADS_USER_ID: "77", REFLECTION_API_KEY: "rk-test" });
   const T0 = Date.parse("2026-11-25T06:00:00Z");
   const TEMPLATE = "Education · Pattern breakout · XAUUSD H1\nRounding Top · direction down\n\nBreakout line 3570.54\nThe pattern fails if an H1 candle closes back above 3689.87.\nPrice when read: 3555.10 · 12:09 AM UTC\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.";
-  const GOOD = "The H1 Rounding Top broke down through its breakout line at 3570.54.\nIt fails if an H1 candle closes back above 3689.87.\nPrice when read: 3555.10 at 12:09 AM UTC.";
+  const GOOD = "Rounding Top, direction down.\n\nThe breakout line is at 3570.54.\nIt fails if an H1 candle closes back above 3689.87.\nPrice when read: 3555.10 at 12:09 AM UTC.";
   addDrafts(d.sql, [
     { id: "pattern:a:threads", channel: "threads", kind: "pattern", text: TEMPLATE, status: "pending" },
     { id: "pattern:b:threads", channel: "threads", kind: "pattern", text: TEMPLATE.replace("Rounding Top", "Double Top"), status: "pending" }
@@ -993,7 +993,7 @@ test("cta-write end to end (rule 4 amended): the switch, a written post auto-app
   const r = await runSchedule(e, { now: T0 + 5 * 60_000, fetcher });
   assert.deepEqual([r.written.written, r.written.kept], [1, 1], JSON.stringify(r.written));
   const a = getDraft(d.sql, "pattern:a:threads"), b = getDraft(d.sql, "pattern:b:threads");
-  assert.ok(a.text.startsWith("Education - Pattern breakout - XAUUSD H1\nThe H1 Rounding Top broke down"), a.text);
+  assert.ok(a.text.startsWith("Education - Pattern breakout - XAUUSD H1\nRounding Top, direction down.\n\nThe breakout line is at 3570.54."), a.text);
   assert.equal(a.guardian.pass, true);
   assert.equal(b.text, TEMPLATE.replace("Rounding Top", "Double Top"), "an added number: the template stays");
   assert.deepEqual(draftEvents(d.sql, "pattern:b:threads").map((x) => x.action).sort(), ["drafted", "write_kept"]);
@@ -1004,7 +1004,7 @@ test("cta-write end to end (rule 4 amended): the switch, a written post auto-app
   assert.equal((await runSchedule(e, { now: T0 + 16 * 60_000, fetcher })).auto?.find((x) => x.id === "pattern:a:threads"), undefined);
   const later = await runSchedule(e, { now: T0 + 21 * 60_000, fetcher });
   assert.deepEqual(later.auto.find((x) => x.id === "pattern:a:threads"), { channel: "threads", id: "pattern:a:threads", status: "approved", publish: "published" });
-  assert.ok(posted.find((p) => p.text?.includes("The H1 Rounding Top broke down")), "the written text went out");
+  assert.ok(posted.find((p) => p.text?.includes("The breakout line is at 3570.54.")), "the written text went out");
   const page = await (await handle(req("/api/studio/agent", { token: person }), e, { ...opts, now: (T0 + 22 * 60_000) / 1000 })).json();
   assert.equal(page.write.mode, "on");
   assert.deepEqual(page.write.recent.map((x) => x.action).sort(), ["write_kept", "written"]);

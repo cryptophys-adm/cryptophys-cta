@@ -7,7 +7,10 @@
 // person, the model behind src/agent/router.mjs rewords the template's body. The first line ("Education · ...") and the
 // closing block (chart credit, disclaimer, hashtags) are the template's own and never pass through the model. The new
 // text replaces the template only if it passes every guard of AGENTS.md rule 4 (`checkWritten`):
-//   - the facts only: the same numbers as the template's body, none added and none dropped;
+//   - the facts only: the same numbers as the template's body, none added and none dropped, in the same order
+//     (`number_order`); the same role and timeframe words (`role_changed`); and each number under the same role word as
+//     in the template (`role_binding`), so "Support 4,100" can never become "Resistance 4,100" (orchestrator review
+//     of #85);
 //   - no link, mention, hashtag or emoji; no advice, call, forecast, promise or certainty word the template does not
 //     itself use (WRITE_FORBIDDEN);
 //   - humanized (src/agent/humanizer.mjs), then the guardian (the draft's own check) and the channel's linter, no FAIL;
@@ -34,7 +37,6 @@ const LINK = /https?:\/\/|\bwww\.|\b[a-z0-9-]+\.(?:com|co|io|net|org|ai|app|work
 const MENTION = /(?:^|\s)@[A-Za-z0-9_.]+/;
 const HASHTAG = /(?:^|\s)#[A-Za-z0-9_]+/;
 const EMOJI = /\p{Extended_Pictographic}/u;
-const NUMBER = /\d[\d,]*(?:\.\d+)?/g;
 
 /** The writing's state: { mode: "on"|"off", why, kinds }. */
 export function writeMode(env, setting, replySetting) {
@@ -59,7 +61,38 @@ export function splitPost(text) {
 export const joinPost = ({ head, gap = true, body, foot }) => [head, ...(gap ? [""] : []), body, ...(foot.length ? ["", ...foot] : [])].join("\n");
 
 /** The numbers a text names, without thousands separators: "4,120.50" and "4120.50" are the same number. */
-export const numbersOf = (text) => new Set((String(text ?? "").match(NUMBER) ?? []).map((n) => n.replace(/,/g, "")));
+export const numbersOf = (text) => new Set(factTokens(text).filter((t) => t.type === "number").map((t) => t.value));
+
+// The words that say what a number is (its role) and which chart it is on. Timeframes in their usual spellings count as
+// one word each, and their digits are not numbers ("H1" is the hourly chart, not the number 1); nor is a digit right
+// after a letter ("Camarilla L5" names a level).
+const TIMEFRAMES = [[/^(?:15m|m15|15-minute|15 minute)$/i, "M15"], [/^(?:h1|1h|1-hour|1 hour|hourly)$/i, "H1"], [/^(?:h4|4h|4-hour|4 hour)$/i, "H4"],
+  [/^(?:d1|1d|daily)$/i, "D1"], [/^(?:w1|weekly|week)$/i, "W1"]];
+export const ROLE_WORDS = Object.freeze(["support", "resistance", "demand", "supply", "high", "low", "higher", "lower", "upper", "above", "below",
+  "pivot", "bullish", "bearish", "neutral", "up", "down", "buy", "sell"]);
+const TOKEN = /\b(?:15m|m15|15[- ]minute|h1|1h|1[- ]hour|hourly|h4|4h|4[- ]hour|d1|1d|daily|w1|weekly|week)\b|\b(?:support|resistance|demand|supply|high|low|higher|lower|upper|above|below|pivot|bullish|bearish|neutral|up|down|buy|sell)\b|(?<![A-Za-z\d])\d[\d,]*(?:\.\d+)?|(?<!\d)[.!?](?!\d)|\n\s*\n|\n/gi;
+/**
+ * A text as the facts a guard compares, in order: numbers, role words and timeframes, with sentence and paragraph
+ * breaks. Each number carries `role` and `chart`: the nearest role word and the nearest timeframe before it in its
+ * sentence, else in its paragraph, else null.
+ */
+export function factTokens(text) {
+  const out = [];
+  let sRole = null, pRole = null, sChart = null, pChart = null;
+  for (const m of String(text ?? "").matchAll(TOKEN)) {
+    const raw = m[0];
+    if (/^\n\s*\n$/.test(raw)) { sRole = pRole = sChart = pChart = null; continue; }
+    if (raw === "\n" || /^[.!?]$/.test(raw)) { sRole = sChart = null; continue; }
+    const tf = TIMEFRAMES.find(([re]) => re.test(raw.replace(/\s+/g, " ")));
+    if (tf) { out.push({ type: "timeframe", value: tf[1] }); sChart = pChart = tf[1]; continue; }
+    if (/^\d/.test(raw)) { out.push({ type: "number", value: raw.replace(/,/g, ""), role: sRole ?? pRole ?? null, chart: sChart ?? pChart ?? null }); continue; }
+    const word = raw.toLowerCase();
+    out.push({ type: "role", value: word });
+    sRole = pRole = word;
+  }
+  return out;
+}
+const multiset = (list) => list.slice().sort().join("|");
 const wordsOf = (text) => new Set((String(text ?? "").toLowerCase().match(WRITE_FORBIDDEN) ?? []).map((w) => w.toLowerCase()));
 
 /** The prompt: the template's body is the only source; the model rewords it, nothing more. */
@@ -69,7 +102,8 @@ export function writePrompt({ channel, kind, body, limit }) {
       `You reword the body of an educational XAUUSD (gold) post for ${channel} by Cryptophys.`,
       "Use only the facts in the FACTS block. Keep every number exactly as written and add no number.",
       "No advice, no buy or sell call, no forecast, no promise, no opinion about what price will do. Describe what the analysis read, not what to do.",
-      "No links, mentions, hashtags or emoji. Plain words, short sentences of different lengths, the most concrete fact first.",
+      "Keep the facts in the same order, and each number with the same label (support, resistance, supply, demand, high, low, above, below, up, down) and the same chart (15m, H1, H4, D1, weekly) as in FACTS. Keep its paragraphs and line breaks.",
+      "No links, mentions, hashtags or emoji. Plain words, short sentences of different lengths.",
       "Do not write a title, a disclaimer or a sign-off: they are added after you.",
       `At most ${limit} characters. Return only the reworded body, or SKIP if it cannot be done.`
     ].join(" ") },
@@ -99,6 +133,13 @@ export function checkWritten({ draft, written, channel, check }) {
   const have = numbersOf(parts.body), got = numbersOf(body);
   if ([...got].some((n) => !have.has(n))) failures.push("number_added");
   if ([...have].some((n) => !got.has(n))) failures.push("number_dropped");
+  const tIn = factTokens(parts.body), tOut = factTokens(body);
+  const nums = (t) => t.filter((x) => x.type === "number");
+  if (nums(tIn).map((x) => x.value).join("|") !== nums(tOut).map((x) => x.value).join("|")) failures.push("number_order");
+  const words = (t) => t.filter((x) => x.type !== "number").map((x) => x.value);
+  if (multiset(words(tIn)) !== multiset(words(tOut))) failures.push("role_changed");
+  const bound = (t) => nums(t).map((x) => `${x.value}@${x.role}@${x.chart}`).join("|");
+  if (bound(tIn) !== bound(tOut)) failures.push("role_binding");
   const allowed = wordsOf(parts.body);
   if ([...wordsOf(body)].some((w) => !allowed.has(w))) failures.push("forbidden_word");
   const text = humanize(joinPost({ ...parts, body })).text;

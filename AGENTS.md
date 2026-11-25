@@ -71,7 +71,7 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
    if it fails. Approved so far: the replies (rule 2's exception), the weekly audit summary (studio only), and
    cta-write (`src/agent/write.mjs`, owner 2026-11-25: model posts "Yes, with the same guards"): it rewords only the
    body of a fresh template post of the four auto-approve kinds, from that body's own facts (the same numbers, none
-   added or dropped; no advice, forecast or certainty word the template does not use), keeps the template's first
+   added or dropped, in the same order and each under the same role word and chart; no advice, forecast or certainty word the template does not use), keeps the template's first
    line and closing block, and is off until an approver turns it on (studio setting `agent_write`, the kill switch)
    and the About page's sentence about the model carries the owner's words (`about_lede_ok`).
 5. **Kernel.** This is an external organ (tier 1, no council seat, `signals.observe` and `reports.publish` only),
