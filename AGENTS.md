@@ -20,6 +20,13 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
    `PUBLISH_CHANNELS` only, starting with `telegram`, then `threads` (owner "ya lanjutkan", after Telegram's first post), then `instagram` (owner "lanjutkan penerbitan instagram", after Threads' first post); another channel is added in its own owner PR after the one
    before it works. `PUBLISH_CHANNELS` unset or empty publishes nothing. Every draft waits in the studio for a person's approval; an approval
    runs the guardian again. A service token can read the studio, never decide.
+   **Replies are the one exception** (owner 2026-11-25: "semua autonomous jadi reply tanpa approval"; caps "10 an hour,
+   40 a day"; "By themselves after 3 days"): the CTA agent answers replies under our own posts without a person's
+   approval (`src/agent/replies.mjs`), on the channels in `REPLY_CHANNELS` (Threads first) that publish, after a 72-hour
+   dry run that sends nothing. A question about buying, selling or where the price goes gets the fixed answer only; every
+   answer passes the guardian's rules, the reply checks and carries "Not financial advice."; at most 1 answer per person
+   per thread, 10 an hour and 40 a day; never a DM, never another account's thread. The studio's switch and the var
+   `AGENT_REPLIES` stop it.
    An analysis draft (the key-level map, a pattern post) expires 2 hours after it was made from the analysis (owner
    2026-11-17: "kadaluwarsa otomatis"): it is never approved, sent again, copied or published after that; a fresh one is
    made from Create with the latest analysis. A recap is about the past and does not expire.
@@ -40,7 +47,10 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
      2026-11-15: "Overlay on TradingView"); the overlay carries only the draft's own numbers;
    - news is never republished, only our own summary with the source named.
 4. **No model writes public text.** Drafts come from fixed templates over the xauusd `PublicProjection` (read-only
-   RPC). Adding a model-written step needs the owner's approval and a guardian check after it.
+   RPC). Adding a model-written step needs the owner's approval and a guardian check after it. Approved so far: the
+   agent's replies (owner 2026-11-25, rule 2's exception), written by the model behind `src/agent/router.mjs` and kept
+   from any number, price, level, direction, forecast or advice by `checkReply` and the guardian, or not sent; and the
+   weekly audit summary, which is studio-only text.
 5. **Kernel.** This is an external organ (tier 1, no council seat, `signals.observe` and `reports.publish` only),
    declared in `organism.json` and read by the platform Forge over `EXT_ORGANISM_CTA`. Platform-side changes (the
    origin entry, the bindings, Access paths) go through the platform's own repository and its consensus.

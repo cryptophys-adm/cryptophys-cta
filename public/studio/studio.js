@@ -1195,6 +1195,7 @@
         box.appendChild(item);
       }
       renderAudit(a.audit);
+      renderReplies(a.replies, a.can_edit);
       renderPlan(a.plan, a.can_edit, a.channel, (a.channels ?? []).find((c) => c.id === a.channel)?.name ?? a.channel);
     } catch (e) { showErr(e); }
   }
@@ -1230,6 +1231,34 @@
     for (const p of au.posts) {
       const item = make("div", "draft");
       item.append(make("div", null, p.head), make("div", "meta", `${KIND[p.kind] ?? p.kind} · ${fmt(p.views)} views · ${p.multiple == null ? "–" : `${p.multiple}× the median`} · ${p.replies} replies · ${p.reposts} reposts`));
+      list.appendChild(item);
+    }
+    box.appendChild(list);
+  }
+  // Replies (src/agent/replies.mjs): the mode (dry run, live, off), the caps, the switch, and what it did with each reply.
+  const REPLY_STATUS = { sent: ["green", "Sent"], dry_run: ["blue", "Would send"], no_answer: ["", "No answer"], blocked: ["red", "Blocked"], capped_person: ["", "Answered already"], no_model: ["amber", "No model"], model_skipped: ["", "Model skipped"], send_failed: ["red", "Not sent"] };
+  function renderReplies(r, canEdit) {
+    const box = $("agentreplies"); box.textContent = "";
+    if (!r) { box.appendChild(make("div", "empty", "Replies are not on for this channel yet.")); return; }
+    const head = make("div");
+    const tone = r.mode === "live" ? "green" : r.mode === "dry_run" ? "blue" : "red";
+    const word = r.mode === "live" ? "Live" : r.mode === "dry_run" ? "Dry run" : "Off";
+    head.append(badge(tone, word), " ", make("b", null, r.mode === "dry_run" ? (r.live_at ? `Nothing is sent; live by itself at ${when(r.live_at)}` : `Nothing is sent; the ${r.dry_run_hours}-hour dry run starts at the next run`) : r.mode === "live" ? "Replies go out without approval, within the caps" : `Stopped: ${r.why ?? "off"}`));
+    box.appendChild(head);
+    box.appendChild(make("div", "meta", `Caps: ${r.caps.hour} an hour, ${r.caps.day} a day, ${r.caps.per_person_per_thread} per person per thread · ${r.sent_today} in the last 24 hours${r.switched_by ? ` · switch: ${r.switched_by}, ${when(r.switched_at)}` : ""}`));
+    const b = make("button", r.mode === "off" ? "btn primary sm" : "btn danger sm", r.mode === "off" ? "Resume replies" : "Stop replies"); b.type = "button"; b.disabled = !canEdit || r.why === "AGENT_REPLIES is not on";
+    if (!canEdit) b.title = "Approvers only";
+    b.addEventListener("click", async () => { b.disabled = true; try { await call("/api/studio/agent/replies", "POST", { enabled: r.mode === "off" }); await loadAgent(); } catch (e) { showErr(e); b.disabled = false; } });
+    box.appendChild(b);
+    const list = make("div", "list");
+    if (!r.recent.length) list.appendChild(make("div", "empty", "No reply read yet."));
+    for (const x of r.recent) {
+      const item = make("div", "draft");
+      const [t, w] = REPLY_STATUS[x.status] ?? ["", x.status];
+      const top = make("div", "meta"); top.append(badge(t, w), " ", `${x.bucket} · ${x.username ? `@${x.username}` : "someone"} · ${when(x.at)}${x.detail ? ` · ${x.detail}` : ""}`);
+      item.appendChild(top);
+      if (x.text) item.appendChild(make("div", null, x.text));
+      if (x.answer) item.appendChild(make("div", "text", x.answer));
       list.appendChild(item);
     }
     box.appendChild(list);

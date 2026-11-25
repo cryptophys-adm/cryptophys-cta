@@ -14,6 +14,7 @@ import { lintPost, textFor } from "../src/agent/lint.mjs";
 import { CHANNELS } from "../src/channels.mjs";
 import { askModel, modelConfig, costOf, wibDayStartIso, MODEL_DEFAULTS, AGENT_SECRETS } from "../src/agent/router.mjs";
 import { weeklySummary, summaryOk, summaryKey } from "../src/agent/weekly.mjs";
+import { triage, checkReply, shapeAnswer, replyMode, runReplies, MARKET_REPLY, DISCLAIMER, REPLY_CHANNELS, REPLY_CAPS, DRY_RUN_HOURS } from "../src/agent/replies.mjs";
 import { publishThreads } from "../src/publishers.mjs";
 import { HASHTAGS } from "../src/channels.mjs";
 import { keyLevelsText } from "../src/analysis-drafts.mjs";
@@ -97,7 +98,7 @@ test("AG4 the Agent page: Threads drafts only, read only, each with its Threads 
   assert.equal(a.checks[0].text, threadsText(POST));
   assert.deepEqual(a.summary, { checked: 2, ready: 1, review: 0, fix: 1, human_pass: a.checks.filter((c) => c.human.verdict === "PASS").length });
   assert.equal(a.topic_tag, "XAUUSD");
-  assert.deepEqual(AGENT_SKILLS.map((s) => [s.id, s.live]), [["linter", true], ["humanizer", true], ["audit", true], ["plan", true], ["replies", false]]);
+  assert.deepEqual(AGENT_SKILLS.map((s) => [s.id, s.live]), [["linter", true], ["humanizer", true], ["audit", true], ["plan", true], ["replies", true]]);
   const html = read("public/studio/index.html"), js = read("public/studio/studio.js"), app = read("src/app.mjs");
   assert.match(html, /<a href="#agent" data-view="agent">/);
   assert.match(html, /id="view-agent"/);
@@ -221,4 +222,75 @@ test("AG8 one agent for every channel (owner 2026-11-25): each channel's own rul
   const c = agentChecks([{ id: "t", channel: "telegram", kind: "custom", status: "pending", text: "Education\n#XAUUSD #gold" }], { channel: "telegram" });
   assert.deepEqual([c.channel, c.topic_tag, c.checks.length, c.checks[0].lint.verdict], ["telegram", null, 1, "READY"]);
   assert.match(read("public/studio/studio.js"), /inactive\.appendChild\(make\("p", null, `The agent does not manage/);
+});
+
+test("AG9 Replies: the triage, the fixed market answer, the reply checks, the dry run then live, the caps, never twice", async () => {
+  assert.deepEqual(REPLY_CHANNELS, ["threads"]);
+  assert.deepEqual(REPLY_CAPS, { hour: 10, day: 40, per_person_per_thread: 1 }, "owner 2026-11-25: 10 an hour, 40 a day");
+  assert.equal(DRY_RUN_HOURS, 72, "owner: live by itself after 3 days");
+  const t = (s) => triage(s);
+  assert.deepEqual(["should I buy gold now?", "where will gold go next week", "what's your TP?", "sell?"].map(t), ["market", "market", "market", "market"]);
+  assert.deepEqual(["🔥🔥", "nice", "thanks a lot", ""].map(t), ["support", "support", "support", "noise"]);
+  assert.deepEqual(["join our signal group t.me/x", "DM me for 20% monthly profit", "check my bio"].map(t), ["noise", "noise", "noise"]);
+  assert.equal(t("how do you pick the zones on the chart?"), "question");
+  assert.equal(t("the weekly VWAP held twice last month too, interesting read"), "substance");
+  assert.ok(checkReply(MARKET_REPLY, { fromModel: false }).ok, "the fixed answer passes");
+  assert.ok(MARKET_REPLY.endsWith(DISCLAIMER));
+  const bad = (s) => checkReply(shapeAnswer(s)).failures;
+  assert.ok(bad("Gold should reach 3600 soon").includes("number"));
+  assert.ok(bad("Looks bullish to us").includes("direction"));
+  assert.ok(bad("We guarantee it works").includes("quality"));
+  assert.ok(bad("You should buy the dip").length);
+  assert.ok(bad("x".repeat(300)).includes("length"));
+  assert.ok(checkReply(shapeAnswer("Thanks for reading! We map them from pivots and VWAP")).ok, "a plain answer about the method passes");
+  assert.equal(shapeAnswer("SKIP"), null);
+  assert.equal(shapeAnswer("Glad it helped"), "Glad it helped. Not financial advice.");
+  assert.equal(checkReply("Glad it helped.").failures.includes("disclaimer"), true, "the disclaimer on every answer");
+  // the mode: off without the var or by the switch; a dry run for 72 hours from the first run; then live
+  const T0 = Date.parse("2026-11-25T06:00:00Z");
+  assert.equal(replyMode({}, null, T0).mode, "off");
+  assert.equal(replyMode({ AGENT_REPLIES: "on" }, { enabled: false, since: "2026-11-20T00:00:00Z" }, T0).mode, "off");
+  assert.equal(replyMode({ AGENT_REPLIES: "on" }, null, T0).mode, "dry_run");
+  assert.equal(replyMode({ AGENT_REPLIES: "on" }, { since: new Date(T0).toISOString() }, T0 + 71 * 3_600_000).mode, "dry_run");
+  assert.equal(replyMode({ AGENT_REPLIES: "on" }, { since: new Date(T0).toISOString() }, T0 + 72 * 3_600_000).mode, "live");
+  // a run: fake replies under one post, a model that answers, the log as the Desk keeps it
+  const run = async (mode, replies, { model = "Happy you found it useful", sent = 0 } = {}) => {
+    const log = [], sends = [], asked = [];
+    const deps = {
+      posts: [{ id: "d1", remote_id: "111", text: "Education · XAUUSD key-level map\nmore" }],
+      fetchReplies: async () => replies,
+      seen: async (id) => log.some((r) => r.reply_id === id),
+      answeredInThread: async (post, author) => log.some((r) => r.post_id === post && r.author === author && ["sent", "dry_run"].includes(r.status)),
+      sentSince: async () => sent + log.filter((r) => ["sent", "dry_run"].includes(r.status)).length,
+      record: async (r) => { log.push(r); },
+      ask: async (m) => { asked.push(m); return model == null ? { ok: false, skipped: "off" } : { ok: true, text: model }; },
+      send: async (text, id) => { sends.push([text, id]); return { remote_id: `r${id}` }; }
+    };
+    const out = await runReplies("threads", { mode }, deps, { now: T0 });
+    return { out, log, sends, asked };
+  };
+  const R = [
+    { id: "1", text: "should I buy now?", username: "a" }, { id: "2", text: "how do you pick the zones on the chart?", username: "b" },
+    { id: "3", text: "🔥", username: "c" }, { id: "4", text: "and how often do you post these?", username: "b" }, { id: "5", text: "mine", username: "us", own: true }
+  ];
+  const dry = await run("dry_run", R);
+  assert.equal(dry.sends.length, 0, "the dry run sends nothing");
+  assert.deepEqual(dry.log.map((r) => [r.reply_id, r.bucket, r.status]), [["1", "market", "dry_run"], ["2", "question", "dry_run"], ["3", "support", "no_answer"], ["4", "question", "capped_person"]], "our own reply skipped; 1 per person per thread");
+  assert.equal(dry.log[0].answer, MARKET_REPLY, "market: the fixed answer, no model");
+  assert.equal(dry.asked.length, 1);
+  assert.match(JSON.stringify(dry.asked[0]), /Never write any number, price, level/);
+  assert.notEqual(dry.log[0].author, "a", "the author kept as a hash");
+  const live = await run("live", R.slice(0, 2));
+  assert.deepEqual(live.sends.map((s) => s[1]), ["1", "2"]);
+  assert.deepEqual(live.log.map((r) => r.status), ["sent", "sent"]);
+  assert.equal(live.out.answered, 2);
+  const capped = await run("live", R.slice(0, 2), { sent: 10 });
+  assert.equal(capped.sends.length, 0, "10 an hour");
+  assert.equal(capped.out.skipped.cap, 1);
+  const blocked = await run("live", [R[1]], { model: "It should rally to 3600" });
+  assert.deepEqual([blocked.sends.length, blocked.log[0].status], [0, "blocked"], "a model answer with a number or a direction never goes out");
+  const nomodel = await run("live", [R[1]], { model: null });
+  assert.deepEqual([nomodel.sends.length, nomodel.log[0].status], [0, "no_model"], "no model, no answer to a question (the market answer needs none)");
+  const off = await run("off", R);
+  assert.deepEqual([off.log.length, off.sends.length], [0, 0]);
 });

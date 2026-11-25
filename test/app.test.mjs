@@ -5,11 +5,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule, cardPathOf } from "../src/app.mjs";
+import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule, cardPathOf, agentReplies } from "../src/app.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
 import { AGENT_SECRETS } from "../src/agent/router.mjs";
-import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls } from "../src/desk.mjs";
+import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
@@ -52,6 +52,7 @@ function deskStub() {
     slotOutcome: async (i) => { slotOutcome(sql, i); return true; }, recentSlots: async (n) => recentSlots(sql, { limit: n }),
     addLink: async (i, now) => addLink(sql, i, { now }), link: async (s) => getLink(sql, s), click: async (i, now) => { countClick(sql, i, { now }); return true; },
     links: async () => listLinks(sql), hashtagSets: async () => listHashtagSets(sql), saveHashtagSet: async (i, now) => saveHashtagSet(sql, i, { now }),
+    replySeen: async (id) => replySeen(sql, id), answeredInThread: async (p, a) => answeredInThread(sql, p, a), repliesSentSince: async (s) => repliesSentSince(sql, s), recordReply: async (r) => recordReply(sql, r), recentReplies: async (n) => recentReplies(sql, { limit: n }), forgetReplies: async (b) => forgetReplies(sql, b),
     recordModelCall: async (i, now) => recordModelCall(sql, i, { now }), modelSpendSince: async (s) => modelSpendSince(sql, s), recentModelCalls: async (n) => recentModelCalls(sql, { limit: n }),
     studioSetting: async (k) => studioSetting(sql, k), saveStudioSetting: async (i, now) => saveStudioSetting(sql, i, { now }), kindMix: async (f, t) => kindMixSince(sql, f, t),
     addAbTest: async (i, now) => { addAbTest(sql, i, { now }); return true; }, abTests: async () => listAbTests(sql), measuredPosts: async () => measuredPosts(sql), copiedSince: async (s) => copiedSince(sql, s),
@@ -875,4 +876,41 @@ test("the model's switch (the CTA agent's router): an approver turns it off and 
   assert.ok(!JSON.stringify(a).includes("rk-test"), "the key never reaches the page");
   await post({ enabled: true }, { token: person });
   assert.equal((await (await handle(req("/api/studio/agent", { token: person }), e, opts)).json()).model.enabled, true);
+});
+
+test("the agent's Replies end to end (owner 2026-11-25): the first run starts a 72-hour dry run that sends nothing; then live; the switch stops it", async () => {
+  resetKeyCacheForTests();
+  const { env: e, d } = env({ AGENT_REPLIES: "on", CONTENT_PUBLISH: "on", PUBLISH_CHANNELS: "threads", THREADS_ACCESS_TOKEN: "T", THREADS_USER_ID: "77" });
+  const T0 = Date.parse("2026-11-25T06:00:00Z");
+  addDrafts(d.sql, [{ id: "p1", channel: "threads", kind: "custom", text: "Education · XAUUSD\n\nGold held its range.\n\nNot financial advice.", status: "pending" }], { now: T0 - 7_200_000 });
+  decideDraft(d.sql, { id: "p1", decision: "approve", actor: "owner" }, { now: T0 - 7_100_000 });
+  recordPublish(d.sql, { id: "p1", remoteId: "999" }, { now: T0 });
+  const sent = [];
+  const fetcher = async (url, init) => {
+    const u = String(url);
+    if (u.includes("/me?")) return Response.json({ id: "77" });
+    if (u.includes("/999/replies")) return Response.json({ data: [{ id: "501", text: "should I buy now?", username: "alice", is_reply_owned_by_me: false }] });
+    if (u.endsWith("/77/threads")) { sent.push(Object.fromEntries(new URLSearchParams(String(init.body)))); return Response.json({ id: "c9" }); }
+    if (u.includes("/c9?")) return Response.json({ status: "FINISHED" });
+    if (u.endsWith("/threads_publish")) return Response.json({ id: "r9" });
+    throw new Error(`unexpected ${u}`);
+  };
+  const first = await agentReplies(e, { now: T0, fetcher, sleep: async () => {} });
+  assert.equal(first.status, "dry_run");
+  assert.deepEqual([first.channels.threads.logged, sent.length], [1, 0], "the dry run logs and sends nothing");
+  assert.equal(studioSetting(d.sql, "agent_replies").value.since, new Date(T0).toISOString(), "the dry run starts at the first run");
+  const person = await jwt({ email: "owner@example.com", sub: "u1" });
+  const page = await (await handle(req("/api/studio/agent", { token: person }), e, opts)).json();
+  assert.deepEqual([page.replies.mode, page.replies.recent[0].status, page.replies.recent[0].username], ["dry_run", "dry_run", "alice"]);
+  // live after 72 hours (the post still inside the 3-day window): a new reply is answered, the old one is not read again
+  const later = T0 + 72 * 3_600_000;
+  const f2 = async (url, init) => (String(url).includes("/999/replies") ? Response.json({ data: [{ id: "501", text: "should I buy now?", username: "alice" }, { id: "502", text: "sell or hold?", username: "bob" }] }) : fetcher(url, init));
+  const live = await agentReplies(e, { now: later, fetcher: f2, sleep: async () => {} });
+  assert.deepEqual([live.status, live.channels.threads.answered, sent.length, sent[0].reply_to_id, sent[0].text.endsWith("Not financial advice.")], ["live", 1, 1, "502", true]);
+  // the switch: an approver stops it, logged; then nothing runs
+  const post = (body, extra = {}) => handle(req("/api/studio/agent/replies", { method: "POST", body, ...extra }), e, opts);
+  assert.equal((await post({ enabled: false }, { token: await jwt({ common_name: "svc.access", sub: "" }) })).status, 403);
+  assert.equal((await post({ enabled: false }, { token: person })).status, 200);
+  assert.equal((await agentReplies(e, { now: later, fetcher: f2 })).status, "off");
+  assert.equal((await agentReplies({ ...e, AGENT_REPLIES: "off" }, { now: later, fetcher: f2 })).status, "off", "the var stops it too");
 });

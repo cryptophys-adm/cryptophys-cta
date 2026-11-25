@@ -55,7 +55,10 @@
     // The origin of the public card URLs Instagram fetches (GET /media/<id>.jpg, only once a draft is approved).
     "PUBLIC_ORIGIN": "https://cta.cryptophys.work",
     // The channels whose post metrics are read once a day (src/insights.mjs). X is not listed: X bills each read.
-    "CONTENT_INSIGHTS": "threads,instagram,youtube"
+    "CONTENT_INSIGHTS": "threads,instagram,youtube",
+    // The CTA agent's autonomous replies (owner 2026-11-25: "semua autonomous jadi reply tanpa approval"; AGENTS.md rule 2):
+    // "on" lets src/agent/replies.mjs run (a 72-hour dry run first); "off" stops it at the next deploy.
+    "AGENT_REPLIES": "on"
   },
   // The public pages and the studio page. run_worker_first lists the paths the Worker answers first (owner 2026-11-19,
   // the holo war room: static files, the 670 KB scene among them, no longer invoke the Worker): the health check, the

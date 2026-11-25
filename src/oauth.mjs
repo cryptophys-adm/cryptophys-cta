@@ -20,7 +20,7 @@ export const CALLBACK_PATH = "/studio/oauth/callback";
  */
 export const PROVIDERS = Object.freeze({
   threads: Object.freeze({ name: "Threads (Meta)", authorize: "https://threads.net/oauth/authorize", token: "https://graph.threads.net/oauth/access_token",
-    scopes: ["threads_basic", "threads_content_publish", "threads_manage_insights"], scopeSep: ",", app: { id: "THREADS_APP_ID", secret: "THREADS_APP_SECRET" }, pkce: false }),
+    scopes: ["threads_basic", "threads_content_publish", "threads_manage_insights", "threads_read_replies", "threads_manage_replies"], scopeSep: ",", app: { id: "THREADS_APP_ID", secret: "THREADS_APP_SECRET" }, pkce: false }),
   instagram: Object.freeze({ name: "Instagram (Meta)", authorize: "https://www.instagram.com/oauth/authorize", token: "https://api.instagram.com/oauth/access_token",
     scopes: ["instagram_business_basic", "instagram_business_content_publish", "instagram_business_manage_insights"], scopeSep: ",", app: { id: "INSTAGRAM_APP_ID", secret: "INSTAGRAM_APP_SECRET" }, pkce: false }),
   x: Object.freeze({ name: "X", authorize: "https://x.com/i/oauth2/authorize", token: "https://api.x.com/2/oauth2/token",

@@ -3,7 +3,7 @@
 import { dailyDrafts } from "./drafts.mjs";
 import { analysisDrafts } from "./analysis-drafts.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "./channels.mjs";
-import { publishTo, publishingQuota, refreshToken, tiktokAccessToken, googleAccessToken, REFRESH_AFTER_DAYS, isBusinessToken } from "./publishers.mjs";
+import { publishTo, publishingQuota, refreshToken, tiktokAccessToken, googleAccessToken, REFRESH_AFTER_DAYS, isBusinessToken, threadsReplies, publishThreadsReply } from "./publishers.mjs";
 import { verifyAccessJwt } from "./access.mjs";
 import { brandOf, profileLinks, DEFAULT_BRAND } from "./brands.mjs";
 import { renderCard, renderVideo, toBase64, fromBase64 } from "./render.mjs";
@@ -18,7 +18,8 @@ import { bestTimes, abResult, evergreen, EVERGREEN_MIN_DAYS } from "./growth.mjs
 import { agentChecks } from "./agent/checks.mjs";
 import { auditChannel, planChannel } from "./agent/audit.mjs";
 import { AGENT_CHANNELS, agentChannels } from "./agent/rules.mjs";
-import { modelStatus } from "./agent/router.mjs";
+import { modelStatus, askModel } from "./agent/router.mjs";
+import { runReplies, replyMode, REPLY_CHANNELS, REPLY_CAPS, REPLY_WINDOW_DAYS, KEEP_DAYS, DRY_RUN_HOURS } from "./agent/replies.mjs";
 import { weeklySummary, summaryKey } from "./agent/weekly.mjs";
 import { linkHosts, normalizeLink, randomSlug, shortUrl, redirectTarget, GO_PATH, normalizeHashtagSet, MAX_SETS, normalizeMix, DEFAULT_MIX, MIX_KINDS, wibWeek, mixReport } from "./marketing.mjs";
 import { templateTexts, checkPost, composeDrafts, overlayFor, recapWindow, COMPOSE_KINDS, COMPOSE_KIND_NAMES } from "./compose.mjs";
@@ -438,7 +439,7 @@ async function rpc(fn, failure) {
 }
 
 const isStudio = (path) => path === "/studio" || path.startsWith("/studio/") || path.startsWith("/api/studio/");
-const STUDIO_ROUTES = ["/api/studio/agent/model", "/api/studio/agent", "/api/studio/connections", "/api/studio/connect/app", "/api/studio/connect/token", "/api/studio/connect/start", "/api/studio/connect/disconnect", "/api/studio/connect/check", "/api/studio/growth", "/api/studio/links", "/api/studio/hashtag-sets", "/api/studio/mix", "/api/studio/schedule", "/api/studio/library", "/api/studio/edit", "/api/studio/duplicate", "/api/studio/calendar", "/api/studio/media-library", "/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/publish-now", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
+const STUDIO_ROUTES = ["/api/studio/agent/replies", "/api/studio/agent/model", "/api/studio/agent", "/api/studio/connections", "/api/studio/connect/app", "/api/studio/connect/token", "/api/studio/connect/start", "/api/studio/connect/disconnect", "/api/studio/connect/check", "/api/studio/growth", "/api/studio/links", "/api/studio/hashtag-sets", "/api/studio/mix", "/api/studio/schedule", "/api/studio/library", "/api/studio/edit", "/api/studio/duplicate", "/api/studio/calendar", "/api/studio/media-library", "/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/publish-now", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
 /** The public origin of the cards Instagram fetches (GET /media/<id>.jpg). */
 export const originOf = (env) => String(env?.PUBLIC_ORIGIN || "https://cta.cryptophys.work").replace(/\/+$/, "");
 const MEDIA_PATH = /^\/media\/([0-9a-f]{32})\.(jpg|webm)$/;
@@ -703,9 +704,24 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
           const audit = auditChannel(posts, { channel, now: at });
           const schedule = (await channelSettings(env)).settings[channel]?.schedule ?? [];
           const summary = (await d.studioSetting(summaryKey(channel)))?.value ?? null;
+          const rs = (await d.studioSetting("agent_replies")) ?? null;
+          const replies = REPLY_CHANNELS.includes(channel) ? { ...replyMode(env, rs?.value ?? null, at), caps: REPLY_CAPS, dry_run_hours: DRY_RUN_HOURS, switched_by: rs?.updated_by ?? null, switched_at: rs?.updated_at ?? null,
+            sent_today: await d.repliesSentSince(new Date(at - 86_400_000).toISOString()), recent: (await d.recentReplies(30)).filter((x) => x.channel === channel) } : null;
           return { ...base, ...agentChecks(await d.list({ channel, limit: 30 }), { channel }), audit: { ...audit, summary: summary?.week === audit.week.from ? summary.text : null },
-            plan: planChannel(audit, posts, { now: at, schedule }) };
+            plan: planChannel(audit, posts, { now: at, schedule }), replies };
         }, "agent_failed");
+      }
+      // The Replies' switch (src/agent/replies.mjs): an approver stops or resumes the autonomous replies; logged.
+      if (route === "POST /api/studio/agent/replies") {
+        const r = await personJson(request, url, identity);
+        if (r.response) return r.response;
+        const denied = approverOnly(role);
+        if (denied) return denied;
+        if (typeof r.body.enabled !== "boolean") return json({ error: "enabled must be true or false" }, 400);
+        return rpc(async () => {
+          const cur = (await desk(env).studioSetting("agent_replies"))?.value ?? {};
+          return desk(env).saveStudioSetting({ key: "agent_replies", value: { ...cur, enabled: r.body.enabled }, actor: identity.subject }, now ? now * 1000 : Date.now());
+        }, "replies_switch_failed");
       }
       // The model's switch (src/agent/router.mjs): an approver turns it off or on; the studio's event log keeps who and when.
       if (route === "POST /api/studio/agent/model") {
@@ -1040,3 +1056,42 @@ export async function agentWeekly(env, { now = Date.now(), fetcher } = {}) {
   for (const channel of AGENT_CHANNELS) out[channel] = await weeklySummary(env, modelStore(env, now), posts, { channel, now, ...(fetcher ? { fetcher } : {}) });
   return { status: Object.values(out).every((r) => r.status === "done_already") ? "done_already" : "ran", channels: out };
 }
+
+/**
+ * The CTA agent's Replies (src/agent/replies.mjs), every 15 minutes: per reply channel, the replies under our posts of
+ * the last REPLY_WINDOW_DAYS, answered within the caps. The first run starts the dry run (DRY_RUN_HOURS); a live answer
+ * goes out only on a channel that publishes (PUBLISH_CHANNELS).
+ */
+export async function agentReplies(env, { now = Date.now(), fetcher, sleep } = {}) {
+  const d = desk(env);
+  const setting = (await d.studioSetting("agent_replies"))?.value ?? null;
+  let mode = replyMode(env, setting, now);
+  if (mode.mode === "off") return { status: "off", why: mode.why };
+  if (!mode.since) {
+    const value = { ...(setting ?? {}), since: new Date(now).toISOString() };
+    await d.saveStudioSetting({ key: "agent_replies", value, actor: "cta-agent" }, now);
+    mode = replyMode(env, value, now);
+  }
+  const out = {};
+  for (const channel of REPLY_CHANNELS) {
+    if (mode.mode === "live" && !publishChannels(env).includes(channel)) { out[channel] = { status: "channel_not_publishing" }; continue; }
+    const account = await accountFor(env, channel, { now, ...(fetcher ? { fetcher } : {}) }).catch(() => null);
+    if (!account?.access_token) { out[channel] = { status: "account_not_configured" }; continue; }
+    const recent = (await d.publishedSince(new Date(now - REPLY_WINDOW_DAYS * 86_400_000).toISOString(), 50)).filter((p) => p.channel === channel && /^\d+$/.test(String(p.remote_id ?? "")));
+    const posts = [];
+    for (const p of recent) posts.push({ id: p.id, remote_id: String(p.remote_id), text: (await d.get(p.id))?.text ?? "" });
+    const store = modelStore(env, now);
+    const f = fetcher ? { fetcher } : {};
+    out[channel] = await runReplies(channel, mode, {
+      posts,
+      fetchReplies: (mediaId) => threadsReplies({ account, mediaId, ...f }),
+      seen: (id) => d.replySeen(id), answeredInThread: (postId, author) => d.answeredInThread(postId, author),
+      sentSince: (s) => d.repliesSentSince(s), record: (r) => d.recordReply(r),
+      ask: (messages) => askModel(env, store, { purpose: `reply:${channel}`, messages, maxTokens: 1500, now, ...f }),
+      send: (text, replyToId) => publishThreadsReply({ account, text, replyToId, ...f, ...(sleep ? { sleep } : {}) })
+    }, { now });
+  }
+  return { status: mode.mode, channels: out };
+}
+/** Forgets the usernames and texts of replies older than KEEP_DAYS (Privacy), at the daily run. */
+export const forgetOldReplies = (env, { now = Date.now() } = {}) => desk(env).forgetReplies(new Date(now - KEEP_DAYS * 86_400_000).toISOString());
