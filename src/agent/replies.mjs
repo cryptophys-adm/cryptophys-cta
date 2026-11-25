@@ -6,6 +6,9 @@
 // (ig-reply's triage: market, question, substance, support, noise), and answers only what deserves it:
 //   - market (buy, sell, entry, target, stop, a price prediction): always the fixed MARKET_REPLY, never model text;
 //   - question and substance: a short model answer (Beam through src/agent/router.mjs) that must pass checkReply, or none;
+//   - room (what the room reads: the bias, the outlook, the War Room; owner 2026-11-25: "War room opsional jika ada
+//     pertanyaan butuh reply", then "Yes, from a fixed template"): the latest War Room reading of the chart it names
+//     (daily if none), filled into the fixed ROOM template from PublicProjection.warroom, never model text;
 //   - support and noise: no answer (a reply is reach, and reach is what bait came for).
 // The guards (orchestrator review of the plan, 2026-11-25): no number, price, level or direction in model text; the
 // guardian's rules and a reply-quality rule on every answer, and the disclaimer on each; at most 1 answer per person per
@@ -27,18 +30,20 @@ export const DISCLAIMER = "Not financial advice.";
 export const MARKET_REPLY = "Thanks for asking. We don't give buy or sell calls: our posts are education, a reading of the chart, and how you use it is your call. Not financial advice.";
 
 const MARKET = /\b(buy|sell|long|short|entry|enter|exit|tp|sl|take[- ]?profit|stop[- ]?loss|target|signal|lot ?size|lots? of \d|leverage|should i|will (it|gold|xau\w*) (go|rise|fall|drop|pump|dump|hit|reach)|where (is|will) (it|gold|price)|price (target|prediction)|moon|pump|dump)\b/i;
+const ROOM = /\b(war ?room|the room|room'?s|bias|outlook|sentiment|bullish or bearish|bearish or bullish|what do (you|the analysts|your analysts) (think|see|read)|your (view|read|reading|take))\b/i;
 const NOISE = /(https?:\/\/|www\.|t\.me\/|wa\.me\/|\bdm me\b|\bmessage me\b|\bsignal group\b|\bjoin (my|our)\b|\bguaranteed\b|\b\d+%\s*(daily|weekly|monthly|profit)\b|\bfollow (me|back)\b|\bcheck my (bio|profile)\b)/i;
 const SUPPORT = /^(\W|\p{Extended_Pictographic}|nice|great|good|thanks|thank you|thx|cool|wow|love (it|this)|agreed?|true|facts|👍|🔥)+$/iu;
 const DIRECTION = /\b(bullish|bearish|rally|crash|breakout|break out|breakdown|surge|plunge|soar|tank|uptrend|downtrend|going (up|down)|go (up|down)|will (rise|fall|drop|climb)|higher|lower|support|resistance|level|zone|price)\b/i;
 const LINKISH = /(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|net|org|io|ai|co|me|app|link|ly|gg|xyz|work)\b|t\.me\/|wa\.me\/)/i;
 const QUALITY = /\b(guarantee\w*|promise\w*|risk[- ]?free|sure win|can't lose|cannot lose|we recommend|you should (buy|sell|trade|invest))\b/i;
 
-/** ig-reply's triage of one reply: "market", "question", "substance", "support" or "noise". */
+/** ig-reply's triage of one reply: "market", "room", "question", "substance", "support" or "noise". */
 export function triage(text) {
   const t = cleanInvisible(String(text ?? "")).text.trim();
   if (!t) return "noise";
   if (NOISE.test(t)) return "noise";
   if (MARKET.test(t)) return "market";
+  if (ROOM.test(t)) return "room";
   if (SUPPORT.test(t) || t.split(/\s+/).length <= 3 && !/\?/.test(t)) return "support";
   if (/\?/.test(t)) return "question";
   return t.split(/\s+/).length >= 5 ? "substance" : "support";
@@ -80,6 +85,29 @@ export function shapeAnswer(text) {
   if (!t || /^skip\.?$/i.test(t)) return null;
   const body = t.replace(/\s*Not financial advice\.?\s*$/i, "").trim();
   return `${body}${/[.!?]$/.test(body) ? "" : "."} ${DISCLAIMER}`;
+}
+
+const ROOM_NAMES = Object.freeze({ "15m": "15-minute", "1h": "1-hour", "4h": "4-hour", "1d": "daily" });
+const BIAS = Object.freeze({ bullish: "Bullish", bearish: "Bearish", neutral: "Neutral" });
+/** The War Room the comment names (the 15-minute, 1-hour, 4-hour or daily chart), or the daily one. */
+export function roomOf(text) {
+  const t = String(text ?? "").toLowerCase();
+  if (/\b(15 ?m|15[- ]?min\w*|m15)\b/.test(t)) return "15m";
+  if (/\b(1 ?h|h1|hourly|1[- ]?hour)\b/.test(t)) return "1h";
+  if (/\b(4 ?h|h4|4[- ]?hour)\b/.test(t)) return "4h";
+  return "1d";
+}
+/**
+ * The fixed War Room answer from a reading (PublicProjection.warroom): the room, its bias, how many analysts were heard,
+ * the close it was read at, and that it is no call; null without a usable reading.
+ */
+export function roomReply(reading) {
+  const room = ROOM_NAMES[reading?.source], bias = BIAS[reading?.bias];
+  if (!room || !bias || reading?.error) return null;
+  const at = Date.parse(reading.at ?? "");
+  const close = Number.isFinite(at) ? ` at the ${new Date(at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "UTC" }).replace(/\u202f/g, " ")} UTC close` : "";
+  const heard = Number.isFinite(reading.analysts) && reading.analysts > 0 ? `, ${reading.analysts} analysts heard` : "";
+  return `The room's latest reading of the ${room} chart${close}: ${bias}${heard}. It's a reading for education, not a call to buy or sell. ${DISCLAIMER}`;
 }
 
 /** The messages for the model: the post's first line and the reply, nothing else. */
@@ -138,7 +166,11 @@ export async function runReplies(channel, mode, deps, { now = Date.now() } = {})
       if (await deps.answeredInThread(post.id, author)) { await deps.record({ ...row, status: "capped_person" }); skip("per_person"); continue; }
       if (!(await room())) { skip("cap"); break; }
       let answer = MARKET_REPLY, fromModel = false;
-      if (bucket !== "market") {
+      if (bucket === "room") {
+        const reading = deps.room ? await deps.room(roomOf(r.text)).catch(() => null) : null;
+        answer = roomReply(reading);
+        if (!answer) { await deps.record({ ...row, status: "no_reading" }); skip("no_reading"); continue; }
+      } else if (bucket !== "market") {
         const m = await deps.ask(replyPrompt({ postHead: String(post.text ?? "").split("\n")[0], reply: r.text }));
         if (!m.ok) { await deps.record({ ...row, status: "no_model", detail: m.skipped ?? m.error }); skip("no_model"); continue; }
         answer = shapeAnswer(m.text); fromModel = true;

@@ -23,7 +23,9 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
    **Replies are the one exception** (owner 2026-11-25: "semua autonomous jadi reply tanpa approval"; caps "10 an hour,
    40 a day"; "By themselves after 3 days"): the CTA agent answers replies under our own posts without a person's
    approval (`src/agent/replies.mjs`), on the channels in `REPLY_CHANNELS` (Threads first) that publish, after a 72-hour
-   dry run that sends nothing. A question about buying, selling or where the price goes gets the fixed answer only; every
+   dry run that sends nothing. A question about buying, selling or where the price goes gets the fixed answer only; a
+   question about the room's reading gets the latest War Room reading in a fixed template, never model text (owner
+   2026-11-25: "Yes, from a fixed template"); every
    answer passes the guardian's rules, the reply checks and carries "Not financial advice."; at most 1 answer per person
    per thread, 10 an hour and 40 a day; never a DM, never another account's thread. The studio's switch and the var
    `AGENT_REPLIES` stop it.
