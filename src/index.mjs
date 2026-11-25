@@ -15,9 +15,9 @@
 // Kernel: the OrganismDna and CtaHealth entrypoints serve the platform's census and drift checks.
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import puppeteer from "@cloudflare/puppeteer";
-import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus } from "./desk.mjs";
+import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls } from "./desk.mjs";
 import { editCheck } from "./compose.mjs";
-import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, collectInsights, runSchedule, ANALYSIS_CRON, analysisRunDue } from "./app.mjs";
+import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, collectInsights, runSchedule, agentWeekly, ANALYSIS_CRON, analysisRunDue } from "./app.mjs";
 import { SCHEDULE_CRON } from "./scheduler.mjs";
 import ORGANISM from "../organism.json" with { type: "json" };
 
@@ -65,6 +65,9 @@ export class ContentDesk extends DurableObject {
   async saveHashtagSet(input, now) { return saveHashtagSet(this.sql, input, { now }); }
   async studioSetting(key) { return studioSetting(this.sql, key); }
   async saveStudioSetting(input, now) { return saveStudioSetting(this.sql, input, { now }); }
+  async recordModelCall(input, now) { return recordModelCall(this.sql, input, { now }); }
+  async modelSpendSince(since) { return modelSpendSince(this.sql, since); }
+  async recentModelCalls(n) { return recentModelCalls(this.sql, { limit: n }); }
   async kindMix(from, to) { return kindMixSince(this.sql, from, to); }
   async addAbTest(input, now) { addAbTest(this.sql, input, { now }); return true; }
   async abTests() { return listAbTests(this.sql); }
@@ -117,6 +120,9 @@ export default {
     if (tokens?.status !== "publishing_off") console.log("cta_tokens", JSON.stringify(tokens));
     // Once a day: the metrics of the last two weeks' posts (only while publishing is on: before, there are none).
     if (publishOn(env)) console.log("cta_insights", JSON.stringify(await collectInsights(env).catch(fail)));
+    // The CTA agent's weekly Audit summary (src/agent/weekly.mjs): once a WIB week, with the model's key only.
+    const weekly = await agentWeekly(env).catch(fail);
+    if (weekly?.status !== "no_key" && weekly?.status !== "done_already") console.log("cta_agent_weekly", JSON.stringify(weekly));
   }
 };
 

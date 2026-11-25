@@ -9,8 +9,8 @@ import { humanScore } from "./humanizer.mjs";
 export const AGENT_SKILLS = Object.freeze([
   { id: "linter", name: "Linter", what: "Threads rules on every draft: 500 characters, the first line, one topic tag, links", runs: "each draft", model: "none", live: true },
   { id: "humanizer", name: "Humanizer", what: "Removes invisible characters when it is published; scores five checks; never rewrites the template's words", runs: "each draft", model: "none", live: true },
-  { id: "audit", name: "Audit", what: "Which posts of the last full week worked, against our own median", runs: "each WIB week (Monday to Sunday)", model: "none yet (Beam writes the summary once the router is in)", live: true },
-  { id: "plan", name: "Plan", what: "The week's mix and posting slots, from the audit; a person adds a slot", runs: "each WIB week", model: "none yet (Beam writes the reasons once the router is in)", live: true },
+  { id: "audit", name: "Audit", what: "Which posts of the last full week worked, against our own median", runs: "each WIB week (Monday to Sunday)", model: "Beam writes the week's summary (studio only), once a week", live: true },
+  { id: "plan", name: "Plan", what: "The week's mix and posting slots, from the audit; a person adds a slot", runs: "each WIB week", model: "none: the reasons are the audit's numbers", live: true },
   { id: "replies", name: "Reply triage", what: "Sorts replies under our posts and answers them", runs: "every 15 min", model: "Beam drafts; the guardian checks", live: false }
 ]);
 

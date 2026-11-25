@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-25 (the CTA agent, PR 3: the model router)
+- feat(agent): the CTA agent's model router to Reflection's Beam (owner, 25 Nov: "agent cta pakai router", https://platform.reflection.ai/; "setuju semua").
+  - `src/agent/router.mjs`: one OpenAI-compatible endpoint (`MODEL_BASE_URL`, `MODEL_ID`), with the key in the Worker secret `REFLECTION_API_KEY` set through the platform.
+  - Off until an approver turns it on in the studio (`POST /api/studio/agent/model`).
+  - A $1 daily cap over the WIB day (`MODEL_DAILY_USD`); low reasoning effort; Reflection's 429 and 403 respected.
+  - An answer under contributor retention is thrown away and the model turns off.
+  - Every call is logged in the Desk's `model_calls` (tokens, cost, status, retention), never its text.
+  - First use: the Audit's weekly summary for the studio (`src/agent/weekly.mjs`). It is thrown away if it names a number the audit does not hold, or a trading word.
+  - The Agent page shows the switch, today's spend and the latest calls.
+  - Tests AG6, AG7 and the switch test. SSOT and the Overview screenshot.
+
 ## 2026-11-25 (the CTA agent, PR 2: Audit and Plan)
 - feat(agent): the Agent page gets Audit and Plan for Threads (`src/agent/audit.mjs`, after ig-audit and ig-plan, MIT). The owner approved them with "setuju semua".
   - Audit: the last full WIB week, each post by its views over our own 28-day median, by post and by kind. A finding needs 3 posts behind it.

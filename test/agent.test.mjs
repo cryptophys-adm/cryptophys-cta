@@ -9,6 +9,8 @@ import { cleanInvisible, humanScore, jsRegex, HUMAN_CHECKS } from "../src/agent/
 import { lintThreads, threadsText, threadsLength, validTopicTag, THREADS_TOPIC_TAG, THREADS_LIMIT } from "../src/agent/threads-lint.mjs";
 import { agentChecks, AGENT_SKILLS } from "../src/agent/checks.mjs";
 import { auditThreads, planThreads, bestHours, wibWeekStart, MIN_FINDING } from "../src/agent/audit.mjs";
+import { askModel, modelConfig, costOf, wibDayStartIso, MODEL_DEFAULTS, AGENT_SECRETS } from "../src/agent/router.mjs";
+import { weeklySummary, summaryOk, SUMMARY_KEY } from "../src/agent/weekly.mjs";
 import { publishThreads } from "../src/publishers.mjs";
 import { HASHTAGS } from "../src/channels.mjs";
 import { keyLevelsText } from "../src/analysis-drafts.mjs";
@@ -132,4 +134,64 @@ test("AG5 Audit and Plan: the last full WIB week against our own median, finding
   assert.match(planThreads(auditThreads([], { now: NOW }), [], { now: NOW }).note, /No hour has 2 measured posts/);
   const js = read("public/studio/studio.js");
   assert.match(js, /call\("\/api\/studio\/settings", "POST", \{ channel: "threads", settings: \{ \.\.\.cur, schedule \} \}\)/, "a slot is added through the settings route (approver, same origin)");
+});
+
+test("AG6 the model router: the key, the switch, the daily cap, Reflection's refusals, retention, and a log without text", async () => {
+  const store = () => {
+    const s = { settings: {}, calls: [] };
+    return { s, setting: async (k) => (s.settings[k] ? { value: s.settings[k], updated_by: "x", updated_at: "t" } : null), saveSetting: async (i) => { s.settings[i.key] = i.value; return true; },
+      record: async (c) => { s.calls.push(c); return true; }, spendSince: async () => ({ calls: s.calls.length, tokens_in: 0, tokens_out: 0, cost_usd: s.calls.reduce((a, c) => a + (c.cost_usd || 0), 0) }), recent: async () => s.calls };
+  };
+  const env = { REFLECTION_API_KEY: "rk-test" };
+  const msgs = [{ role: "user", content: "hi" }];
+  const answer = (status, body, retention = "zero") => async (url, init) => { answer.last = { url, init }; return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "reflection-data-retention": retention } }); };
+  assert.deepEqual(MODEL_DEFAULTS, { base: "https://api.reflection.ai/openai/v1", model: "Beam-1.0-501B-A23B", daily_usd: 1, price_in: 0.4, price_out: 1.2 });
+  assert.deepEqual(AGENT_SECRETS, ["REFLECTION_API_KEY"]);
+  assert.deepEqual(await askModel({}, store(), { purpose: "t", messages: msgs, fetcher: () => { throw new Error("no call"); } }), { ok: false, skipped: "no_key" });
+  const fresh = store();
+  assert.deepEqual(await askModel(env, fresh, { purpose: "t", messages: msgs, fetcher: () => { throw new Error("no call"); } }), { ok: false, skipped: "off", reason: "not turned on yet" }, "off until an approver turns it on");
+  const on = () => { const x = store(); x.s.settings.agent_model = { enabled: true }; return x; };
+  const ok = on();
+  const r = await askModel(env, ok, { purpose: "audit_summary", messages: msgs, fetcher: answer(200, { choices: [{ message: { content: " Fine. " } }], usage: { prompt_tokens: 1000, completion_tokens: 500 } }) });
+  assert.deepEqual([r.ok, r.text, r.cost_usd, r.retention], [true, "Fine.", 0.001, "zero"], "$0.40 and $1.20 a million");
+  const sent = JSON.parse(answer.last.init.body);
+  assert.equal(answer.last.url, "https://api.reflection.ai/openai/v1/chat/completions");
+  assert.equal(answer.last.init.headers.authorization, "Bearer rk-test");
+  assert.deepEqual([sent.model, sent.reasoning_effort, sent.max_completion_tokens], ["Beam-1.0-501B-A23B", "low", 2000]);
+  assert.deepEqual(ok.s.calls[0], { purpose: "audit_summary", model: "Beam-1.0-501B-A23B", status: "ok", retention: "zero", tokens_in: 1000, tokens_out: 500, cost_usd: 0.001 });
+  assert.ok(!JSON.stringify(ok.s.calls).includes("Fine") && !JSON.stringify(ok.s.calls).includes("hi"), "the log keeps no text");
+  const off = store(); off.s.settings.agent_model = { enabled: false, reason: "turned off in the studio" };
+  assert.equal((await askModel(env, off, { purpose: "t", messages: msgs, fetcher: () => { throw new Error("no call"); } })).skipped, "off");
+  const spent = on(); spent.s.calls.push({ cost_usd: 1 });
+  assert.equal((await askModel(env, spent, { purpose: "t", messages: msgs, fetcher: () => { throw new Error("no call"); } })).skipped, "budget", "the daily cap");
+  const train = on();
+  assert.equal((await askModel(env, train, { purpose: "t", messages: msgs, fetcher: answer(200, { choices: [{ message: { content: "x" } }] }, "contributor") })).skipped, "retention");
+  assert.equal(train.s.settings.agent_model.enabled, false, "contributor terms turn the model off");
+  const broke = on();
+  const b = await askModel(env, broke, { purpose: "t", messages: msgs, fetcher: answer(403, { error: { code: "prepaid_balance_exhausted" } }) });
+  assert.deepEqual([b.ok, b.status, broke.s.calls[0].status, broke.s.calls[0].detail], [false, 403, "http_403", "prepaid_balance_exhausted"]);
+  assert.equal(costOf(modelConfig({ MODEL_PRICE_IN: "0.25", MODEL_PRICE_OUT: "1" }), 2_000_000, 1_000_000), 1.5);
+  assert.equal(modelConfig({ MODEL_BASE_URL: "http://plain" }).base, MODEL_DEFAULTS.base, "https only");
+  assert.equal(wibDayStartIso(Date.parse("2026-11-25T05:00:00Z")), "2026-11-24T17:00:00.000Z");
+});
+
+test("AG7 the weekly summary: once a week, only the audit's facts, no added number and no trading words", async () => {
+  assert.ok(summaryOk("War Room did best at 4× the median over 3 posts.", { kinds: [{ median_multiple: 4, posts: 3 }] }));
+  assert.ok(!summaryOk("War Room did best at 5× the median.", { kinds: [{ median_multiple: 4 }] }), "a number not in the facts");
+  assert.ok(!summaryOk("Buy more War Room posts.", {}), "a trading word");
+  const NOW = Date.parse("2026-11-25T05:00:00Z");
+  const posts = ["2026-11-18T12:30:00Z", "2026-11-19T12:30:00Z", "2026-11-20T12:30:00Z"].map((at, i) => ({ id: `w${i}`, kind: "warroom", channel: "threads", text: "Education · x", published_at: at, metrics: { views: 1000, comments: 1, reposts: 0 } }));
+  const saved = { agent_model: { enabled: true } }, calls = [];
+  const store = { setting: async (k) => (saved[k] ? { value: saved[k] } : null), saveSetting: async (i) => { saved[i.key] = i.value; }, record: async (c) => calls.push(c), spendSince: async () => ({ cost_usd: 0 }), recent: async () => [] };
+  const fetcher = async () => new Response(JSON.stringify({ choices: [{ message: { content: "War Room held the median over 3 posts." } }], usage: { prompt_tokens: 10, completion_tokens: 10 } }), { headers: { "reflection-data-retention": "zero" } });
+  const env = { REFLECTION_API_KEY: "rk" };
+  assert.equal((await weeklySummary(env, store, posts, { now: NOW, fetcher })).status, "written");
+  assert.deepEqual(saved[SUMMARY_KEY], { week: "2026-11-15T17:00:00.000Z", text: "War Room held the median over 3 posts.", model: "beam" });
+  assert.equal((await weeklySummary(env, store, posts, { now: NOW, fetcher: () => { throw new Error("no second call"); } })).status, "done_already");
+  const bad = async () => new Response(JSON.stringify({ choices: [{ message: { content: "Sell gold now, 9× better." } }] }), { headers: { "reflection-data-retention": "zero" } });
+  const other = { agent_model: { enabled: true } };
+  const store2 = { ...store, setting: async (k) => (other[k] ? { value: other[k] } : null), saveSetting: async (i) => { other[i.key] = i.value; } };
+  assert.equal((await weeklySummary(env, store2, posts, { now: NOW, fetcher: bad })).status, "summary_refused");
+  assert.equal(other[SUMMARY_KEY], undefined, "nothing kept");
+  assert.equal((await weeklySummary(env, store2, [], { now: NOW, fetcher: bad })).status, "nothing_to_sum_up");
 });
