@@ -11,12 +11,23 @@
 //   - Reflection's own answers: a 429 or 403 stops the call (Reflection's prepaid credit is the second cap);
 //   - data retention: Reflection states it on every answer (`reflection-data-retention`); "contributor" (the request
 //     may train its models) turns the model off in the studio and the answer is thrown away;
-//   - reasoning effort "low" by default (Beam always reasons; its reasoning tokens bill as output).
+//   - reasoning effort "low" by default (Beam always reasons; its reasoning tokens bill as output);
+//   - free only (owner 2026-11-25: "tetap siapkan callback jika beam tidak bisa dijangkau atau menjadi berbayar atau
+//     lebih dari batasan"; Reflection's free Beta: 10M input and 1M output tokens a day, 60 a minute, shared by the
+//     organisation): MODEL_FREE_ONLY "on" by default; a 402, a billing or credit error, or an answer that reports a cost
+//     above 0 turns the model off in the studio with the reason and logs `cta_model_off` once; CTA's own daily token
+//     caps (MODEL_DAILY_TOKENS_IN, MODEL_DAILY_TOKENS_OUT; CTA's share until the organisation's split is set) and a
+//     per-minute guard (MODEL_RPM, default 50) skip the call. Every skip leaves the caller's fallback: the template, or
+//     no reply.
 // Every call is logged (tokens, cost, status, retention), never its prompt or answer. Text it writes is shown only in
 // the studio until the owner's Replies PR says otherwise; it never states a price or a level it was not given.
 /** The router's Worker secret, set by the owner through the platform (organism.json `deploy.secrets_kept`). */
 export const AGENT_SECRETS = Object.freeze(["REFLECTION_API_KEY"]);
-export const MODEL_DEFAULTS = Object.freeze({ base: "https://api.reflection.ai/openai/v1", model: "Beam-1.0-501B-A23B", daily_usd: 1, price_in: 0.4, price_out: 1.2 });
+export const MODEL_DEFAULTS = Object.freeze({ base: "https://api.reflection.ai/openai/v1", model: "Beam-1.0-501B-A23B", daily_usd: 1, price_in: 0.4, price_out: 1.2,
+  free_only: true, tokens_in_day: 2_000_000, tokens_out_day: 200_000, rpm: 50 });
+/** The skips that end a run quietly: the caller falls back (the template, or no reply) and tries again later. */
+export const MODEL_STOPS = Object.freeze(["off", "no_key", "budget", "retention", "tokens", "rpm", "paid"]);
+const BILLING = /billing|credit|payment|insufficient[_ ]?(funds|balance)|prepaid|paid[_ ]?plan|upgrade|subscription/i;
 const WIB = 7 * 3_600_000;
 const DAY = 86_400_000;
 const pos = (v, d) => (Number.isFinite(Number(v)) && Number(v) >= 0 && String(v).trim() !== "" ? Number(v) : d);
@@ -30,6 +41,10 @@ export function modelConfig(env = {}) {
     daily_usd: pos(env.MODEL_DAILY_USD, MODEL_DEFAULTS.daily_usd),
     price_in: pos(env.MODEL_PRICE_IN, MODEL_DEFAULTS.price_in),
     price_out: pos(env.MODEL_PRICE_OUT, MODEL_DEFAULTS.price_out),
+    free_only: String(env.MODEL_FREE_ONLY ?? "on").trim().toLowerCase() !== "off",
+    tokens_in_day: pos(env.MODEL_DAILY_TOKENS_IN, MODEL_DEFAULTS.tokens_in_day),
+    tokens_out_day: pos(env.MODEL_DAILY_TOKENS_OUT, MODEL_DEFAULTS.tokens_out_day),
+    rpm: pos(env.MODEL_RPM, MODEL_DEFAULTS.rpm),
     has_key: Boolean(String(env.REFLECTION_API_KEY ?? "").trim())
   };
 }
@@ -50,7 +65,15 @@ export async function askModel(env, store, { purpose, messages, maxTokens = 2000
   if (sw?.value?.enabled !== true) return { ok: false, skipped: "off", reason: sw?.value?.reason ?? "not turned on yet" };
   const spent = await store.spendSince(wibDayStartIso(now));
   if (spent.cost_usd >= cfg.daily_usd) return { ok: false, skipped: "budget", spent_usd: spent.cost_usd, cap_usd: cfg.daily_usd };
+  if (spent.tokens_in >= cfg.tokens_in_day || spent.tokens_out >= cfg.tokens_out_day) return { ok: false, skipped: "tokens", tokens_in: spent.tokens_in, tokens_out: spent.tokens_out };
+  const minute = await store.spendSince(new Date(now - 60_000).toISOString());
+  if (minute.calls >= cfg.rpm) return { ok: false, skipped: "rpm", calls_last_minute: minute.calls };
   const log = (c) => store.record({ purpose, model: cfg.model, ...c }).catch(() => false);
+  // Free only: the model goes off with the reason (the studio shows it) and one log line; callers fall back.
+  const turnOff = async (reason) => {
+    await store.saveSetting({ key: "agent_model", value: { enabled: false, reason }, actor: "cta-agent" }).catch(() => null);
+    console.log("cta_model_off", JSON.stringify({ purpose, reason }));
+  };
   let res;
   try {
     res = await fetcher(`${cfg.base}/chat/completions`, {
@@ -72,6 +95,13 @@ export async function askModel(env, store, { purpose, messages, maxTokens = 2000
     await store.saveSetting({ key: "agent_model", value: { enabled: false, reason: "Reflection answered under contributor terms (it may train on our data): the model is off until an approver turns it on" }, actor: "cta-agent" }).catch(() => null);
     return { ok: false, skipped: "retention" };
   }
+  const billed = Number(body?.usage?.cost ?? body?.usage?.total_cost ?? body?.cost ?? 0);
+  const said = `${body?.error?.code ?? ""} ${body?.error?.type ?? ""} ${body?.error?.message ?? ""}`;
+  if (cfg.free_only && (res.status === 402 || BILLING.test(said) || (Number.isFinite(billed) && billed > 0))) {
+    await log({ status: res.status === 402 ? "http_402" : billed > 0 ? "billed" : `http_${res.status}`, retention, ...usage, cost_usd, detail: "paid" });
+    await turnOff(`Reflection asked for payment or reported a cost (${res.status === 402 ? "402" : billed > 0 ? `cost ${billed}` : String(body?.error?.code ?? res.status).slice(0, 40)}): the model is off until an approver turns it on; posts keep their templates`);
+    return { ok: false, skipped: "paid" };
+  }
   if (!res.ok) {
     const code = String(body?.error?.code ?? res.status).slice(0, 60);
     await log({ status: `http_${res.status}`, retention, ...usage, cost_usd, detail: code });
@@ -89,6 +119,7 @@ export async function modelStatus(env, store, { now = Date.now() } = {}) {
   return {
     model: cfg.model, host: new URL(cfg.base).host, has_key: cfg.has_key, enabled: sw?.value?.enabled === true, reason: sw?.value?.reason ?? (sw ? null : "not turned on yet"),
     switched_by: sw?.updated_by ?? null, switched_at: sw?.updated_at ?? null,
-    cap_usd: cfg.daily_usd, today: await store.spendSince(wibDayStartIso(now)), recent: await store.recent(10)
+    cap_usd: cfg.daily_usd, free_only: cfg.free_only, caps: { tokens_in: cfg.tokens_in_day, tokens_out: cfg.tokens_out_day, rpm: cfg.rpm },
+    today: await store.spendSince(wibDayStartIso(now)), recent: await store.recent(10)
   };
 }

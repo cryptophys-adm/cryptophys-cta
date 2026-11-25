@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-25 (Beam free-only guards; publish failures logged; a longer Threads wait)
+- feat(router): Beam is used on the free plan only, with CTA's own limits. Owner, 25 Nov: "tetap siapkan callback jika beam tidak bisa dijangkau atau menjadi berbayar atau lebih dari batasan".
+  - `MODEL_FREE_ONLY` is on by default. A 402, a billing or credit error, or an answer that reports a cost turns the model off in the studio, with the reason. It also logs `cta_model_off`.
+  - Daily token caps: `MODEL_DAILY_TOKENS_IN` 2,000,000 and `MODEL_DAILY_TOKENS_OUT` 200,000, which is CTA's share until the organisation's split is set.
+  - `MODEL_RPM` caps calls at 50 a minute.
+  - Every skip falls back: posts keep their templates, and replies are not sent. The studio's model block shows the limits.
+- feat(log): every failed publish logs `cta_publish_failed` with id, channel, kind and error, capped at 200 characters, with no token and no URL query. From the orchestrator's review, after a Threads post failed at 15:15 UTC with its error visible only in the studio.
+- fix(threads): the container wait now polls for up to about 60 seconds (it was about 17) and keeps the platform's `error_message`.
+- Test AG18; AG6 updated: a credit error now turns the model off.
+
 ## 2026-11-25 (auto-approve at once; About step 4; realtime risk accepted)
 - feat(agent): a draft of an auto-approved kind is now approved and published as soon as it is ready and checked. It used to wait 15 minutes.
   - The owner asked "kenapa lama 25m setelah close 1H ?" and then chose "Jendela 0 menit + opsi 3".

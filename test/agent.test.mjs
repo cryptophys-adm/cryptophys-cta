@@ -16,7 +16,7 @@ import { hookScore, hookFormula, openingLine, HOOK_CHECKS } from "../src/agent/h
 import { splitPost, joinPost, checkWritten, writeMode, runWrite, factTokens, WRITE_KINDS, OUTCOME_WORDS } from "../src/agent/write.mjs";
 import { lintPost, textFor } from "../src/agent/lint.mjs";
 import { CHANNELS } from "../src/channels.mjs";
-import { askModel, modelConfig, costOf, wibDayStartIso, MODEL_DEFAULTS, AGENT_SECRETS } from "../src/agent/router.mjs";
+import { askModel, modelConfig, costOf, wibDayStartIso, MODEL_DEFAULTS, AGENT_SECRETS, MODEL_STOPS } from "../src/agent/router.mjs";
 import { weeklySummary, summaryOk, summaryKey } from "../src/agent/weekly.mjs";
 import { triage, checkReply, shapeAnswer, replyMode, runReplies, roomReply, roomOf, ROOM_MAX_AGE_MIN, MARKET_REPLY, DISCLAIMER, REPLY_CHANNELS, REPLY_CAPS, DRY_RUN_HOURS } from "../src/agent/replies.mjs";
 import { autoAt, dueNow, AUTO_WINDOW_MINUTES } from "../src/agent/auto-approve.mjs";
@@ -165,7 +165,7 @@ test("AG6 the model router: the key, the switch, the daily cap, Reflection's ref
   const env = { REFLECTION_API_KEY: "rk-test" };
   const msgs = [{ role: "user", content: "hi" }];
   const answer = (status, body, retention = "zero") => async (url, init) => { answer.last = { url, init }; return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "reflection-data-retention": retention } }); };
-  assert.deepEqual(MODEL_DEFAULTS, { base: "https://api.reflection.ai/openai/v1", model: "Beam-1.0-501B-A23B", daily_usd: 1, price_in: 0.4, price_out: 1.2 });
+  assert.deepEqual(MODEL_DEFAULTS, { base: "https://api.reflection.ai/openai/v1", model: "Beam-1.0-501B-A23B", daily_usd: 1, price_in: 0.4, price_out: 1.2, free_only: true, tokens_in_day: 2_000_000, tokens_out_day: 200_000, rpm: 50 });
   assert.deepEqual(AGENT_SECRETS, ["REFLECTION_API_KEY"]);
   assert.deepEqual(await askModel({}, store(), { purpose: "t", messages: msgs, fetcher: () => { throw new Error("no call"); } }), { ok: false, skipped: "no_key" });
   const fresh = store();
@@ -189,7 +189,10 @@ test("AG6 the model router: the key, the switch, the daily cap, Reflection's ref
   assert.equal(train.s.settings.agent_model.enabled, false, "contributor terms turn the model off");
   const broke = on();
   const b = await askModel(env, broke, { purpose: "t", messages: msgs, fetcher: answer(403, { error: { code: "prepaid_balance_exhausted" } }) });
-  assert.deepEqual([b.ok, b.status, broke.s.calls[0].status, broke.s.calls[0].detail], [false, 403, "http_403", "prepaid_balance_exhausted"]);
+  assert.deepEqual([b.ok, b.skipped, broke.s.calls[0].status, broke.s.calls[0].detail, broke.s.settings.agent_model.enabled], [false, "paid", "http_403", "paid", false], "free only: a credit error turns the model off");
+  const loud = on();
+  const l = await askModel({ ...env, MODEL_FREE_ONLY: "off" }, loud, { purpose: "t", messages: msgs, fetcher: answer(403, { error: { code: "prepaid_balance_exhausted" } }) });
+  assert.deepEqual([l.ok, l.status, loud.s.calls[0].detail, loud.s.settings.agent_model.enabled], [false, 403, "prepaid_balance_exhausted", true], "MODEL_FREE_ONLY off: the refusal only stops the call");
   assert.equal(costOf(modelConfig({ MODEL_PRICE_IN: "0.25", MODEL_PRICE_OUT: "1" }), 2_000_000, 1_000_000), 1.5);
   assert.equal(modelConfig({ MODEL_BASE_URL: "http://plain" }).base, MODEL_DEFAULTS.base, "https only");
   assert.equal(wibDayStartIso(Date.parse("2026-11-25T05:00:00Z")), "2026-11-24T17:00:00.000Z");
@@ -576,4 +579,52 @@ test("AG17 the analysis run's log (orchestrator review after the 07:09 UTC miss)
   assert.match(read("src/app.mjs"), /\.\.\.read, drafts: drafts\.map\(\(x\) => \(\{ id: x\.id, status: x\.status \}\)\), added, \.\.\.\(dropped\.length \? \{ dropped \} : \{\}\)/);
   assert.match(read("AGENTS.md"), /held: owner 2026-11-25, dynamic-worker budget/);
   assert.match(read("docs/SSOT.md"), /\*\*held: owner 2026-11-25, dynamic-worker budget\*\*/);
+});
+
+test("AG18 free only, the token caps, the minute guard (owner 2026-11-25: \"tetap siapkan callback jika beam tidak bisa dijangkau atau menjadi berbayar atau lebih dari batasan\"); a publish failure logged; the Threads wait", async () => {
+  const store = (spent = {}) => {
+    const s = { settings: { agent_model: { enabled: true } }, calls: [] };
+    return { s, setting: async (k) => (s.settings[k] ? { value: s.settings[k] } : null), saveSetting: async (i) => { s.settings[i.key] = i.value; return true; },
+      record: async (c) => { s.calls.push(c); return true; }, spendSince: async (since) => ({ calls: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0, ...(typeof spent === "function" ? spent(since) : spent) }), recent: async () => s.calls };
+  };
+  const env = { REFLECTION_API_KEY: "rk-test" }, msgs = [{ role: "user", content: "hi" }];
+  const answer = (status, body) => async () => new Response(JSON.stringify(body), { status, headers: { "reflection-data-retention": "zero" } });
+  const none = () => { throw new Error("no call"); };
+  assert.deepEqual(MODEL_STOPS, ["off", "no_key", "budget", "retention", "tokens", "rpm", "paid"]);
+  // 402, and an answer that reports a cost: off, once, with the reason; the caller falls back
+  const p402 = store();
+  assert.equal((await askModel(env, p402, { purpose: "write:threads", messages: msgs, fetcher: answer(402, { error: { message: "Payment required" } }) })).skipped, "paid");
+  assert.equal(p402.s.settings.agent_model.enabled, false);
+  assert.match(p402.s.settings.agent_model.reason, /payment|cost/);
+  assert.equal((await askModel(env, p402, { purpose: "t", messages: msgs, fetcher: none })).skipped, "off", "off until an approver turns it on");
+  const billed = store();
+  assert.equal((await askModel(env, billed, { purpose: "t", messages: msgs, fetcher: answer(200, { choices: [{ message: { content: "x" } }], usage: { prompt_tokens: 10, completion_tokens: 5, cost: 0.002 } }) })).skipped, "paid", "a reported cost above 0");
+  assert.equal(billed.s.settings.agent_model.enabled, false);
+  // CTA's own daily token caps and the minute guard: no call
+  assert.equal((await askModel(env, store({ tokens_in: 2_000_000 }), { purpose: "t", messages: msgs, fetcher: none })).skipped, "tokens");
+  assert.equal((await askModel(env, store({ tokens_out: 200_000 }), { purpose: "t", messages: msgs, fetcher: none })).skipped, "tokens");
+  const busy = store((since) => (Date.parse(since) > Date.now() - 120_000 ? { calls: 50 } : {}));
+  assert.equal((await askModel(env, busy, { purpose: "t", messages: msgs, fetcher: none })).skipped, "rpm", "50 a minute at the most");
+  assert.deepEqual(modelConfig({ MODEL_DAILY_TOKENS_IN: "5000000", MODEL_RPM: "20" }).tokens_in_day, 5_000_000);
+  // cta-write stops quietly on any of them (the template stays)
+  const deps = { candidates: async () => [{ id: "p", kind: "pattern", channel: "threads", text: "Education · x\nbody 1\n\nNot financial advice." }], ask: async () => ({ ok: false, skipped: "rpm" }), check: () => ({ pass: true }), record: async () => { throw new Error("no record"); } };
+  assert.equal((await runWrite("threads", deps)).stopped, "rpm");
+  // a publish failure: one telemetry line, never a token or a URL's query
+  const { safeError } = await import("../src/app.mjs");
+  assert.equal(safeError(new Error("threads 400: bad https://graph.threads.net/v1.0/1/threads?access_token=EAAB123 token=abcdefabcdefabcdefabcdefabcdefabcdef")), "threads 400: bad https://graph.threads.net/v1.0/1/threads token=…");
+  assert.ok(safeError("x".repeat(500)).length <= 200);
+  assert.match(read("src/app.mjs"), /console\.log\("cta_publish_failed", JSON\.stringify\(\{ id: draft\.id, channel: draft\.channel, kind: draft\.kind, error: safeError\(error\) \}\)\);/);
+  // the Threads container wait: up to about 60 seconds, the platform's message kept
+  const { waitReady, WAIT_STEPS_MS } = await import("../src/publishers.mjs");
+  assert.equal(WAIT_STEPS_MS.reduce((a, b) => a + b, 0), 60_000);
+  const waited = [], asked = [];
+  const slow = async (url) => { asked.push(new URL(String(url)).searchParams.get("fields")); return Response.json({ status: asked.length < 4 ? "IN_PROGRESS" : "FINISHED" }); };
+  assert.equal(await waitReady(slow, "https://graph.threads.net/v1.0/c1", "T", "status", { sleep: async (ms) => { waited.push(ms); } }), "FINISHED");
+  assert.deepEqual([waited, asked[0]], [[2_000, 3_000, 5_000], "status,error_message"]);
+  const bad = async () => Response.json({ status: "ERROR", error_message: "Media download failed" });
+  await assert.rejects(waitReady(bad, "https://graph.threads.net/v1.0/c1", "T", "status", { sleep: async () => {} }), /container error: Media download failed/);
+  const never = async () => Response.json({ status: "IN_PROGRESS" });
+  const w2 = [];
+  await assert.rejects(waitReady(never, "https://graph.threads.net/v1.0/c1", "T", "status", { sleep: async (ms) => { w2.push(ms); } }), /not ready in time \(last status IN_PROGRESS\)/);
+  assert.equal(w2.reduce((a, b) => a + b, 0), 60_000, "60 seconds at the most");
 });

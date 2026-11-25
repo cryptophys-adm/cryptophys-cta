@@ -193,9 +193,15 @@ export async function publishDraft(env, draft, { now = Date.now(), fetcher, slot
       saveToken: (token) => saveTokenSealed(env, draft.channel, token, now), tiktokAudited: String(env.TIKTOK_AUDITED ?? "").trim().toLowerCase() === "yes" });
     return desk(env).published({ id: draft.id, remoteId: r.remote_id, ...(out.changed ? { text: out.text } : {}) }, now);
   } catch (error) {
+    // One telemetry line per failure (orchestrator review, 2026-11-25, after a Threads post failed with its error only
+    // in the studio): the id, channel, kind and the error, at most 200 characters, never a token or a URL's query.
+    console.log("cta_publish_failed", JSON.stringify({ id: draft.id, channel: draft.channel, kind: draft.kind, error: safeError(error) }));
     return desk(env).published({ id: draft.id, error: String(error?.message ?? error) }, now);
   }
 }
+
+/** An error for the log: no URL query, no token-like string, at most 200 characters. */
+export const safeError = (error) => String(error?.message ?? error ?? "").replace(/(https?:\/\/[^\s?#]+)[?#]\S*/g, "$1").replace(/(access_token|token|key|secret)=\S+/gi, "$1=…").replace(/\b[A-Za-z0-9_\-]{32,}\b/g, "…").slice(0, 200);
 
 /** A draft's own media from the desk ({ bytes, mime }), for the video publishers (they upload the bytes). */
 export async function mediaBytes(env, draft) {
