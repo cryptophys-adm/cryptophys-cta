@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-25 (the public pages read again every minute; the track record a minute at the edge)
+- feat(public): the track record is as live as Nexus's. Owner, 25 Nov: "harus realtime"; then "Everything realtime".
+  - `TRACK_TTL_S` 600 to 60: the edge and the browser keep `/api/public/track-record` a minute. An empty record is still not cached. The War Room scene was already 60; the profile and the archive are not cached.
+  - `site/home/live.js`: every minute while the tab is shown, and once when it is shown again, the pages read again. Never two reads at once; a failed or empty read keeps what is on screen. The average strip on every page, the Performance table, the home's latest post and the Archive's list.
+  - No public text changes here. The Performance line above the table now comes from one function, `basisOf`, with the same words; the words for a delay of 0 wait for the owner.
+- Tests TK4, TK-D, TK-L and TH9; `test/fixtures/track-heights.json` measured again (the heights unchanged).
+
 ## 2026-11-25 (key-level maps: a zero-width zone as one price; map ids compared as times)
 - fix(analysis): a zone whose low and high round to the same price now shows one price, in the post's text and on the card. Owner, 25 Nov: "1. Yes". Example: "Supply (sell area) 3546.64 (weak: 1H swing low)", where it used to read "3546.64-3546.64".
   - A normal zone still shows "low–high". Only the rendering changes; xauusd's data is untouched.

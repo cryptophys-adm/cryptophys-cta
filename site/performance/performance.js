@@ -4,7 +4,11 @@
 // The record is preloaded in the page's head and its box (.track-box, aria-busy) holds the drawn table's height while it
 // loads, so the footnote, the terms and the footer do not move (the one-theme backlog, PR 3, C1; home.css). The Threads
 // links come from the public profile through the shared applyProfile (C3), as on the pages of ../page/page.js.
-import { trackModel, TRACK_URL, NOT_YET } from '../home/track.js';
+// Live (owner 2026-11-25: "harus realtime", as Nexus's): the record is read again every minute while the tab is shown
+// and once when it is shown again (../home/live.js); a new record redraws the table and the strip, an empty or failed
+// read keeps the last numbers on screen.
+import { trackModel, basisOf, TRACK_URL, NOT_YET } from '../home/track.js';
+import { liveTrack } from '../home/live.js';
 import { renderAvgStrip } from '../home/avg-strip.js';
 import { startClock } from '../home/header.js';
 import { applyProfile, PROFILE_URL } from '../page/profile.js';
@@ -18,13 +22,14 @@ const make = (tag, cls, text) => { const n = document.createElement(tag); if (cl
 function draw(body) {
   const m = trackModel(body);
   if (!m.available) {
-    $('basis').textContent = 'Simulated. Updated daily, a day behind.';
+    $('basis').textContent = basisOf(null);
     $('track-empty').textContent = NOT_YET;
     $('track-empty').hidden = false;
     $('track-body').hidden = true;
     return;
   }
   $('basis').textContent = m.basis;
+  $('track-empty').hidden = true;
   for (const c of m.columns) {
     const th = $(`col-${c.id}`);
     th.replaceChildren(document.createTextNode(c.title), ...(c.sub ? [make('small', null, c.sub)] : []));
@@ -59,5 +64,7 @@ fetch(TRACK_URL)
     draw(body);
     renderAvgStrip(body);
     $('track-box').removeAttribute('aria-busy');
+    // From here on the record is read again each minute; only a record with numbers redraws the page.
+    liveTrack((next) => { draw(next); renderAvgStrip(next); }, { first: body });
   });
 fetch(PROFILE_URL).then(json).catch(() => null).then((p) => applyProfile(p));

@@ -59,6 +59,15 @@ function cells(c, s) {
 }
 
 /**
+ * Pure: the line above the table, from the record's own `delay_hours` (24 without it, or without a record). Its
+ * wording for a delay of 0 waits for the owner (the AI Worker now counts each plan once it closes): it is kept here only.
+ */
+export function basisOf(body) {
+  const delay = finite(body?.delay_hours) ? body.delay_hours : 24;
+  return `Simulated. Updated daily, ${delay === 24 ? 'a day' : `${delay} hours`} behind.`;
+}
+
+/**
  * Pure: the Performance table as the page draws it: the basis line, each column's own count and start under its title,
  * four rows (win rate, expectancy, net R, profit factor). A column without numbers is one pending cell over the four
  * rows (`rowspan` 4) that reads PENDING_NOTE. `available` false: the page says the numbers are not available yet.
@@ -66,7 +75,6 @@ function cells(c, s) {
 export function trackModel(body) {
   const rowLabels = ['Win rate', 'Expectancy', 'Net R', 'Profit factor'];
   if (!trackAvailable(body)) return { available: false, basis: '', columns: COLUMNS.map((c) => ({ id: c.id, title: c.title, sub: '', shown: false })), rows: [] };
-  const delay = finite(body.delay_hours) ? body.delay_hours : 24;
   const columns = COLUMNS.map((c) => {
     const s = shownScenario(body, c.id);
     const since = s ? dayWords(s.since) : '';
@@ -78,7 +86,7 @@ export function trackModel(body) {
   }));
   return {
     available: true,
-    basis: `Simulated. Updated daily, ${delay === 24 ? 'a day' : `${delay} hours`} behind.`,
+    basis: basisOf(body),
     columns: columns.map(({ cells: _, ...c }) => c),
     rows
   };

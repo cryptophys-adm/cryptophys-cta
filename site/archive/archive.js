@@ -7,6 +7,7 @@ import { startClock } from '../home/header.js';
 import { renderAvgStrip } from '../home/avg-strip.js';
 import { TRACK_URL } from '../home/track.js';
 import { applyProfile, PROFILE_URL } from '../page/profile.js';
+import { liveTrack, everyMinute, readAgain } from '../home/live.js';
 
 startClock();
 
@@ -45,6 +46,7 @@ function drawTabs() {
 // text as published and, when the post had one, its card, which is fetched only then.
 function postLine(p) {
   const box = make('details', 'a-post');
+  box.dataset.key = `${p.at}|${p.channel}|${p.head}`;
   const sum = make('summary');
   const t = make('time', 'a-time'); t.dateTime = p.at;
   t.append(make('span', null, p.time));
@@ -67,6 +69,8 @@ function render() {
   drawTabs();
   const m = archiveModel(state.posts, state.kind, { label: state.label });
   const box = $('archive');
+  // A post the visitor opened stays open when the list is drawn again with a newer answer.
+  const opened = new Set([...box.querySelectorAll('details[open]')].map((d) => d.dataset.key));
   box.replaceChildren();
   if (m.empty) box.append(make('p', 'empty', m.empty));
   m.days.forEach((d, i) => {
@@ -75,7 +79,7 @@ function render() {
     const h2 = make('h2', null, d.day); h2.id = `day-${i}`;
     sec.setAttribute('aria-labelledby', h2.id);
     const list = make('ul', 'a-posts');
-    for (const p of d.posts) { const li = make('li'); li.append(postLine(p)); list.append(li); }
+    for (const p of d.posts) { const li = make('li'), line = postLine(p); if (opened.has(line.dataset.key)) line.open = true; li.append(line); list.append(li); }
     sec.append(h2, list);
     box.append(sec);
   });
@@ -108,5 +112,15 @@ const profile = json(PROFILE_URL).then((p) => {
 Promise.all([profile, fetch(ARCHIVE_URL).then((r) => (r.ok ? r.json() : null)).catch(() => null)]).then(([, a]) => {
   state.posts = Array.isArray(a?.posts) ? a.posts : [];
   render();
+  // Read again every minute while the tab is shown (owner 2026-11-25: "Everything realtime"; ../home/live.js): the
+  // list is drawn again only when the answer changed; a failed read keeps the posts on screen.
+  let last = JSON.stringify(state.posts);
+  everyMinute(async () => {
+    const next = await readAgain(ARCHIVE_URL);
+    if (!Array.isArray(next?.posts)) return;
+    const s = JSON.stringify(next.posts);
+    if (s === last) return;
+    last = s; state.posts = next.posts; render();
+  });
 });
-json(TRACK_URL).then((body) => renderAvgStrip(body));
+json(TRACK_URL).then((body) => { renderAvgStrip(body); liveTrack(renderAvgStrip, { first: body }); });
