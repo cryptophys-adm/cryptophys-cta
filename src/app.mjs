@@ -552,7 +552,9 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
   const media = request.method === "GET" ? MEDIA_PATH.exec(path) : null;
   if (media) {
     const m = await desk(env).media(media[1]).catch(() => null);
-    if (!m || (m.draft_status !== "approved" && m.draft_status !== "published")) return json({ error: "not_found" }, 404);
+    // Served while the post is going out too (status publishing, the claim of #93): Threads and Instagram fetch the
+    // card during the publish call; without it they answered "400 An unknown error occurred" (2026-11-25 15:15, 16:10).
+    if (!m || !PUBLIC_MEDIA.includes(m.draft_status)) return json({ error: "not_found" }, 404);
     if ((media[2] === "webm") !== (m.content_type === "video/webm")) return json({ error: "not_found" }, 404);
     return image(m, "public, max-age=86400");
   }
@@ -1139,6 +1141,9 @@ export async function aboutLedeLive(env, url) {
     return res.ok && (await res.text()).includes(ABOUT_LEDE);
   } catch { return false; }
 }
+
+/** The draft statuses whose card is public: approved, being published (the platform fetches it then), published. */
+export const PUBLIC_MEDIA = Object.freeze(["approved", "publishing", "published"]);
 
 async function asset(env, request, url, rewrite, status) {
   if (!env.ASSETS) return json({ error: "not_found" }, 404);

@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule, cardPathOf, agentReplies, aboutLedeLive, agentWrite } from "../src/app.mjs";
+import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule, cardPathOf, agentReplies, aboutLedeLive, agentWrite, PUBLIC_MEDIA } from "../src/app.mjs";
 import { ABOUT_LEDE } from "../src/agent/write.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
@@ -275,6 +275,12 @@ test("Instagram cards: rendered for drafts that need one, then served publicly o
   assert.equal(pub.status, 200);
   assert.deepEqual([...new Uint8Array(await pub.arrayBuffer())].slice(0, 2), [0xff, 0xd8]);
   assert.equal((await handle(req(`/media/${"0".repeat(32)}.jpg`), e, opts)).status, 404);
+  // While the post goes out (status publishing, the claim): still served, because Threads and Instagram fetch the card
+  // during the publish call (regression: 2026-11-25 15:15 and 16:10, Threads "400 An unknown error occurred").
+  assert.equal(claimPublish(d.sql, { id: ok.id }).ok, true);
+  assert.equal(getDraft(d.sql, ok.id).status, "publishing");
+  assert.equal((await handle(req(`/media/${m[1]}.jpg`), e, opts)).status, 200, "served while publishing");
+  assert.deepEqual(PUBLIC_MEDIA, ["approved", "publishing", "published"]);
   // Published, the Archive names its card by path (the digest, owner 2026-11-23; orchestrator review of #73), never the stored URL.
   recordPublish(d.sql, { id: ok.id, remoteId: "ig1" });
   const [post] = (await (await handle(req("/api/public/archive"), e, opts)).json()).posts;
@@ -1070,3 +1076,4 @@ test("one claim before publishing (orchestrator review of #93): two runs publish
   assert.deepEqual(claimPublish(d.sql, { id: "t2" }, { now: T + 12 * 60_000 }), { ok: false, status: "failed" }, "a failed draft is not claimed: a person uses Publish now");
   assert.deepEqual(claimPublish(d.sql, { id: "t1" }, { now: T }), { ok: false, status: "published" }, "a published draft is never claimed");
 });
+
