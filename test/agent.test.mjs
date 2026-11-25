@@ -165,7 +165,7 @@ test("AG6 the model router: the key, the switch, the daily cap, Reflection's ref
   const env = { REFLECTION_API_KEY: "rk-test" };
   const msgs = [{ role: "user", content: "hi" }];
   const answer = (status, body, retention = "zero") => async (url, init) => { answer.last = { url, init }; return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "reflection-data-retention": retention } }); };
-  assert.deepEqual(MODEL_DEFAULTS, { base: "https://api.reflection.ai/openai/v1", model: "Beam-1.0-501B-A23B", daily_usd: 1, price_in: 0.4, price_out: 1.2, free_only: true, tokens_in_day: 2_000_000, tokens_out_day: 200_000, rpm: 50 });
+  assert.deepEqual(MODEL_DEFAULTS, { base: "https://api.reflection.ai/openai/v1", model: "Beam-1.0-501B-A23B", daily_usd: 1, price_in: 0.4, price_out: 1.2, free_only: true, tokens_in_day: 1_000_000, tokens_out_day: 200_000, rpm: 20 });
   assert.deepEqual(AGENT_SECRETS, ["REFLECTION_API_KEY"]);
   assert.deepEqual(await askModel({}, store(), { purpose: "t", messages: msgs, fetcher: () => { throw new Error("no call"); } }), { ok: false, skipped: "no_key" });
   const fresh = store();
@@ -601,10 +601,10 @@ test("AG18 free only, the token caps, the minute guard (owner 2026-11-25: \"teta
   assert.equal((await askModel(env, billed, { purpose: "t", messages: msgs, fetcher: answer(200, { choices: [{ message: { content: "x" } }], usage: { prompt_tokens: 10, completion_tokens: 5, cost: 0.002 } }) })).skipped, "paid", "a reported cost above 0");
   assert.equal(billed.s.settings.agent_model.enabled, false);
   // CTA's own daily token caps and the minute guard: no call
-  assert.equal((await askModel(env, store({ tokens_in: 2_000_000 }), { purpose: "t", messages: msgs, fetcher: none })).skipped, "tokens");
+  assert.equal((await askModel(env, store({ tokens_in: 1_000_000 }), { purpose: "t", messages: msgs, fetcher: none })).skipped, "tokens");
   assert.equal((await askModel(env, store({ tokens_out: 200_000 }), { purpose: "t", messages: msgs, fetcher: none })).skipped, "tokens");
-  const busy = store((since) => (Date.parse(since) > Date.now() - 120_000 ? { calls: 50 } : {}));
-  assert.equal((await askModel(env, busy, { purpose: "t", messages: msgs, fetcher: none })).skipped, "rpm", "50 a minute at the most");
+  const busy = store((since) => (Date.parse(since) > Date.now() - 120_000 ? { calls: 20 } : {}));
+  assert.equal((await askModel(env, busy, { purpose: "t", messages: msgs, fetcher: none })).skipped, "rpm", "20 a minute at the most");
   assert.deepEqual(modelConfig({ MODEL_DAILY_TOKENS_IN: "5000000", MODEL_RPM: "20" }).tokens_in_day, 5_000_000);
   // cta-write stops quietly on any of them (the template stays)
   const deps = { candidates: async () => [{ id: "p", kind: "pattern", channel: "threads", text: "Education · x\nbody 1\n\nNot financial advice." }], ask: async () => ({ ok: false, skipped: "rpm" }), check: () => ({ pass: true }), record: async () => { throw new Error("no record"); } };

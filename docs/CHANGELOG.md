@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-25 (Beam: CTA's share of the free plan)
+- chore(router): CTA's share of the organisation's free Beam plan is set as the defaults: 1,000,000 input and 200,000 output tokens a day (`MODEL_DAILY_TOKENS_IN`, `MODEL_DAILY_TOKENS_OUT`), and 20 calls a minute (`MODEL_RPM`).
+  - The organisation's plan is 10M input, 1M output and 60 calls a minute. The orchestrator set CTA's share on 25 Nov.
+  - That is about ten times CTA's estimated use (≤50k input and ≤75k output a day). It stops a runaway loop early and leaves the rest for Cerebrum.
+  - Tests AG6 and AG18 follow.
+
 ## 2026-11-25 (the card is served while its post goes out)
 - fix(media): a card is public while its draft is `publishing` too, as well as `approved` and `published`. The claim from #93 marks a draft `publishing` before the publish call, but Threads fetches the card's `image_url` during that call. The route answered 404, so Threads failed with "400 An unknown error occurred" (15:15 and 16:10 UTC). Telegram uploads the bytes itself and was not affected. The media test now checks a claimed draft.
 
