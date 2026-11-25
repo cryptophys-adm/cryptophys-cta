@@ -47,7 +47,7 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
    - analytics and key levels are allowed; buy and sell zones as information only;
    - never buy/sell advice: no entry, stop loss, take profit, BUY/SELL/LONG/SHORT as a signal, lot or rating
      (the guardian's `signal_words` and `instruction` rules);
-   - the system's decisions only as a recap after 24 hours; the analysis (zones, patterns, structure) in real time;
+   - the system's decisions as a recap without a delay (owner 2026-11-25: "harus realtime", "kamu saja yang kerjakan karena xauusd sedang overload", "Semua sekarang", "Posts juga realtime"; before, only after 24 hours): a decision may be posted as a recap at once (the guardian's `PUBLIC_DELAY_HOURS` "0"; "24" restores the hold), but its price, entry, SL and TP are never posted; the analysis (zones, patterns, structure) in real time;
    - no promised return, no account data, never Nexus or Omega, never a secret;
    - chart images are TradingView charts with TradingView's attribution visible; never a chart drawn from Yahoo
      data, the TradingView account's bars or the broker's MT5 bars (licensing). Our zones, pattern lines and
