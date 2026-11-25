@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-25 (auto-approve at once; About step 4; realtime risk accepted)
+- feat(agent): a draft of an auto-approved kind is now approved and published as soon as it is ready and checked. It used to wait 15 minutes.
+  - The owner asked "kenapa lama 25m setelah close 1H ?" and then chose "Jendela 0 menit + opsi 3".
+  - `AUTO_WINDOW_MINUTES` is now 0.
+  - The analysis run (and the daily run) runs the scheduler's steps right after its cards: cta-write, then auto-approve, then publishing. With an empty slot grid on Threads (owner: "langsung post begitu di approve"), an H1 map goes out about 10 minutes after the close; it used to take about 25.
+  - An edited draft still waits for a person. The guardian, the 2-hour expiry and the daily cap still apply.
+- content(about): About's step 4 text changed, word for word. The owner chose "Usulan dengan kata 'checked'".
+  - Before: "… or lets a kind of post be approved automatically after 15 minutes, while a person can still stop it; …"
+  - After: "… or lets a kind of post be approved automatically once it is ready and checked; …"
+  - `test/fixtures/legal-words.json` follows.
+  - The studio's Auto-approve hint and AGENTS.md rule 2 say the same.
+- docs: AGENTS.md rule 3 records the owner's "Posts realtime too, risk accepted" (2026-11-25, about 12:37 UTC), given to the orchestrator's POJK question about posts this close to live.
+
 ## 2026-11-25 (Channels: one channel per tab, a 96-slot schedule)
 - feat(studio): a channel can now hold up to 96 posting slots a day, one every 15 minutes. Channels shows one channel per tab.
   - Owner, 25 Nov: "scheduling channel sekarang terlalu kaku hanya max 12 slot padahal butuh 24 atau mungkin layoutnya dibuat per tab saja per page, sehingga slot bisa 24H sekitar 24x4 slot per hari".

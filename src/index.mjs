@@ -129,10 +129,12 @@ export default {
       // Every run is logged (orchestrator review, 2026-11-25): what it read per chart, what it added, what it left out and why.
       console.log("cta_analysis_drafts", JSON.stringify(drafted));
       await cards(env, fail);
+      await publishNow(env, fail);
       return;
     }
     console.log("cta_recap_drafts", JSON.stringify(await draftDay(env).catch(fail)));
     await cards(env, fail);
+    await publishNow(env, fail);
     const tokens = await refreshTokens(env).catch(fail);
     if (tokens?.status !== "publishing_off") console.log("cta_tokens", JSON.stringify(tokens));
     // Once a day: the metrics of the last two weeks' posts (only while publishing is on: before, there are none).
@@ -145,6 +147,15 @@ export default {
 };
 
 /** The cards of the drafts waiting for one, right after drafting (the chart is read close to the analysis). */
+/**
+ * Right after a run's drafts have their cards (owner 2026-11-25: "Jendela 0 menit + opsi 3"): cta-write, auto-approve
+ * and publishing at once, the scheduler's own steps (runSchedule), instead of waiting for its next 5-minute tick.
+ */
+async function publishNow(env, fail) {
+  const r = await runSchedule(env, { now: Date.now() }).catch(fail);
+  if (r?.slots?.length || r?.auto?.length || r?.status === "error" || r?.written) console.log("cta_schedule", JSON.stringify(r));
+}
+
 async function cards(env, fail) {
   const r = await renderImages(env, { launch: launcher(env) }).catch(fail);
   if (r?.waiting || r?.status === "error") console.log("cta_cards", JSON.stringify(r));

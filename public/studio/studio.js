@@ -381,8 +381,8 @@
     kf.appendChild(checks);
     bd.appendChild(kf);
 
-    // Auto-approve (owner 2026-11-25): the kinds this channel approves by itself, 15 minutes after a draft is ready.
-    const af = field("Auto-approve", "A draft of a kind ticked here is approved by itself 15 minutes after it is ready, on a channel that publishes. Until then you can approve, edit or reject it; an edited draft waits for you. The guardian runs again. Never a custom post.");
+    // Auto-approve (owner 2026-11-25): the kinds this channel approves by itself, as soon as a draft is ready and checked.
+    const af = field("Auto-approve", "A draft of a kind ticked here is approved by itself as soon as it is ready and checked (its card made, the model's wording done), on a channel that publishes, and goes out at once or at the next slot. An edited draft waits for you. The guardian runs again. Never a custom post.");
     const autos = make("div", "checks");
     for (const k of cfg.auto_kinds ?? []) {
       const l = make("label");

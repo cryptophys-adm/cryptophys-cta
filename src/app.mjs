@@ -289,7 +289,7 @@ export async function runSchedule(env, { now = Date.now(), fetcher } = {}) {
 
 /**
  * The agent's auto-approve (src/agent/auto-approve.mjs), at each scheduler run: per publishing channel, each pending
- * draft of a kind it approves automatically whose 15-minute window has passed is approved as a person's approval is
+ * draft of a kind it approves automatically that is ready (AUTO_WINDOW_MINUTES, 0 since 2026-11-25) is approved as a person's approval is
  * (the guardian again; an aged analysis draft expires), then published at once or left for the channel's next slot.
  */
 export async function autoApprove(env, settings, { now = Date.now(), fetcher } = {}) {
@@ -298,7 +298,7 @@ export async function autoApprove(env, settings, { now = Date.now(), fetcher } =
     const kinds = settings[channel]?.enabled === false ? [] : settings[channel]?.auto_approve ?? [];
     if (!kinds.length) continue;
     for (const c of dueNow(await d.autoCandidates({ channel, kinds }), now)) {
-      const r = await d.decide({ id: c.id, decision: "approve", actor: AUTO_ACTOR, reason: `rule: ${channel} approves ${c.kind} after 15 minutes` }, now);
+      const r = await d.decide({ id: c.id, decision: "approve", actor: AUTO_ACTOR, reason: `rule: ${channel} approves ${c.kind} once it is ready and checked` }, now);
       const row = { channel, id: c.id, kind: c.kind, decided_by: AUTO_ACTOR, status: r?.status ?? "unknown" };
       if (r?.status === "approved") {
         const p = await publishDraft(env, await d.get(c.id), { now, ...(fetcher ? { fetcher } : {}) });

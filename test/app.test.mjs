@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule, cardPathOf, agentReplies, aboutLedeLive } from "../src/app.mjs";
+import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule, cardPathOf, agentReplies, aboutLedeLive, agentWrite } from "../src/app.mjs";
 import { ABOUT_LEDE } from "../src/agent/write.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
@@ -948,18 +948,18 @@ test("auto-approve end to end (owner 2026-11-25): a Threads pattern draft goes o
   };
   const person = await jwt({ email: "owner@example.com" });
   const queue = await (await handle(req("/api/studio/drafts?status=pending&channel=threads", { token: person }), e, opts)).json();
-  assert.equal(queue.drafts.find((x) => x.id === "pattern:a:threads").auto_at, "2026-11-25T06:15:00.000Z", "the queue shows when it goes out by itself");
+  assert.equal(queue.drafts.find((x) => x.id === "pattern:a:threads").auto_at, "2026-11-25T06:00:00.000Z", "the queue shows when it goes out by itself: as soon as it is ready");
   assert.equal(queue.drafts.find((x) => x.id === "pattern:b:threads").auto_at, null, "an edited draft waits for a person");
   assert.equal("auto_at" in queue.drafts.find((x) => x.id === "custom:x:threads"), false, "never a custom post");
-  assert.equal((await runSchedule(e, { now: T0 + 10 * 60_000, fetcher })).auto, undefined, "nothing inside the window");
-  const r = await runSchedule(e, { now: T0 + 16 * 60_000, fetcher });
+  assert.equal((await runSchedule(e, { now: T0 - 60_000, fetcher })).auto, undefined, "nothing before it is ready");
+  const r = await runSchedule(e, { now: T0 + 60_000, fetcher });
   assert.deepEqual(r.auto.map((x) => [x.id, x.status, x.publish]), [["pattern:a:threads", "approved", "published"]]);
   assert.equal(getDraft(d.sql, "pattern:a:threads").decided_by, "auto-approve");
   assert.equal(posted.length, 1);
   assert.deepEqual([getDraft(d.sql, "pattern:b:threads").status, getDraft(d.sql, "pattern:a:telegram").status, getDraft(d.sql, "custom:x:threads").status], ["pending", "pending", "pending"], "edited, another channel without the rule, a custom post: they wait");
 });
 
-test("cta-write end to end (rule 4 amended): the switch, a written post auto-approved 15 minutes after the write, a failed guard keeps the template, the kill switch", async () => {
+test("cta-write end to end (rule 4 amended): the switch, a written post auto-approved and published in the run that wrote it, a failed guard keeps the template, the kill switch", async () => {
   resetKeyCacheForTests();
   const { env: e, d } = env({ CONTENT_PUBLISH: "on", PUBLISH_CHANNELS: "threads", THREADS_ACCESS_TOKEN: "T", THREADS_USER_ID: "77", REFLECTION_API_KEY: "rk-test" });
   const T0 = Date.parse("2026-11-25T06:00:00Z");
@@ -990,24 +990,23 @@ test("cta-write end to end (rule 4 amended): the switch, a written post auto-app
   assert.equal((await post("/api/studio/agent/write", { enabled: true, kinds: ["custom"] }, T0)).status, 400, "never a custom post");
   assert.equal((await post("/api/studio/agent/model", { enabled: true }, T0)).status, 200);
   assert.equal((await post("/api/studio/agent/write", { enabled: true }, T0)).status, 200);
-  assert.equal((await runSchedule(e, { now: T0 + 60_000, fetcher })).written, undefined, "still off: About's sentence about the model is not in (about_lede_ok)");
+  assert.equal((await agentWrite(e, { now: T0 + 60_000, fetcher })).status, "off", "still off: About's sentence about the model is not in (about_lede_ok)");
   assert.equal(getDraft(d.sql, "pattern:a:threads").text, TEMPLATE);
   assert.equal((await post("/api/studio/agent/replies", { about_lede_ok: true }, T0)).status, 200);
+  // the same run writes first, then approves and publishes at once (window 0, owner 2026-11-25)
   const r = await runSchedule(e, { now: T0 + 5 * 60_000, fetcher });
   assert.deepEqual([r.written.written, r.written.kept], [1, 1], JSON.stringify(r.written));
+  assert.deepEqual(r.auto.map((x) => [x.id, x.publish]).sort(), [["pattern:a:threads", "published"], ["pattern:b:threads", "published"]], "the written one and the template kept: both go out in the run that checked them");
+  assert.ok(posted.find((p) => p.text?.includes("The breakout line is at 3570.54.")), "the written text went out");
   const a = getDraft(d.sql, "pattern:a:threads"), b = getDraft(d.sql, "pattern:b:threads");
   assert.ok(a.text.startsWith("Education - Pattern breakout - XAUUSD H1\nRounding Top, direction down.\n\nThe breakout line is at 3570.54."), a.text);
   assert.equal(a.guardian.pass, true);
-  assert.equal(b.text, TEMPLATE.replace("Rounding Top", "Double Top"), "an added number: the template stays");
-  assert.deepEqual(draftEvents(d.sql, "pattern:b:threads").map((x) => x.action).sort(), ["drafted", "write_kept"]);
+  assert.ok(b.text.startsWith("Education - Pattern breakout - XAUUSD H1\nDouble Top - direction down\n\nBreakout line 3570.54"), "an added number: the template stays (published, humanized)");
+  assert.deepEqual(draftEvents(d.sql, "pattern:b:threads").map((x) => x.action).sort(), ["approved", "drafted", "published", "write_kept"]);
   assert.match(draftEvents(d.sql, "pattern:b:threads").find((x) => x.action === "write_kept").detail, /number_added/);
   assert.match(draftEvents(d.sql, "pattern:a:threads").find((x) => x.action === "written").detail, /template: Education · Pattern breakout/, "the template is kept in the history");
   assert.equal((await runSchedule(e, { now: T0 + 10 * 60_000, fetcher })).written, undefined, "each draft is tried once");
-  // auto-approve counts 15 minutes from the write (05 min), not from the draft (00 min)
-  assert.equal((await runSchedule(e, { now: T0 + 16 * 60_000, fetcher })).auto?.find((x) => x.id === "pattern:a:threads"), undefined);
-  const later = await runSchedule(e, { now: T0 + 21 * 60_000, fetcher });
-  assert.deepEqual(later.auto.find((x) => x.id === "pattern:a:threads"), { channel: "threads", id: "pattern:a:threads", kind: "pattern", decided_by: "auto-approve", status: "approved", publish: "published" });
-  assert.ok(posted.find((p) => p.text?.includes("The breakout line is at 3570.54.")), "the written text went out");
+  assert.deepEqual(r.auto.find((x) => x.id === "pattern:a:threads"), { channel: "threads", id: "pattern:a:threads", kind: "pattern", decided_by: "auto-approve", status: "approved", publish: "published" });
   const page = await (await handle(req("/api/studio/agent", { token: person }), e, { ...opts, now: (T0 + 22 * 60_000) / 1000 })).json();
   assert.equal(page.write.mode, "on");
   assert.deepEqual(page.write.recent.map((x) => x.action).sort(), ["write_kept", "written"]);
@@ -1017,7 +1016,8 @@ test("cta-write end to end (rule 4 amended): the switch, a written post auto-app
   addDrafts(d.sql, [{ id: "pattern:c:threads", channel: "threads", kind: "pattern", text: TEMPLATE, status: "pending" }], { now: T0 + 24 * 60_000 });
   answers.push("should never be asked");
   await runSchedule(e, { now: T0 + 25 * 60_000, fetcher });
-  assert.deepEqual([getDraft(d.sql, "pattern:c:threads").text, answers.length], [TEMPLATE, 1]);
+  assert.equal(answers.length, 1, "no model call");
+  assert.ok(!draftEvents(d.sql, "pattern:c:threads").some((x) => x.action === "written"), "the template, not a written text");
 });
 
 test("the About gate (about_lede_ok): set by an approver only while /about carries the owner's sentence; the event keeps who and when", async () => {
