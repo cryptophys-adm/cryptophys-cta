@@ -16,7 +16,7 @@ import { accountOf } from "../src/app.mjs";
 const brand = BRANDS["xauusd-ai-cta"];
 const sqlite = () => {
   const db = new DatabaseSync(":memory:");
-  return { exec(q, ...b) { const s = db.prepare(q); const out = /^\s*SELECT/i.test(q) ? s.all(...b) : (s.run(...b), []); return { toArray: () => out.map((r) => ({ ...r })) }; } };
+  return { exec(q, ...b) { const s = db.prepare(q); const out = /^\s*SELECT|\bRETURNING\b/i.test(q) ? s.all(...b) : (s.run(...b), []); return { toArray: () => out.map((r) => ({ ...r })) }; } };
 };
 
 /** A WebM as a browser's MediaRecorder writes it: EBML header, a Segment of unknown size, Info, Tracks, a Cluster. */

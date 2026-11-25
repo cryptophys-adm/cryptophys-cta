@@ -32,10 +32,10 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
    `AGENT_REPLIES` stop it.
    **Posts approved by a rule** (owner 2026-11-25: "Yes, posted by itself"; kinds "Chart pattern (confirmed), Key-level
    map, Daily recap, War Room"; the public wording "Use the mockup's sentences"; the lawyer "No, go ahead"): a channel's
-   settings may approve those kinds automatically (`auto_approve`, Threads by default; never a custom post), 15 minutes
-   after a draft is ready, unless a person edited it; the approval is a person's in every other way (the guardian again,
-   an aged analysis draft expires), it is logged as "auto-approve", and in the window a person can approve, edit or
-   reject it (`src/agent/auto-approve.mjs`). The scheduled run drafts confirmed chart patterns only ("Only confirmed").
+   settings may approve those kinds automatically (`auto_approve`, Threads by default; never a custom post) as soon as a
+   draft is ready and checked (owner 2026-11-25: "Jendela 0 menit + opsi 3"; it was 15 minutes), unless a person edited
+   it; the approval is a person's in every other way (the guardian again, an aged analysis draft expires) and is logged
+   as "auto-approve" (`src/agent/auto-approve.mjs`). The scheduled run drafts confirmed chart patterns only ("Only confirmed").
    An analysis draft (the key-level map, a pattern post) expires 2 hours after it was made from the analysis (owner
    2026-11-17: "kadaluwarsa otomatis"): it is never approved, sent again, copied or published after that; a fresh one is
    made from Create with the latest analysis. A recap is about the past and does not expire.
@@ -48,7 +48,7 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
    - analytics and key levels are allowed; buy and sell zones as information only;
    - never buy/sell advice: no entry, stop loss, take profit, BUY/SELL/LONG/SHORT as a signal, lot or rating
      (the guardian's `signal_words` and `instruction` rules);
-   - the system's decisions as a recap without a delay (owner 2026-11-25: "harus realtime", "kamu saja yang kerjakan karena xauusd sedang overload", "Semua sekarang", "Posts juga realtime"; before, only after 24 hours): a decision may be posted as a recap at once (the guardian's `PUBLIC_DELAY_HOURS` "0"; "24" restores the hold), but its price, entry, SL and TP are never posted; the analysis (zones, patterns, structure) in real time;
+   - the system's decisions as a recap without a delay (owner 2026-11-25: "harus realtime", "kamu saja yang kerjakan karena xauusd sedang overload", "Semua sekarang", "Posts juga realtime"; before, only after 24 hours): a decision may be posted as a recap at once (the guardian's `PUBLIC_DELAY_HOURS` "0"; "24" restores the hold), but its price, entry, SL and TP are never posted; the analysis (zones, patterns, structure) in real time. The owner accepted the risk (2026-11-25, about 12:37 UTC, to the orchestrator's question whether posts that close to live can read as a signal service, POJK): "Posts realtime too, risk accepted";
    - no promised return, no account data, never Nexus or Omega, never a secret;
    - chart images are TradingView charts with TradingView's attribution visible; never a chart drawn from Yahoo
      data, the TradingView account's bars or the broker's MT5 bars (licensing). Our zones, pattern lines and

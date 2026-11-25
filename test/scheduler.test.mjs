@@ -25,7 +25,7 @@ test("slots in WIB: due within 30 minutes, the next ones, across midnight and th
 
 test("the desk: a slot is claimed once; the oldest approved draft is next; outcomes are kept", () => {
   const db = new DatabaseSync(":memory:");
-  const sql = { exec(q, ...b) { const s = db.prepare(q); const out = /^\s*SELECT/i.test(q) ? s.all(...b) : (s.run(...b), []); return { toArray: () => out.map((r) => ({ ...r })) }; } };
+  const sql = { exec(q, ...b) { const s = db.prepare(q); const out = /^\s*SELECT|\bRETURNING\b/i.test(q) ? s.all(...b) : (s.run(...b), []); return { toArray: () => out.map((r) => ({ ...r })) }; } };
   assert.equal(claimSlot(sql, { key: "2026-11-16T19:00", channel: "threads", at: MON }, { now: MON }), true);
   assert.equal(claimSlot(sql, { key: "2026-11-16T19:00", channel: "threads", at: MON }, { now: MON + 1 }), false);
   assert.equal(claimSlot(sql, { key: "2026-11-16T19:00", channel: "x", at: MON }, { now: MON }), true, "per channel");
@@ -41,7 +41,7 @@ test("the desk: a slot is claimed once; the oldest approved draft is next; outco
 
 test("newest wins (orchestrator, 2026-11-25): a slot sends the newest approved map of each chart; older ones of the same chart are superseded, other kinds keep their order", () => {
   const db = new DatabaseSync(":memory:");
-  const sql = { exec(q, ...b) { const s = db.prepare(q); const out = /^\s*SELECT/i.test(q) ? s.all(...b) : (s.run(...b), []); return { toArray: () => out.map((r) => ({ ...r })) }; } };
+  const sql = { exec(q, ...b) { const s = db.prepare(q); const out = /^\s*SELECT|\bRETURNING\b/i.test(q) ? s.all(...b) : (s.run(...b), []); return { toArray: () => out.map((r) => ({ ...r })) }; } };
   const T = Date.parse("2026-11-25T10:00:00Z");
   const text = "Education · XAUUSD key-level map\nx\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.";
   const map = (id) => ({ id, channel: "threads", kind: "key_levels", text, status: "pending" });

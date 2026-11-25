@@ -15,7 +15,7 @@
 // Kernel: the OrganismDna and CtaHealth entrypoints serve the platform's census and drift checks.
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import puppeteer from "@cloudflare/puppeteer";
-import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites } from "./desk.mjs";
+import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites, claimPublish } from "./desk.mjs";
 import { editCheck } from "./compose.mjs";
 import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, collectInsights, runSchedule, agentWeekly, agentReplies, forgetOldReplies, ANALYSIS_CRON, analysisRunDue } from "./app.mjs";
 import { SCHEDULE_CRON } from "./scheduler.mjs";
@@ -29,6 +29,7 @@ export class ContentDesk extends DurableObject {
   async get(id) { const d = getDraft(this.sql, id); return d ? { ...d, events: draftEvents(this.sql, id) } : null; }
   async decide(input, now) { return decideDraft(this.sql, input, { now }); }
   async published(input, now) { return recordPublish(this.sql, input, { now }); }
+  async claimPublish(input, now) { return claimPublish(this.sql, input, { now }); }
   async requeue(input, now) { return requeueFailed(this.sql, input, { now }); }
   async counts() { return deskCounts(this.sql); }
   async channelCountsByStatus() { return channelStatusCounts(this.sql); }
@@ -129,10 +130,12 @@ export default {
       // Every run is logged (orchestrator review, 2026-11-25): what it read per chart, what it added, what it left out and why.
       console.log("cta_analysis_drafts", JSON.stringify(drafted));
       await cards(env, fail);
+      await publishNow(env, fail);
       return;
     }
     console.log("cta_recap_drafts", JSON.stringify(await draftDay(env).catch(fail)));
     await cards(env, fail);
+    await publishNow(env, fail);
     const tokens = await refreshTokens(env).catch(fail);
     if (tokens?.status !== "publishing_off") console.log("cta_tokens", JSON.stringify(tokens));
     // Once a day: the metrics of the last two weeks' posts (only while publishing is on: before, there are none).
@@ -145,6 +148,15 @@ export default {
 };
 
 /** The cards of the drafts waiting for one, right after drafting (the chart is read close to the analysis). */
+/**
+ * Right after a run's drafts have their cards (owner 2026-11-25: "Jendela 0 menit + opsi 3"): cta-write, auto-approve
+ * and publishing at once, the scheduler's own steps (runSchedule), instead of waiting for its next 5-minute tick.
+ */
+async function publishNow(env, fail) {
+  const r = await runSchedule(env, { now: Date.now() }).catch(fail);
+  if (r?.slots?.length || r?.auto?.length || r?.status === "error" || r?.written) console.log("cta_schedule", JSON.stringify(r));
+}
+
 async function cards(env, fail) {
   const r = await renderImages(env, { launch: launcher(env) }).catch(fail);
   if (r?.waiting || r?.status === "error") console.log("cta_cards", JSON.stringify(r));

@@ -5,12 +5,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule, cardPathOf, agentReplies, aboutLedeLive } from "../src/app.mjs";
+import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule, cardPathOf, agentReplies, aboutLedeLive, agentWrite } from "../src/app.mjs";
 import { ABOUT_LEDE } from "../src/agent/write.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
 import { AGENT_SECRETS } from "../src/agent/router.mjs";
-import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites } from "../src/desk.mjs";
+import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites, claimPublish, failStuckPublishing, STUCK_NOTE } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
@@ -31,7 +31,7 @@ async function jwt(claims) {
 
 function sqlite() {
   const db = new DatabaseSync(":memory:");
-  return { exec(q, ...b) { const s = db.prepare(q); const out = /^\s*SELECT/i.test(q) ? s.all(...b) : (s.run(...b), []); return { toArray: () => out.map((r) => ({ ...r })) }; } };
+  return { exec(q, ...b) { const s = db.prepare(q); const out = /^\s*SELECT|\bRETURNING\b/i.test(q) ? s.all(...b) : (s.run(...b), []); return { toArray: () => out.map((r) => ({ ...r })) }; } };
 }
 /** The ContentDesk Durable Object's RPC surface over node:sqlite. */
 function deskStub() {
@@ -39,7 +39,7 @@ function deskStub() {
   const api = {
     add: async (d, now, actor) => addDrafts(sql, d, { now, ...(actor ? { actor } : {}) }), list: async (i) => listDrafts(sql, i ?? {}),
     get: async (id) => { const d = getDraft(sql, id); return d ? { ...d, events: draftEvents(sql, id) } : null; },
-    decide: async (i, now) => decideDraft(sql, i, { now }), published: async (i, now) => recordPublish(sql, i, { now }), requeue: async (i, now) => requeueFailed(sql, i, { now }),
+    decide: async (i, now) => decideDraft(sql, i, { now }), published: async (i, now) => recordPublish(sql, i, { now }), claimPublish: async (i, now) => claimPublish(sql, i, { now }), requeue: async (i, now) => requeueFailed(sql, i, { now }),
     counts: async () => deskCounts(sql), channelCountsByStatus: async () => channelStatusCounts(sql), token: async (c) => storedToken(sql, c), saveToken: async (c, t, now) => { storeToken(sql, c, t, { now }); return true; },
     idsWithPrefix: async (p) => draftIdsWithPrefix(sql, p), kindCounts: async (k, s) => kindCountsSince(sql, k, s), archive: async (n) => publishedPosts(sql, { limit: n }),
     needingImage: async (n, retry) => draftsNeedingImage(sql, { limit: n, retry }), attachImage: async (i, now) => attachImage(sql, i, { now }),
@@ -948,18 +948,18 @@ test("auto-approve end to end (owner 2026-11-25): a Threads pattern draft goes o
   };
   const person = await jwt({ email: "owner@example.com" });
   const queue = await (await handle(req("/api/studio/drafts?status=pending&channel=threads", { token: person }), e, opts)).json();
-  assert.equal(queue.drafts.find((x) => x.id === "pattern:a:threads").auto_at, "2026-11-25T06:15:00.000Z", "the queue shows when it goes out by itself");
+  assert.equal(queue.drafts.find((x) => x.id === "pattern:a:threads").auto_at, "2026-11-25T06:00:00.000Z", "the queue shows when it goes out by itself: as soon as it is ready");
   assert.equal(queue.drafts.find((x) => x.id === "pattern:b:threads").auto_at, null, "an edited draft waits for a person");
   assert.equal("auto_at" in queue.drafts.find((x) => x.id === "custom:x:threads"), false, "never a custom post");
-  assert.equal((await runSchedule(e, { now: T0 + 10 * 60_000, fetcher })).auto, undefined, "nothing inside the window");
-  const r = await runSchedule(e, { now: T0 + 16 * 60_000, fetcher });
+  assert.equal((await runSchedule(e, { now: T0 - 60_000, fetcher })).auto, undefined, "nothing before it is ready");
+  const r = await runSchedule(e, { now: T0 + 60_000, fetcher });
   assert.deepEqual(r.auto.map((x) => [x.id, x.status, x.publish]), [["pattern:a:threads", "approved", "published"]]);
   assert.equal(getDraft(d.sql, "pattern:a:threads").decided_by, "auto-approve");
   assert.equal(posted.length, 1);
   assert.deepEqual([getDraft(d.sql, "pattern:b:threads").status, getDraft(d.sql, "pattern:a:telegram").status, getDraft(d.sql, "custom:x:threads").status], ["pending", "pending", "pending"], "edited, another channel without the rule, a custom post: they wait");
 });
 
-test("cta-write end to end (rule 4 amended): the switch, a written post auto-approved 15 minutes after the write, a failed guard keeps the template, the kill switch", async () => {
+test("cta-write end to end (rule 4 amended): the switch, a written post auto-approved and published in the run that wrote it, a failed guard keeps the template, the kill switch", async () => {
   resetKeyCacheForTests();
   const { env: e, d } = env({ CONTENT_PUBLISH: "on", PUBLISH_CHANNELS: "threads", THREADS_ACCESS_TOKEN: "T", THREADS_USER_ID: "77", REFLECTION_API_KEY: "rk-test" });
   const T0 = Date.parse("2026-11-25T06:00:00Z");
@@ -990,24 +990,23 @@ test("cta-write end to end (rule 4 amended): the switch, a written post auto-app
   assert.equal((await post("/api/studio/agent/write", { enabled: true, kinds: ["custom"] }, T0)).status, 400, "never a custom post");
   assert.equal((await post("/api/studio/agent/model", { enabled: true }, T0)).status, 200);
   assert.equal((await post("/api/studio/agent/write", { enabled: true }, T0)).status, 200);
-  assert.equal((await runSchedule(e, { now: T0 + 60_000, fetcher })).written, undefined, "still off: About's sentence about the model is not in (about_lede_ok)");
+  assert.equal((await agentWrite(e, { now: T0 + 60_000, fetcher })).status, "off", "still off: About's sentence about the model is not in (about_lede_ok)");
   assert.equal(getDraft(d.sql, "pattern:a:threads").text, TEMPLATE);
   assert.equal((await post("/api/studio/agent/replies", { about_lede_ok: true }, T0)).status, 200);
+  // the same run writes first, then approves and publishes at once (window 0, owner 2026-11-25)
   const r = await runSchedule(e, { now: T0 + 5 * 60_000, fetcher });
   assert.deepEqual([r.written.written, r.written.kept], [1, 1], JSON.stringify(r.written));
+  assert.deepEqual(r.auto.map((x) => [x.id, x.publish]).sort(), [["pattern:a:threads", "published"], ["pattern:b:threads", "published"]], "the written one and the template kept: both go out in the run that checked them");
+  assert.ok(posted.find((p) => p.text?.includes("The breakout line is at 3570.54.")), "the written text went out");
   const a = getDraft(d.sql, "pattern:a:threads"), b = getDraft(d.sql, "pattern:b:threads");
   assert.ok(a.text.startsWith("Education - Pattern breakout - XAUUSD H1\nRounding Top, direction down.\n\nThe breakout line is at 3570.54."), a.text);
   assert.equal(a.guardian.pass, true);
-  assert.equal(b.text, TEMPLATE.replace("Rounding Top", "Double Top"), "an added number: the template stays");
-  assert.deepEqual(draftEvents(d.sql, "pattern:b:threads").map((x) => x.action).sort(), ["drafted", "write_kept"]);
+  assert.ok(b.text.startsWith("Education - Pattern breakout - XAUUSD H1\nDouble Top - direction down\n\nBreakout line 3570.54"), "an added number: the template stays (published, humanized)");
+  assert.deepEqual(draftEvents(d.sql, "pattern:b:threads").map((x) => x.action).sort(), ["approved", "drafted", "published", "publishing", "write_kept"]);
   assert.match(draftEvents(d.sql, "pattern:b:threads").find((x) => x.action === "write_kept").detail, /number_added/);
   assert.match(draftEvents(d.sql, "pattern:a:threads").find((x) => x.action === "written").detail, /template: Education · Pattern breakout/, "the template is kept in the history");
   assert.equal((await runSchedule(e, { now: T0 + 10 * 60_000, fetcher })).written, undefined, "each draft is tried once");
-  // auto-approve counts 15 minutes from the write (05 min), not from the draft (00 min)
-  assert.equal((await runSchedule(e, { now: T0 + 16 * 60_000, fetcher })).auto?.find((x) => x.id === "pattern:a:threads"), undefined);
-  const later = await runSchedule(e, { now: T0 + 21 * 60_000, fetcher });
-  assert.deepEqual(later.auto.find((x) => x.id === "pattern:a:threads"), { channel: "threads", id: "pattern:a:threads", kind: "pattern", decided_by: "auto-approve", status: "approved", publish: "published" });
-  assert.ok(posted.find((p) => p.text?.includes("The breakout line is at 3570.54.")), "the written text went out");
+  assert.deepEqual(r.auto.find((x) => x.id === "pattern:a:threads"), { channel: "threads", id: "pattern:a:threads", kind: "pattern", decided_by: "auto-approve", status: "approved", publish: "published" });
   const page = await (await handle(req("/api/studio/agent", { token: person }), e, { ...opts, now: (T0 + 22 * 60_000) / 1000 })).json();
   assert.equal(page.write.mode, "on");
   assert.deepEqual(page.write.recent.map((x) => x.action).sort(), ["write_kept", "written"]);
@@ -1017,7 +1016,8 @@ test("cta-write end to end (rule 4 amended): the switch, a written post auto-app
   addDrafts(d.sql, [{ id: "pattern:c:threads", channel: "threads", kind: "pattern", text: TEMPLATE, status: "pending" }], { now: T0 + 24 * 60_000 });
   answers.push("should never be asked");
   await runSchedule(e, { now: T0 + 25 * 60_000, fetcher });
-  assert.deepEqual([getDraft(d.sql, "pattern:c:threads").text, answers.length], [TEMPLATE, 1]);
+  assert.equal(answers.length, 1, "no model call");
+  assert.ok(!draftEvents(d.sql, "pattern:c:threads").some((x) => x.action === "written"), "the template, not a written text");
 });
 
 test("the About gate (about_lede_ok): set by an approver only while /about carries the owner's sentence; the event keeps who and when", async () => {
@@ -1044,4 +1044,29 @@ test("the About gate (about_lede_ok): set by an approver only while /about carri
   assert.equal((await handle(req("/api/studio/agent/replies", { method: "POST", body: { about_lede_ok: false }, token: owner }), old.env, opts)).status, 200, "turning it off needs no check");
   const js = readFileSync("public/studio/studio.js", "utf8");
   assert.match(js, /About's sentence about the model is live/);
+});
+
+test("one claim before publishing (orchestrator review of #93): two runs publishing one draft at the same moment make exactly one platform call", async () => {
+  resetKeyCacheForTests();
+  const { env: e, d } = env({ CONTENT_PUBLISH: "on", PUBLISH_CHANNELS: "telegram", TELEGRAM_BOT_TOKEN: "123:SECRET", TELEGRAM_CHAT_ID: "@c" });
+  addDrafts(d.sql, [{ id: "t1", channel: "telegram", kind: "daily_recap", text: "Education only. Not financial advice.", status: "pending" }]);
+  decideDraft(d.sql, { id: "t1", decision: "approve", actor: "owner" });
+  let calls = 0;
+  const fetcher = async () => { calls++; await new Promise((r) => setTimeout(r, 20)); return Response.json({ ok: true, result: { message_id: 7 } }); };
+  const [a, b] = await Promise.all([publishDraft(e, getDraft(d.sql, "t1"), { fetcher }), publishDraft(e, getDraft(d.sql, "t1"), { fetcher })]);
+  assert.equal(calls, 1, "exactly one API call");
+  assert.ok([a, b].some((x) => x.status === "published") && [a, b].some((x) => x.held === "already_publishing"), JSON.stringify([a, b]));
+  assert.equal(getDraft(d.sql, "t1").status, "published");
+  assert.deepEqual(draftEvents(d.sql, "t1").filter((x) => x.action === "publishing").length, 1, "one claim");
+  // a claim left by a run that died: failed after CLAIM_STALE_MS, for a person to check; never republished by itself
+  addDrafts(d.sql, [{ id: "t2", channel: "telegram", kind: "daily_recap", text: "Education only. Not financial advice.", status: "pending" }]);
+  decideDraft(d.sql, { id: "t2", decision: "approve", actor: "owner" });
+  const T = Date.now();
+  assert.equal(claimPublish(d.sql, { id: "t2" }, { now: T }).ok, true);
+  assert.deepEqual(claimPublish(d.sql, { id: "t2" }, { now: T + 60_000 }), { ok: false, status: "publishing" }, "never claimed twice");
+  assert.deepEqual(failStuckPublishing(d.sql, { now: T + 5 * 60_000 }), [], "a fresh claim stays");
+  assert.deepEqual(failStuckPublishing(d.sql, { now: T + 11 * 60_000 }), ["t2"]);
+  assert.deepEqual([getDraft(d.sql, "t2").status, getDraft(d.sql, "t2").error], ["failed", STUCK_NOTE]);
+  assert.deepEqual(claimPublish(d.sql, { id: "t2" }, { now: T + 12 * 60_000 }), { ok: false, status: "failed" }, "a failed draft is not claimed: a person uses Publish now");
+  assert.deepEqual(claimPublish(d.sql, { id: "t1" }, { now: T }), { ok: false, status: "published" }, "a published draft is never claimed");
 });

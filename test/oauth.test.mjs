@@ -9,7 +9,7 @@ import { putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeCon
 
 const KEY = Buffer.alloc(32, 7).toString("base64");
 const REDIRECT = redirectUri("https://cta.cryptophys.work");
-const sqlite = () => { const db = new DatabaseSync(":memory:"); return { exec(q, ...b) { const s = db.prepare(q); const out = /^\s*SELECT/i.test(q) ? s.all(...b) : (s.run(...b), []); return { toArray: () => out.map((r) => ({ ...r })) }; } }; };
+const sqlite = () => { const db = new DatabaseSync(":memory:"); return { exec(q, ...b) { const s = db.prepare(q); const out = /^\s*SELECT|\bRETURNING\b/i.test(q) ? s.all(...b) : (s.run(...b), []); return { toArray: () => out.map((r) => ({ ...r })) }; } }; };
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 test("sign-in URLs: the provider's own page, our fixed redirect, the scopes, a one-time state; PKCE for X; offline for YouTube", async () => {

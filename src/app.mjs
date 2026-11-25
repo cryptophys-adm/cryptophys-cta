@@ -180,6 +180,10 @@ export async function publishDraft(env, draft, { now = Date.now(), fetcher, slot
   if (CHANNEL_SPECS[draft.channel]?.publisher !== "built") return { status: "approved", held: "publisher_not_built" };
   const account = await accountFor(env, draft.channel, { now, fetcher });
   if (!account) return { status: "approved", held: "account_not_configured" };
+  // One claim before the platform is called (orchestrator review of #93): only the run that moves the draft from approved
+  // to publishing posts it; a second run at the same moment gets "already_publishing" and calls nothing.
+  const claim = await desk(env).claimPublish({ id: draft.id }, now);
+  if (!claim?.ok) return { status: claim?.status ?? "approved", held: "already_publishing" };
   // Every post goes out humanized (humanize.py in full; owner: "Everything, templates too"), checked by the guardian
   // again; the Archive keeps the text that went out.
   const out = publishText(draft, (d) => recheck(d, { delayHours: delayOf(env), now }));
@@ -289,7 +293,7 @@ export async function runSchedule(env, { now = Date.now(), fetcher } = {}) {
 
 /**
  * The agent's auto-approve (src/agent/auto-approve.mjs), at each scheduler run: per publishing channel, each pending
- * draft of a kind it approves automatically whose 15-minute window has passed is approved as a person's approval is
+ * draft of a kind it approves automatically that is ready (AUTO_WINDOW_MINUTES, 0 since 2026-11-25) is approved as a person's approval is
  * (the guardian again; an aged analysis draft expires), then published at once or left for the channel's next slot.
  */
 export async function autoApprove(env, settings, { now = Date.now(), fetcher } = {}) {
@@ -298,7 +302,7 @@ export async function autoApprove(env, settings, { now = Date.now(), fetcher } =
     const kinds = settings[channel]?.enabled === false ? [] : settings[channel]?.auto_approve ?? [];
     if (!kinds.length) continue;
     for (const c of dueNow(await d.autoCandidates({ channel, kinds }), now)) {
-      const r = await d.decide({ id: c.id, decision: "approve", actor: AUTO_ACTOR, reason: `rule: ${channel} approves ${c.kind} after 15 minutes` }, now);
+      const r = await d.decide({ id: c.id, decision: "approve", actor: AUTO_ACTOR, reason: `rule: ${channel} approves ${c.kind} once it is ready and checked` }, now);
       const row = { channel, id: c.id, kind: c.kind, decided_by: AUTO_ACTOR, status: r?.status ?? "unknown" };
       if (r?.status === "approved") {
         const p = await publishDraft(env, await d.get(c.id), { now, ...(fetcher ? { fetcher } : {}) });

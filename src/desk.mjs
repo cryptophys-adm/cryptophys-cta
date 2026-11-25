@@ -74,7 +74,7 @@ export const DESK_SCHEMA = [
 ];
 /** A media chunk: 1 MB of base64 per row (a Durable Object's SQLite row holds up to 2 MB). */
 export const MEDIA_CHUNK = 1_000_000;
-export const STATUSES = Object.freeze(["pending", "needs_image", "needs_video", "blocked", "approved", "rejected", "published", "failed", "expired"]);
+export const STATUSES = Object.freeze(["pending", "needs_image", "needs_video", "blocked", "approved", "publishing", "rejected", "published", "failed", "expired"]);
 
 const rows = (sql, q, ...b) => sql.exec(q, ...b).toArray();
 const clip = (v, n) => (typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, n) : "");
@@ -110,6 +110,7 @@ function event(sql, { at, id, action, actor, detail = null }) {
 /** Marks every aged analysis draft that could still go out as expired (with an event). Returns the ids. */
 export function expireStale(sql, { now = Date.now(), ttlHours = ANALYSIS_TTL_HOURS } = {}) {
   ensureDesk(sql);
+  failStuckPublishing(sql, { now }); // a run that died mid-publish: failed, for a person to check (never republished blindly)
   const cutoff = iso(now - ttlHours * 3_600_000);
   const marks = EXPIRABLE.map(() => "?").join(", ");
   const ids = rows(sql, `SELECT id FROM drafts WHERE kind IN (${LEVEL_KINDS.map(() => "?").join(", ")}) AND status IN (${marks}) AND created_at < ?`, ...LEVEL_KINDS, ...EXPIRABLE, cutoff).map((r) => r.id);
@@ -198,13 +199,45 @@ export function decideDraft(sql, { id, decision, actor, reason = "", delayHours 
   return { ok: true, id: d.id, status, guardian };
 }
 
+/** A claim older than this is a run that died mid-publish: the draft becomes failed, never published again blindly. */
+export const CLAIM_STALE_MS = 10 * 60_000;
+export const STUCK_NOTE = "publishing was interrupted: check the channel for the post before trying again";
+/**
+ * The one claim on an approved draft before a platform is called (orchestrator review of #93: two runs, the analysis
+ * run's publishNow and the 5-minute scheduler, must never post one draft twice): one conditional UPDATE, approved to
+ * publishing; only the caller whose UPDATE changed the row publishes ({ ok: true }); any other gets { ok: false, status }.
+ */
+export function claimPublish(sql, { id }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  const claimed = rows(sql, "UPDATE drafts SET status = 'publishing' WHERE id = ? AND status = 'approved' RETURNING id", String(id));
+  if (!claimed.length) return { ok: false, status: getDraft(sql, id)?.status ?? "missing" };
+  event(sql, { at: iso(now), id: String(id), action: "publishing", actor: "content-engine", detail: null });
+  return { ok: true };
+}
+/**
+ * A claim left by a run that died (older than CLAIM_STALE_MS): the draft becomes failed with STUCK_NOTE, so a person
+ * checks the channel and uses the existing "Publish now" (requeueFailed); never republished by itself. Returns the ids.
+ */
+export function failStuckPublishing(sql, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  const out = [];
+  for (const r of rows(sql, "SELECT d.id, (SELECT MAX(e.at) FROM events e WHERE e.draft_id = d.id AND e.action = 'publishing') AS at FROM drafts d WHERE d.status = 'publishing'")) {
+    if (r.at && now - Date.parse(r.at) < CLAIM_STALE_MS) continue;
+    const changed = rows(sql, "UPDATE drafts SET status = 'failed', error = ? WHERE id = ? AND status = 'publishing' RETURNING id", STUCK_NOTE, r.id);
+    if (!changed.length) continue;
+    event(sql, { at: iso(now), id: r.id, action: "failed", actor: "content-engine", detail: STUCK_NOTE });
+    out.push(r.id);
+  }
+  return out;
+}
+
 /** The outcome of a publishing attempt of an approved draft. */
 export function recordPublish(sql, { id, remoteId = null, error = null, text = null }, { now = Date.now() } = {}) {
   ensureDesk(sql);
   const status = remoteId ? "published" : "failed";
   // The humanized text that went out (src/agent/humanizer.mjs publishText), so the Archive shows the post as published.
-  if (remoteId && typeof text === "string" && text.trim()) sql.exec("UPDATE drafts SET text = ? WHERE id = ? AND status = 'approved'", text, String(id));
-  sql.exec("UPDATE drafts SET status = ?, published_at = ?, remote_id = ?, error = ? WHERE id = ? AND status = 'approved'", status, remoteId ? iso(now) : null, remoteId, error ? clip(String(error), 300) : null, String(id));
+  if (remoteId && typeof text === "string" && text.trim()) sql.exec("UPDATE drafts SET text = ? WHERE id = ? AND status IN ('approved', 'publishing')", text, String(id));
+  sql.exec("UPDATE drafts SET status = ?, published_at = ?, remote_id = ?, error = ? WHERE id = ? AND status IN ('approved', 'publishing')", status, remoteId ? iso(now) : null, remoteId, error ? clip(String(error), 300) : null, String(id));
   event(sql, { at: iso(now), id: String(id), action: status, actor: "content-engine", detail: remoteId ?? clip(String(error ?? ""), 300) });
   return { status };
 }

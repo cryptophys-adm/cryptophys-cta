@@ -318,14 +318,15 @@ test("AG9 Replies: the triage, the fixed market answer, the reply checks, the dr
   assert.deepEqual([off.log.length, off.sends.length], [0, 0]);
 });
 
-test("AG10 auto-approve: 15 minutes after a draft is ready, never an edited one; the owner's four kinds on Threads by default", () => {
-  assert.equal(AUTO_WINDOW_MINUTES, 15);
+test("AG10 auto-approve: as soon as a draft is ready (owner 2026-11-25: \"Jendela 0 menit + opsi 3\"; it was 15 minutes), never an edited one; the owner's four kinds on Threads by default", () => {
+  assert.equal(AUTO_WINDOW_MINUTES, 0);
   assert.deepEqual(AUTO_KINDS, ["key_levels", "pattern", "daily_recap", "warroom"], "owner 2026-11-25: Chart pattern (confirmed), Key-level map, Daily recap, War Room");
   assert.deepEqual(AUTO_DEFAULTS, { threads: AUTO_KINDS });
-  assert.equal(autoAt({ ready_at: "2026-11-25T06:00:00.000Z" }), "2026-11-25T06:15:00.000Z");
+  assert.equal(autoAt({ ready_at: "2026-11-25T06:00:00.000Z" }), "2026-11-25T06:00:00.000Z");
   assert.equal(autoAt({ ready_at: "2026-11-25T06:00:00.000Z", edited: true }), null, "an edited draft waits for a person");
   const c = [{ id: "a", ready_at: "2026-11-25T06:00:00.000Z" }, { id: "b", ready_at: "2026-11-25T06:10:00.000Z" }, { id: "c", ready_at: "2026-11-25T05:00:00.000Z", edited: true }];
-  assert.deepEqual(dueNow(c, Date.parse("2026-11-25T06:16:00Z")).map((x) => x.id), ["a"]);
+  assert.deepEqual(dueNow(c, Date.parse("2026-11-25T06:05:00Z")).map((x) => x.id), ["a"], "ready: approved at once; ready later: not yet; edited: never");
+  assert.match(read("src/index.mjs"), /await cards\(env, fail\);\n\s+await publishNow\(env, fail\);/, "the analysis run writes, approves and publishes right after its cards");
   assert.deepEqual(normalizeSettings("telegram", { auto_approve: ["pattern", "key_levels"] }).settings.auto_approve, ["key_levels", "pattern"]);
   assert.equal(normalizeSettings("telegram", { auto_approve: ["custom"] }).ok, false, "never a custom post");
   assert.deepEqual(normalizeSettings("telegram", {}).settings.auto_approve, [], "other channels: none by default");
