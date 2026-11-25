@@ -209,7 +209,7 @@ export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS
     for (const m of maps) {
       const text = chartMapText(analysis, m, { channel });
       const zones = m.charts.flatMap((c) => analysis.zones_by_chart[c] ?? []);
-      if (text) out.push(draft({ id: chartMapId(m.charts, m.closed, channel), kind: "key_levels", channel, text, now, overlay: overlayOf({ ...analysis, zones }, { maxZones: 3 }) }));
+      if (text) out.push(draft({ id: chartMapId(m.charts, m.closed, channel), kind: "key_levels", channel, text, now, overlay: { ...overlayOf({ ...analysis, zones }, { maxZones: 3 }), chart: m.charts[0] } }));
     }
     if (levelsRun && !perChart) {
       const text = keyLevelsText(analysis, { channel });

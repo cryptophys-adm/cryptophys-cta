@@ -17,6 +17,7 @@ import { weeklySummary, summaryOk, summaryKey } from "../src/agent/weekly.mjs";
 import { triage, checkReply, shapeAnswer, replyMode, runReplies, roomReply, roomOf, ROOM_MAX_AGE_MIN, MARKET_REPLY, DISCLAIMER, REPLY_CHANNELS, REPLY_CAPS, DRY_RUN_HOURS } from "../src/agent/replies.mjs";
 import { autoAt, dueNow, AUTO_WINDOW_MINUTES } from "../src/agent/auto-approve.mjs";
 import { AUTO_KINDS, AUTO_DEFAULTS, normalizeSettings } from "../src/settings.mjs";
+import { chartOf } from "../src/card.mjs";
 import { draftedPatterns, analysisDrafts, dueChartMaps, chartMapText, chartsOfId, MAP_FRESH_MINUTES } from "../src/analysis-drafts.mjs";
 import { publishThreads } from "../src/publishers.mjs";
 import { HASHTAGS } from "../src/channels.mjs";
@@ -384,4 +385,10 @@ test("AG12 key-level maps per chart (owner 2026-11-25): each chart's map once pe
   assert.deepEqual(analysisDrafts({ ...A, zones_by_chart: undefined, closed: undefined, zones: [{ role: "supply", low: 4060, high: 4062, strength: "strong", metrics: [] }] }, { now: Date.parse("2026-11-25T06:09:00Z"), channels: ["threads"], levelsRun: true }).map((d) => d.id), ["levels:2026-11-25:threads"]);
   assert.deepEqual(analysisDrafts(A, { now: Date.parse("2026-11-25T06:09:00Z"), channels: ["threads"], levelsRun: true }).map((d) => d.id), [], "with zones_by_chart the daily map gives way (and the 4:00 close is no longer fresh at 6:09)");
   assert.equal(MAP_FRESH_MINUTES, 70);
+  // the card (owner 2026-11-25: "apakah post juga termasuk image yang dirender?"): TradingView's chart of the post's largest chart, its zones drawn
+  assert.equal(drafts[0].overlay.chart, "H4");
+  assert.equal(chartOf(drafts[0]), "H4", "H4 + H1: the H4 chart");
+  assert.equal(chartOf({ kind: "key_levels", overlay: { chart: "D1" } }), "D1");
+  assert.equal(chartOf({ kind: "key_levels", overlay: {} }), "H4", "the daily map of 06:09: H4 as before");
+  assert.ok(drafts[0].overlay.zones.length >= 2, "the zones drawn over the chart");
 });

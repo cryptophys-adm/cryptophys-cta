@@ -25,13 +25,15 @@ const INTERVAL = { M15: "15", H1: "60", H4: "240", D1: "D" };
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-/** The chart timeframe of a draft: a pattern's own chart; the key-level map on H4; the daily recap on H1. */
+/** The chart timeframe of a draft: a pattern's own chart; the key-level map on its largest chart, else H4; the daily recap on H1. */
 export function chartOf(draft) {
   if (draft?.kind === "pattern") {
     const m = /^pattern:(M15|H1|H4|D1):/.exec(String(draft.id ?? ""));
     if (m) return m[1];
   }
-  if (draft?.kind === "key_levels") return "H4";
+  // A key-level map per chart (owner 2026-11-25): its largest chart (D1 for the daily close, H4 for "H4 + H1", H1
+  // alone); the daily map of 06:09 on H4, as before.
+  if (draft?.kind === "key_levels") return INTERVAL[draft?.overlay?.chart] ? draft.overlay.chart : "H4";
   // War Room (owner 2026-11-18): the source's own timeframe (news on H1).
   if (draft?.kind === "warroom" && INTERVAL[draft?.overlay?.chart]) return draft.overlay.chart;
   return "H1";
