@@ -20,7 +20,7 @@ export const MAX_COMPOSE_CHANNELS = CHANNELS.length;
 
 /** The blank post: a title line, room to write, TradingView's credit where the post is the chart card, the disclaimer, the hashtags. */
 export function customTemplate(channel, hashtags) {
-  return ["Education · XAUUSD", "", "", "", ...(hasImage(channel) ? [CHART_CREDIT] : []), channel === "x" ? SHORT_DISCLAIMER : ANALYSIS_DISCLAIMER, hashtags].join("\n");
+  return ["Education · XAUUSD", "", "", "", ...(hasImage(channel) ? [CHART_CREDIT] : []), channel === "x" ? SHORT_DISCLAIMER : ANALYSIS_DISCLAIMER, ...[hashtags].filter(Boolean)].join("\n");
 }
 
 /** The recap window the engine uses (decisions between 48 and 24 hours old) and its summary. */

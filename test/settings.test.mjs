@@ -39,7 +39,8 @@ test("validation: kinds, the daily maximum, schedule slots in WIB, hashtags; any
     schedule: [{ days: ["fri", "mon"], time: "19:30" }, { days: ["mon", "fri"], time: "19:30" }, { days: ["sat"], time: "08:05" }], hashtags: "  #XAUUSD   #gold_edu " });
   assert.ok(ok.ok, ok.error);
   assert.deepEqual(ok.settings, { enabled: false, format: "text", kinds: ["key_levels", "pattern"], max_per_day: 3,
-    schedule: [{ days: ["sat"], time: "08:05" }, { days: ["mon", "fri"], time: "19:30" }], hashtags: "#XAUUSD #gold_edu" });
+    schedule: [{ days: ["sat"], time: "08:05" }, { days: ["mon", "fri"], time: "19:30" }], hashtags: "" }, "Threads takes no hashtag line: one topic tag through the API (owner 2026-11-25)");
+  assert.equal(normalizeSettings("telegram", { hashtags: "  #XAUUSD   #gold_edu " }).settings.hashtags, "#XAUUSD #gold_edu", "the other channels keep theirs");
   const bad = [
     ["unknown", {}], ["x", null], ["x", []], ["x", { enabled: "yes" }], ["x", { kinds: ["meme"] }], ["x", { max_per_day: 0 }], ["x", { max_per_day: 25 }],
     ["x", { max_per_day: 2.5 }], ["x", { schedule: [{ days: ["mon"], time: "24:00" }] }], ["x", { schedule: [{ days: [], time: "10:00" }] }],
@@ -62,9 +63,9 @@ test("drafting honours the settings: disabled channels, kinds, the daily maximum
   let rechecked = 0;
   const out = applySettings(drafts, s, { today: { threads: 1 }, recheck: (d) => { rechecked += 1; return { pass: !/#BUY/.test(d.text), failures: [] }; } });
   assert.deepEqual(out.map((d) => d.id), ["pattern:threads:1", "daily_recap:telegram:1"], "one more threads draft today, no key levels, X off");
-  assert.ok(out[0].text.endsWith("\n#XAUUSD #edukasi"));
+  assert.doesNotMatch(out[0].text, /#/, "Threads keeps no hashtag line, even with one stored (owner 2026-11-25: one topic tag)");
   assert.ok(out[1].text.endsWith(HASHTAGS.telegram), "hashtags the guardian refuses: the draft keeps the default line");
-  assert.equal(rechecked, 2);
+  assert.equal(rechecked, 1, "only Telegram's line changed");
   // A draft the guardian held is kept as it is (the studio shows why), never re-tagged.
   const held = applySettings([draft("threads", "pattern", 9, { status: "blocked", guardian: { pass: false, failures: [{ check: "x" }] } })], s, { recheck: () => { throw new Error("not called"); } });
   assert.equal(held[0].text, drafts[1].text);

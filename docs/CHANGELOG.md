@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-25 (the CTA agent, PR 1: Checks)
+- feat(agent): the CTA agent's first skills for Threads, adopted from instagram-agent-skill (MIT, credited). The owner, 25 Nov: "post sementara tetap dari xauusd, yg dideploy sekarang adalah skills seperti instagram agents" and "setuju semua, mulai dari Checks".
+  - Threads linter (`src/agent/threads-lint.mjs`): 500 characters (an emoji counts its UTF-8 bytes), the first line, one topic tag, links, mentions, emoji, invisible characters and the em dash.
+  - Humanizer (`src/agent/humanizer.mjs`): a port of detect.py's five checks, plus humanize.py's removal of invisible characters, over the lexicon as published.
+  - A read-only Agent page in the studio (`GET /api/studio/agent`, `#agent`): Overview and Checks for the latest 30 Threads drafts.
+  - Threads posts carry the topic tag XAUUSD through the API instead of the in-text "#XAUUSD #gold #education". A draft's closing hashtag-only line and any invisible characters are dropped when it goes to Threads; no word changes.
+  - No model, no new permission, no new secret.
+  - Tests AG1 to AG4 and the Agent API test. SSOT and screenshots `docs/screenshots/agent-checks/`.
+
 ## 2026-11-24 (share card, llms.txt, War Room tab)
 - feat(site): three owner items, built as the mockup "CTA: share image, llms.txt, War Room tab" shows (owner 2026-11-24: "setuju, pakai label War Room").
   - Share card: `public/og.png`, a 1200 × 630 PNG (about 100 KB) for every public page, with `og:image` and its type, size and alt text. `twitter:card` is now `summary_large_image`. The card uses only the home page's own words, with a ring of sixteen seats round the gold brand mark; it shows no price, level or reading. `scripts/og-image.mjs` draws it from `scripts/og/card.html`.

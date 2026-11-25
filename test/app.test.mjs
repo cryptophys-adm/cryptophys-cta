@@ -837,3 +837,18 @@ test("Create → War Room through the studio API (owner 2026-11-18): the source'
   const bad = await (await handle(req("/api/studio/templates?kind=warroom&ref=5m&channels=threads", { token: person }), e, opts)).json();
   assert.equal(bad.ref, "news", "an unknown source reads the news");
 });
+
+test("the Agent page's API (owner 2026-11-25, the CTA agent's Checks): a person reads the Threads drafts' checks; nothing changes", async () => {
+  resetKeyCacheForTests();
+  const { env: e, d } = env();
+  addDrafts(d.sql, [
+    { id: "th1", channel: "threads", kind: "custom", text: "Education · XAUUSD\n\nGold held its range.\n\nEducational analysis by Cryptophys. Not financial advice.\n#XAUUSD #gold #education", status: "pending" },
+    { id: "tg1", channel: "telegram", kind: "custom", text: "Education only. Not financial advice.", status: "pending" }
+  ]);
+  assert.equal((await handle(req("/api/studio/agent"), e, opts)).status, 403, "behind Access");
+  const a = await (await handle(req("/api/studio/agent", { token: await jwt({ email: "owner@example.com" }) }), e, opts)).json();
+  assert.deepEqual(a.checks.map((c) => c.id), ["th1"], "Threads only");
+  assert.equal(a.checks[0].text.endsWith("Not financial advice."), true, "what Threads gets: no hashtag line");
+  assert.equal(a.topic_tag, "XAUUSD");
+  assert.equal(getDraft(d.sql, "th1").text.endsWith("#education"), true, "the draft itself is unchanged");
+});

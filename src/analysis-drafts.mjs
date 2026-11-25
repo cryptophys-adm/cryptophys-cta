@@ -28,7 +28,7 @@ export function finish(lines, channel) {
   // X: the short disclaimer, so the analysis keeps its lines within 280 characters.
   // Instagram, YouTube, TikTok: the post is the card (or its video) with TradingView's chart, so the caption names it
   // (the guardian's attribution).
-  const tail = ["", ...(["instagram", "youtube", "tiktok"].includes(channel) ? [CHART_CREDIT] : []), channel === "x" ? SHORT_DISCLAIMER : ANALYSIS_DISCLAIMER, ANALYSIS_HASHTAGS[channel] ?? ANALYSIS_HASHTAGS.threads];
+  const tail = ["", ...(["instagram", "youtube", "tiktok"].includes(channel) ? [CHART_CREDIT] : []), channel === "x" ? SHORT_DISCLAIMER : ANALYSIS_DISCLAIMER, ...[ANALYSIS_HASHTAGS[channel] ?? ""].filter(Boolean)];
   const max = TEXT_LIMITS[channel] ?? 500;
   // Too long: drop body lines from the end (never the title or the disclaimer).
   let body = [...lines];

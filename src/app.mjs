@@ -15,6 +15,7 @@ import { recheck, isStale, EXPIRED_NOTE } from "./desk.mjs";
 import { dueSlots, nextSlots } from "./scheduler.mjs";
 import { PROVIDERS, BOT_CHANNELS, CONNECT_SECRETS, appOf, newAttempt, authorizeUrl, exchangeCode, refreshX, identify, checkTelegram, telegramChatIdProblem, TELEGRAM_CHAT_NOT_FOUND, redirectUri, sealToken, openToken, encryptionReady, STATE_RE, CALLBACK_PATH } from "./oauth.mjs";
 import { bestTimes, abResult, evergreen, EVERGREEN_MIN_DAYS } from "./growth.mjs";
+import { agentChecks } from "./agent/checks.mjs";
 import { linkHosts, normalizeLink, randomSlug, shortUrl, redirectTarget, GO_PATH, normalizeHashtagSet, MAX_SETS, normalizeMix, DEFAULT_MIX, MIX_KINDS, wibWeek, mixReport } from "./marketing.mjs";
 import { templateTexts, checkPost, composeDrafts, overlayFor, recapWindow, COMPOSE_KINDS, COMPOSE_KIND_NAMES } from "./compose.mjs";
 import { sourceOf } from "./warroom-drafts.mjs";
@@ -433,7 +434,7 @@ async function rpc(fn, failure) {
 }
 
 const isStudio = (path) => path === "/studio" || path.startsWith("/studio/") || path.startsWith("/api/studio/");
-const STUDIO_ROUTES = ["/api/studio/connections", "/api/studio/connect/app", "/api/studio/connect/token", "/api/studio/connect/start", "/api/studio/connect/disconnect", "/api/studio/connect/check", "/api/studio/growth", "/api/studio/links", "/api/studio/hashtag-sets", "/api/studio/mix", "/api/studio/schedule", "/api/studio/library", "/api/studio/edit", "/api/studio/duplicate", "/api/studio/calendar", "/api/studio/media-library", "/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/publish-now", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
+const STUDIO_ROUTES = ["/api/studio/agent", "/api/studio/connections", "/api/studio/connect/app", "/api/studio/connect/token", "/api/studio/connect/start", "/api/studio/connect/disconnect", "/api/studio/connect/check", "/api/studio/growth", "/api/studio/links", "/api/studio/hashtag-sets", "/api/studio/mix", "/api/studio/schedule", "/api/studio/library", "/api/studio/edit", "/api/studio/duplicate", "/api/studio/calendar", "/api/studio/media-library", "/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/publish-now", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
 /** The public origin of the cards Instagram fetches (GET /media/<id>.jpg). */
 export const originOf = (env) => String(env?.PUBLIC_ORIGIN || "https://cta.cryptophys.work").replace(/\/+$/, "");
 const MEDIA_PATH = /^\/media\/([0-9a-f]{32})\.(jpg|webm)$/;
@@ -680,6 +681,9 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
           return { ok: true, url: authorizeUrl(channel, { clientId: app.id, redirect: redirectUri(originOf(env)), state: attempt.state, challenge: attempt.challenge }) };
         }, "connect_failed");
       }
+      // The CTA agent (owner 2026-11-25: "setuju semua, mulai dari Checks"): the Threads drafts' checks (src/agent/checks.mjs).
+      // Read only; posts still come from the xauusd templates and nothing here changes a draft.
+      if (route === "GET /api/studio/agent") return rpc(async () => agentChecks(await desk(env).list({ channel: "threads", limit: 30 })), "agent_failed");
       // Growth (src/growth.mjs): A/B results, best posting times per channel, evergreen suggestions.
       if (route === "GET /api/studio/growth") {
         return rpc(async () => {
