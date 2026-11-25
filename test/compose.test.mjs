@@ -17,7 +17,8 @@ const settings = effectiveSettings({ threads: { hashtags: "#XAUUSD #edukasi" } }
 
 test("templates: blank, key levels, pattern and recap per channel, with the channel's hashtags", () => {
   const blank = templateTexts("custom", { channels: ["threads", "instagram", "x"], settings });
-  assert.ok(blank.texts.threads.endsWith("#XAUUSD #edukasi"));
+  assert.ok(blank.texts.threads.endsWith("not financial advice."), "Threads: no hashtag line, one topic tag through the API instead (owner 2026-11-25)");
+  assert.doesNotMatch(blank.texts.threads, /#/);
   assert.match(blank.texts.instagram, /Chart by TradingView\./, "the card's credit where the post is the chart");
   assert.match(blank.texts.x, /Education only\. Not financial advice\./);
   const lv = templateTexts("key_levels", { channels: ["threads", "telegram"], settings, analysis: ANALYSIS });

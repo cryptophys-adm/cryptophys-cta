@@ -85,7 +85,8 @@ export function normalizeSettings(channel, input) {
     out.schedule = slots.filter((s) => { const k = s.days.join(",") + "@" + s.time; if (seen.has(k)) return false; seen.add(k); return true; })
       .sort((a, b) => a.time.localeCompare(b.time));
   }
-  if ("hashtags" in input) {
+  // Threads takes one topic tag instead (owner 2026-11-25): its hashtag line stays empty, whatever was stored.
+  if ("hashtags" in input && channel !== "threads") {
     const tags = String(input.hashtags ?? "").trim().split(/\s+/).filter(Boolean);
     if (tags.length > 8 || tags.some((t) => !TAG.test(t))) return { ok: false, error: "hashtags: up to 8 words that start with # (letters, digits, _)" };
     // Never the internal names in public (the guardian holds a draft that has them; refused here first).

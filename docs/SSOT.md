@@ -75,6 +75,8 @@ Bindings:
 
 Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (drift checks).
 
+- **The CTA agent** (owner 2026-11-25: "pelajari dulu, kita perlu membuat agent cta pakai router ... Adopsi skills dan fiturnya ... fase pertama" Threads; "post sementara tetap dari xauusd, yg dideploy sekarang adalah skills seperti instagram agents"; "setuju semua, mulai dari Checks"; design note "CTA agent, phase 1: Threads" and mockup "CTA Studio: the Agent page"). The skills of instagram-agent-skill (MIT, Copyright (c) 2026 Jake Schincariol; `src/agent/LICENSE-instagram-agent-skill`) run inside this Worker for Threads; the posts still come from the xauusd templates, and no model writes them. Built so far, **Checks** (`src/agent/`): `threads-lint.mjs`, caption.py's rules retuned to Threads (500 characters with an emoji counted by its UTF-8 bytes, the first line, one topic tag, at most 5 links, mentions, emoji density, invisible characters, the em dash; READY, REVIEW or FIX); `humanizer.mjs`, a port of ig-human's detect.py (burstiness, specificity, slop density, fingerprint, voice; PASS, REVIEW or FLAGGED; information only, the templates' plain analytic voice scores REVIEW) and of humanize.py's invisible pass, over the unchanged lexicon `slop.mjs` (slop.json v1.0); `checks.mjs`, the studio's **Agent** page (`#agent`: Overview with the skills and their state, Checks with each of the latest 30 Threads drafts as Threads gets it). It never rewrites a word. Threads drafts carry no hashtag line any more (`HASHTAGS.threads` is empty; a stored Threads hashtag setting is ignored): `publishThreads` sends `topic_tag` XAUUSD (Threads keeps one topic tag a post and reads only the first in-text hashtag) and the text without a closing hashtag-only line, so drafts made before it lose their "#XAUUSD #gold #education", and without invisible characters. Next, each in its own PR: Audit and Plan (weekly, from the Threads insights), the router to Reflection's Beam (`api.reflection.ai`, a daily cap and a cost log, the key a Worker secret set through the platform), and Replies. Tests AG1 to AG4 and the Agent API test; screenshots `docs/screenshots/agent-checks/`.
+
 ## 2. Routes
 
 | Route | Who | What |
@@ -87,6 +89,7 @@ Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (dr
 | `GET /studio` | Access JWT | the studio page; without a valid JWT the sign-in page (`/signin` in the one look, 403, `no-store`) |
 | `GET /`, `/performance`, `/archive`, `/about`, `/disclaimer`, `/privacy`, `/terms` | none | the public pages (static; the archive and profile from `/api/public/*`) |
 | `GET /api/studio/whoami`, `status`, `drafts`, `draft`, `preview` | Access JWT (person or service token) | read the queue; `preview` is a dry run with tokens redacted |
+| `GET /api/studio/agent` | Access JWT (person or service token) | the CTA agent's Checks: the latest 30 Threads drafts, each with what Threads gets, the Threads linter and the humanizer (read only; `src/agent/checks.mjs`) |
 | `POST /api/studio/decide` | an approver (a person, same origin, JSON) | approve or reject (a reason is required to reject); an approval publishes at once only while `CONTENT_PUBLISH` is "on" and the draft's channel is in `PUBLISH_CHANNELS` |
 | `POST /api/studio/draft-now` | a person, same origin, JSON | runs the drafting now |
 | `GET /api/studio/media?id=` | Access JWT | a card or video at any status (the studio's preview) |
@@ -139,7 +142,7 @@ Cloudflare reads a cron's weekday field as 1 = Sunday to 7 = Saturday, so the tr
 
 | Channel | Media | Publisher | Secrets |
 |---|---|---|---|
-| Threads (`@cryptophys.adm`; the brand id stays `xauusd-ai-cta`) | text | built | `THREADS_ACCESS_TOKEN`, `THREADS_USER_ID` |
+| Threads (`@cryptophys.adm`; the brand id stays `xauusd-ai-cta`) | text, or the card; one topic tag (`topic_tag` XAUUSD) and no in-text hashtag line (owner 2026-11-25) | built | `THREADS_ACCESS_TOKEN`, `THREADS_USER_ID` |
 | Instagram | image: the card (TradingView chart + our overlay + Cryptophys panel), rendered by Browser Run; the caption names TradingView | built | `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_USER_ID` |
 | X | text, 280 characters (short recap) | built (billed per post by X) | `X_ACCESS_TOKEN` |
 | Telegram channel | text | built (Bot API; the bot is a channel admin) | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |

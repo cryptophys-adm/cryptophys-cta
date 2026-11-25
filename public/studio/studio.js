@@ -12,9 +12,9 @@
   const when = (iso) => (iso ? `${iso.slice(0, 10)} ${clock12(iso)} UTC` : "—");
   const LABEL = { pending: "Waiting for you", needs_image: "Needs image", needs_video: "Needs video", blocked: "Held by guardian", approved: "Approved", rejected: "Rejected", published: "Published", failed: "Failed to publish", expired: "Expired (old analysis)" };
   const TONE = { pending: "blue", needs_image: "", needs_video: "", blocked: "red", approved: "amber", rejected: "", published: "green", failed: "red", expired: "" };
-  const KIND = { daily_recap: "Daily recap", key_levels: "Key-level map", pattern: "Chart pattern", custom: "Custom post" };
+  const KIND = { daily_recap: "Daily recap", key_levels: "Key-level map", pattern: "Chart pattern", warroom: "War Room", custom: "Custom post" };
   const FILTERS = ["pending", "needs_image", "needs_video", "blocked", "approved", "published", "rejected", "failed", "expired", ""];
-  const VIEWS = ["dashboard", "queue", "create", "library", "calendar", "media", "marketing", "performance", "channels"];
+  const VIEWS = ["dashboard", "queue", "create", "library", "calendar", "media", "marketing", "performance", "agent", "channels"];
   const EDITABLE = ["pending", "blocked", "needs_image", "needs_video"];
   let chFilter = "",
     filter = "pending", status = null, canDecide = false, canWrite = false, role = null, perf = null, sched = null;
@@ -49,6 +49,7 @@
     if (v === "calendar") loadCalendar();
     if (v === "media") loadMedia(true);
     if (v === "marketing") loadMarketing();
+    if (v === "agent") loadAgent();
   }
 
   function tile(label, value, meta, link) {
@@ -1121,6 +1122,58 @@
     finally { b.disabled = !canWrite; }
   }
 
+  // ---- the agent (owner 2026-11-25: "setuju semua, mulai dari Checks"): Overview and Checks for Threads ----
+  const VERDICT = { READY: ["green", "Ready"], REVIEW: ["amber", "Review"], FIX: ["red", "Fix"] };
+  const CHECK_TONE = { PASS: "green", WARN: "amber", FAIL: "red" };
+  const HUMAN = { burstiness: "Burstiness", specificity: "Specificity", slop: "Slop density", fingerprint: "Fingerprint", voice: "Voice" };
+  function agentTab(name) {
+    for (const b of $("agenttabs").querySelectorAll("[role=tab]")) {
+      const on = b.dataset.tab === name;
+      b.classList.toggle("on", on); b.setAttribute("aria-selected", String(on)); b.tabIndex = on ? 0 : -1;
+      $(`agent-${b.dataset.tab}`).hidden = !on;
+    }
+  }
+  async function loadAgent() {
+    try {
+      const a = await call("/api/studio/agent");
+      const t = $("agenttiles"); t.textContent = "";
+      t.appendChild(tile("Threads drafts checked", String(a.summary.checked), "the latest 30"));
+      t.appendChild(tile("Ready", String(a.summary.ready), `${a.summary.review} to review · ${a.summary.fix} to fix`));
+      t.appendChild(tile("Humanizer pass", String(a.summary.human_pass), "five checks; information only"));
+      t.appendChild(tile("Topic tag", a.topic_tag, "one per post, set through the API"));
+      const sk = $("agentskills"); sk.textContent = "";
+      // A list, not a table: it fits a phone (each skill, its state, then what it does, when and with which model).
+      const list = make("div", "list");
+      for (const s of a.skills) {
+        const item = make("div", "draft");
+        const top = make("div");
+        top.append(badge(s.live ? "green" : "", s.live ? "On" : "Next"), " ", make("b", null, s.name));
+        item.append(top, make("div", null, s.what), make("div", "meta", `Runs ${s.runs} · model: ${s.model}`));
+        list.appendChild(item);
+      }
+      sk.appendChild(list);
+      const box = $("agentchecks"); box.textContent = "";
+      if (!a.checks.length) { box.appendChild(make("div", "empty", "No Threads draft yet.")); return; }
+      for (const c of a.checks) {
+        const item = make("div", "draft");
+        const top = make("div", "meta");
+        const [tone, word] = VERDICT[c.lint.verdict] ?? ["", c.lint.verdict];
+        top.append(badge(tone, word), " ", `${KIND[c.kind] ?? c.kind} · ${LABEL[c.status] ?? c.status} · ${when(c.created_at)}`);
+        item.appendChild(top);
+        item.appendChild(make("div", "text", c.text));
+        const list = make("div");
+        for (const k of c.lint.checks) {
+          const row = make("div", "meta");
+          row.append(badge(CHECK_TONE[k.status] ?? "", k.status), ` ${k.check.toLowerCase()}: ${k.detail}`);
+          list.appendChild(row);
+        }
+        item.appendChild(list);
+        item.appendChild(make("div", "meta", `Humanizer ${c.human.score} (${c.human.verdict.toLowerCase()}): ${Object.entries(c.human.checks).map(([k, v]) => `${HUMAN[k] ?? k} ${v.score}`).join(" · ")}`));
+        box.appendChild(item);
+      }
+    } catch (e) { showErr(e); }
+  }
+
   // ---- performance ----
   async function loadPerformance() {
     try {
@@ -1184,6 +1237,14 @@
     busy("draftnow", async () => { const r = await call("/api/studio/draft-now", "POST", {}); await refresh(); const p = renderProblem(r?.cards); if (p) showErr(p); });
     busy("rendernow", async () => { const r = await call("/api/studio/render-now", "POST", {}); await refresh(); const p = renderProblem(r); if (p) showErr(p); });
     busy("insightsnow", async () => { await call("/api/studio/insights-now", "POST", {}); await loadPerformance(); });
+    $("agenttabs").addEventListener("click", (ev) => { const b = ev.target.closest("[role=tab]"); if (b) agentTab(b.dataset.tab); });
+    $("agenttabs").addEventListener("keydown", (ev) => {
+      if (ev.key !== "ArrowRight" && ev.key !== "ArrowLeft") return;
+      const tabs = [...$("agenttabs").querySelectorAll("[role=tab]")], i = tabs.indexOf(document.activeElement);
+      if (i < 0) return;
+      const next = tabs[(i + (ev.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+      next.focus(); agentTab(next.dataset.tab);
+    });
     window.addEventListener("hashchange", show);
     await refresh();
     show();
