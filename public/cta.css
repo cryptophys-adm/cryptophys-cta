@@ -169,6 +169,14 @@ input:disabled{background:var(--subtle);color:var(--faint)}
 .days button{width:40px;height:30px;border-radius:15px;border:1px solid var(--line);background:var(--surface);color:var(--muted);font:inherit;font-size:12px;font-weight:600;cursor:pointer}
 .days button.on{background:var(--blue);border-color:var(--blue);color:#fff}
 .days button:disabled{cursor:not-allowed}
+.quick{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.quick select.minute{height:30px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface);font:inherit;font-size:12px}
+.qgrids{display:flex;flex-wrap:wrap;gap:12px 32px}
+.qgrid{display:grid;grid-template-columns:32px repeat(4,48px);gap:3px;align-items:center;justify-content:start}
+.qgrid .qh{font-size:11px;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums}
+.qgrid button{height:18px;border-radius:4px;border:1px solid var(--line);background:var(--surface);cursor:pointer;padding:0}
+.qgrid button.on{background:var(--blue);border-color:var(--blue)}
+.qgrid button:disabled{cursor:not-allowed}
 .saved{font-size:13px;color:var(--green)}
 .saved:empty{display:none}
 

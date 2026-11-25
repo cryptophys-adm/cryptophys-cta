@@ -39,7 +39,10 @@ export const PLANNED_FORMATS = Object.freeze({
   threads: Object.freeze(["video"]), instagram: Object.freeze(["video"]), x: Object.freeze(["video"]),
   telegram: Object.freeze(["video"]), youtube: Object.freeze([]), tiktok: Object.freeze([])
 });
-export const MAX_SLOTS = 12;
+// Up to 96 slots a channel (owner 2026-11-25: "slot bisa 24H sekitar 24x4 slot per hari": every 15 minutes of a day).
+export const MAX_SLOTS = 96;
+/** The grid's quarter hours ("00:00" to "23:45"), the studio's schedule editor (owner 2026-11-25). */
+export const QUARTERS = Object.freeze(Array.from({ length: 96 }, (_, i) => `${String(Math.floor(i / 4)).padStart(2, "0")}:${String((i % 4) * 15).padStart(2, "0")}`));
 // Up to 32 (owner 2026-11-25, the key maps "All of H1, 4H and D1": up to 24 maps a day on Threads, plus up to 4 confirmed
 // patterns and the recap: 29); the channel's own number stays the owner's to set in Channels.
 export const MAX_PER_DAY = 32;
