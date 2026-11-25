@@ -2,7 +2,8 @@
 // dan key level. Tidak boleh ada advices buy/sell, kecuali info buy/sell zone"; "Real-time, hanya analisa").
 // From the AI Worker's public analysis (src/public-analysis.mjs) only, in fixed English templates (owner 2026-11-15:
 // "Semua content in english"; no model writes public text):
-//   - the key-level map, once a weekday at 06:09 UTC (13:09 WIB, before London): the demand zones ("buy area")
+//   - the key-level map per chart at each H1, H4 and D1 close, merged when they close together (chartMapText below, from
+//     xauusd KM1's zones_by_chart; owner 2026-11-25); before KM1, once a weekday at 06:09 UTC (13:09 WIB, before London): the demand zones ("buy area")
 //     and supply zones ("sell area") as information, the price when read, the structure per chart;
 //   - a pattern post when an H1, H4 or D1 pattern is confirmed (its breakout); the scheduled run drafts confirmed ones only
 //     (owner 2026-11-25: "Only confirmed"), while Create still offers an H4 or D1 pattern forming to a person:
@@ -20,7 +21,7 @@ import { HASHTAGS as ANALYSIS_HASHTAGS } from "./channels.mjs";
 /** At most this many pattern drafts a day per channel (the queue stays readable; each still needs approval). */
 export const MAX_PATTERN_DRAFTS_PER_DAY = 4;
 const TREND_ID = { up: "up", down: "down", range: "sideways" };
-const STRENGTH_ID = { strong: "strong", moderate: "moderate", weak: "weak" };
+const STRENGTH_ID = { strong: "strong", moderate: "moderate", medium: "medium", weak: "weak" };
 const f2 = (x) => (Number.isFinite(Number(x)) ? Number(x).toFixed(2) : "?");
 /** "an H4", "a D1". */
 const an = (chart) => `${/^[HM]/.test(String(chart)) ? "an" : "a"} ${chart}`;
@@ -69,6 +70,65 @@ export function keyLevelsText(analysis, { channel = "threads" } = {}) {
   const st = Object.entries(analysis.structure ?? {}).filter(([, s]) => s.trend).map(([c, s]) => `${c} ${TREND_ID[s.trend] ?? s.trend}${s.label ? ` (${s.label})` : ""}`);
   if (st.length) lines.push("", `Structure: ${st.join(" · ")}`);
   return finish(lines, channel);
+}
+
+// ---- Key-level maps per chart (owner 2026-11-25: "pull keymap dari xauusd per 1h dan 4h dan 1D"; "Jika waktunya sama
+// berarti digabung"). From PublicProjection.analysis().zones_by_chart and .closed (xauusd KM1): each chart's map is
+// posted once per new close of that chart, and the charts that closed at the same time share one post. A close older than
+// MAP_FRESH_MINUTES is not posted (no catch-up after a pause). Without zones_by_chart the daily map of 06:09 UTC stays.
+export const MAP_CHARTS = Object.freeze(["D1", "H4", "H1"]);
+export const MAP_FRESH_MINUTES = 70;
+const compactIso = (iso) => String(iso).replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+/** A chart map's draft id: "levels:H4+H1:20261125T0400Z:threads". */
+export const chartMapId = (charts, closed, channel) => `levels:${charts.join("+")}:${compactIso(closed)}:${channel}`;
+/** The charts and close a chart map's id names, or null for another id. */
+export function chartsOfId(id) {
+  const m = /^levels:((?:D1|H4|H1)(?:\+(?:D1|H4|H1))*):(\d{8}T\d{4,6}Z):/.exec(String(id ?? ""));
+  return m ? { charts: m[1].split("+"), closed: m[2] } : null;
+}
+/**
+ * The chart maps due now: for each chart with a fresh close not posted yet (`known`: the levels draft ids), grouped by
+ * close, so charts that closed together go out as one post. Largest chart first within a post.
+ */
+export function dueChartMaps(analysis, { now = Date.now(), known = new Set() } = {}) {
+  const byChart = analysis?.zones_by_chart, closed = analysis?.closed;
+  if (!byChart || !closed) return [];
+  const posted = new Set();
+  for (const id of known) { const c = chartsOfId(id); if (c) for (const ch of c.charts) posted.add(`${ch}@${c.closed}`); }
+  const groups = new Map();
+  for (const chart of MAP_CHARTS) {
+    const at = closed[chart], t = Date.parse(at ?? "");
+    if (!Number.isFinite(t) || now - t > MAP_FRESH_MINUTES * 60_000 || t > now + 60_000) continue;
+    if (posted.has(`${chart}@${compactIso(new Date(t).toISOString())}`)) continue;
+    if (!(byChart[chart] ?? []).length) continue;
+    const key = new Date(t).toISOString();
+    groups.set(key, [...(groups.get(key) ?? []), chart]);
+  }
+  return [...groups.entries()].map(([closedAt, charts]) => ({ charts, closed: closedAt }));
+}
+/** One chart's zones for a map: the nearest above and below the price, candidates first, `perSide` of each. */
+function mapZones(zones, price, perSide) {
+  const list = (zones ?? []).filter((z) => Number.isFinite(Number(z.low)) && Number.isFinite(Number(z.high)));
+  const rank = (a, b) => (b.candidate === true) - (a.candidate === true);
+  const p = Number(price);
+  const supply = list.filter((z) => z.role === "supply").sort((a, b) => rank(a, b) || (Number.isFinite(p) ? Math.abs(a.low - p) - Math.abs(b.low - p) : a.low - b.low)).slice(0, perSide);
+  const demand = list.filter((z) => z.role === "demand").sort((a, b) => rank(a, b) || (Number.isFinite(p) ? Math.abs(a.high - p) - Math.abs(b.high - p) : b.high - a.high)).slice(0, perSide);
+  return { supply: supply.sort((a, b) => b.low - a.low), demand: demand.sort((a, b) => b.high - a.high) };
+}
+/** Pure: a chart map's text (one chart, or the charts that closed together) for one channel, or null without a zone. */
+export function chartMapText(analysis, { charts, closed }, { channel = "threads" } = {}) {
+  const perSide = charts.length > 1 ? 1 : 2;
+  const line = (z, side) => zoneLine(z, { channel }).replace(/^• /, `• ${side} `);
+  const body = [];
+  for (const chart of charts) {
+    const { supply, demand } = mapZones(analysis?.zones_by_chart?.[chart], analysis?.price, perSide);
+    if (!supply.length && !demand.length) continue;
+    body.push("", `${chart}:`, ...supply.map((z) => line(z, "Supply (sell area)")), ...demand.map((z) => line(z, "Demand (buy area)")));
+  }
+  if (!body.length) return null;
+  const lines = [`Education · XAUUSD key-level map · ${charts.join(" + ")} close · ${dateId(closed)} ${clock12(closed)} UTC`];
+  if (analysis.price != null) lines.push(`Price when read: ${f2(analysis.price)}`);
+  return finish([...lines, ...body], channel);
 }
 
 /** Pure: one pattern's text for one channel. */
@@ -140,11 +200,18 @@ function linesOf(p) {
  * Pure: the drafts of one run. `postedToday` is how many pattern drafts each channel already has today;
  * `known` the pattern keys already drafted (so a pattern is posted once per status).
  */
-export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS, levelsRun = false, postedToday = {}, known = new Set() } = {}) {
+export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS, levelsRun = false, postedToday = {}, known = new Set(), knownLevels = new Set() } = {}) {
   const day = new Date(now).toISOString().slice(0, 10);
   const out = [];
+  const perChart = Boolean(analysis?.zones_by_chart && analysis?.closed);
+  const maps = perChart ? dueChartMaps(analysis, { now, known: knownLevels }) : [];
   for (const channel of channels.filter((c) => CHANNELS.includes(c))) {
-    if (levelsRun) {
+    for (const m of maps) {
+      const text = chartMapText(analysis, m, { channel });
+      const zones = m.charts.flatMap((c) => analysis.zones_by_chart[c] ?? []);
+      if (text) out.push(draft({ id: chartMapId(m.charts, m.closed, channel), kind: "key_levels", channel, text, now, overlay: { ...overlayOf({ ...analysis, zones }, { maxZones: 3 }), chart: m.charts[0] } }));
+    }
+    if (levelsRun && !perChart) {
       const text = keyLevelsText(analysis, { channel });
       if (text) out.push(draft({ id: `levels:${day}:${channel}`, kind: "key_levels", channel, text, now, overlay: overlayOf(analysis, { maxZones: 3 }) }));
     }

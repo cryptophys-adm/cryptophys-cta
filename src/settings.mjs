@@ -40,7 +40,9 @@ export const PLANNED_FORMATS = Object.freeze({
   telegram: Object.freeze(["video"]), youtube: Object.freeze([]), tiktok: Object.freeze([])
 });
 export const MAX_SLOTS = 12;
-export const MAX_PER_DAY = 24;
+// Up to 32 (owner 2026-11-25, the key maps "All of H1, 4H and D1": up to 24 maps a day on Threads, plus up to 4 confirmed
+// patterns and the recap: 29); the channel's own number stays the owner's to set in Channels.
+export const MAX_PER_DAY = 32;
 
 /** The defaults: what the engine did before settings existed. */
 export function defaultSettings(channel) {

@@ -229,9 +229,10 @@ export async function draftAnalysis(env, { now = Date.now() } = {}) {
   const analysis = await env.PROJECTION.analysis();
   const d = desk(env);
   const known = new Set(await d.idsWithPrefix("pattern:"));
+  const knownLevels = new Set(await d.idsWithPrefix("levels:"));
   const postedToday = await d.kindCounts("pattern", new Date(now).toISOString().slice(0, 10));
   const { settings } = await channelSettings(env);
-  const drafts = await settled(env, analysisDrafts(analysis, { now, channels: draftingChannels(channelsOf(env), settings), levelsRun: new Date(now).getUTCHours() === 6, postedToday, known }), settings, now);
+  const drafts = await settled(env, analysisDrafts(analysis, { now, channels: draftingChannels(channelsOf(env), settings), levelsRun: new Date(now).getUTCHours() === 6, postedToday, known, knownLevels }), settings, now);
   const added = drafts.length ? await d.add(drafts, now) : [];
   return { zones: analysis?.zones?.length ?? 0, patterns: analysis?.patterns?.length ?? 0, drafts: drafts.map((x) => ({ id: x.id, status: x.status })), added };
 }

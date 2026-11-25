@@ -17,7 +17,8 @@ import { weeklySummary, summaryOk, summaryKey } from "../src/agent/weekly.mjs";
 import { triage, checkReply, shapeAnswer, replyMode, runReplies, roomReply, roomOf, ROOM_MAX_AGE_MIN, MARKET_REPLY, DISCLAIMER, REPLY_CHANNELS, REPLY_CAPS, DRY_RUN_HOURS } from "../src/agent/replies.mjs";
 import { autoAt, dueNow, AUTO_WINDOW_MINUTES } from "../src/agent/auto-approve.mjs";
 import { AUTO_KINDS, AUTO_DEFAULTS, normalizeSettings } from "../src/settings.mjs";
-import { draftedPatterns } from "../src/analysis-drafts.mjs";
+import { chartOf } from "../src/card.mjs";
+import { draftedPatterns, analysisDrafts, dueChartMaps, chartMapText, chartsOfId, MAP_FRESH_MINUTES } from "../src/analysis-drafts.mjs";
 import { publishThreads } from "../src/publishers.mjs";
 import { HASHTAGS } from "../src/channels.mjs";
 import { keyLevelsText } from "../src/analysis-drafts.mjs";
@@ -351,4 +352,46 @@ test("AG11 the War Room in replies (owner 2026-11-25: \"Yes, from a fixed templa
   assert.equal(asked.length, 0, "no model call for the room");
   assert.deepEqual(sends, [["The room's latest reading of the 4-hour chart at the 4:00 AM UTC close: Bullish, 16 analysts heard. It's a reading for education, not a call to buy or sell. Not financial advice.", "1"]]);
   assert.deepEqual(log.map((x) => [x.reply_id, x.bucket, x.status]), [["1", "room", "sent"], ["2", "room", "no_reading"]], "the 1H reading of 3:00 is three hours old at 6:00: no answer");
+});
+
+test("AG12 key-level maps per chart (owner 2026-11-25): each chart's map once per new close, charts that closed together in one post", () => {
+  const A = { at: "2026-11-25T04:09:00Z", price: 4041.2, zones: [], patterns: [], structure: {},
+    zones_by_chart: {
+      H1: [{ role: "supply", low: 4060, high: 4062, strength: "medium", metrics: ["1H Camarilla H4"], candidate: true }, { role: "supply", low: 4050, high: 4051, strength: "weak", metrics: ["1H swing high"], candidate: false }, { role: "demand", low: 4030, high: 4032, strength: "strong", metrics: ["1H point of control"], candidate: true }],
+      H4: [{ role: "supply", low: 4080, high: 4083, strength: "strong", metrics: ["4H Camarilla H4"], candidate: true }, { role: "demand", low: 4020, high: 4021, strength: "medium", metrics: ["4H Camarilla L4"], candidate: false }],
+      D1: [{ role: "demand", low: 4000, high: 4002, strength: "strong", metrics: ["weekly pivot"], candidate: true }]
+    },
+    closed: { H1: "2026-11-25T04:00:00.000Z", H4: "2026-11-25T04:00:00.000Z", D1: "2026-11-24T22:00:00.000Z" } };
+  const NOW = Date.parse("2026-11-25T04:09:00Z");
+  assert.deepEqual(dueChartMaps(A, { now: NOW }), [{ charts: ["H4", "H1"], closed: "2026-11-25T04:00:00.000Z" }], "H4 and H1 closed together: one post; D1 closed 6 hours ago: not caught up");
+  const drafts = analysisDrafts(A, { now: NOW, channels: ["threads", "telegram"] });
+  assert.deepEqual(drafts.map((d) => [d.id, d.kind, d.status, d.guardian.pass]), [["levels:H4+H1:20261125T040000Z:threads", "key_levels", "pending", true], ["levels:H4+H1:20261125T040000Z:telegram", "key_levels", "pending", true]]);
+  const t = drafts[0].text;
+  assert.match(t, /^Education · XAUUSD key-level map · H4 \+ H1 close · Wednesday, 25 November 2026 4:00 AM UTC\nPrice when read: 4041\.20\n\nH4:\n• Supply \(sell area\) 4080\.00–4083\.00 \(strong: 4H Camarilla H4\)\n• Demand \(buy area\) 4020\.00–4021\.00 \(medium: 4H Camarilla L4\)\n\nH1:\n• Supply \(sell area\) 4060\.00–4062\.00/);
+  assert.ok(t.length <= 500);
+  assert.doesNotMatch(t, /4050\.00/, "a merged map: one zone a side, candidates first");
+  // the next hour: only H1 closed; the H4+H1 post already went out; D1 at its own close takes H4 and H1 with it
+  const known = new Set(drafts.map((d) => d.id));
+  assert.deepEqual(dueChartMaps(A, { now: NOW, known }), [], "never twice for one close");
+  const next = { ...A, closed: { ...A.closed, H1: "2026-11-25T05:00:00.000Z" } };
+  assert.deepEqual(dueChartMaps(next, { now: Date.parse("2026-11-25T05:09:00Z"), known }), [{ charts: ["H1"], closed: "2026-11-25T05:00:00.000Z" }]);
+  const day = { ...A, closed: { H1: "2026-11-25T22:00:00.000Z", H4: "2026-11-25T22:00:00.000Z", D1: "2026-11-25T22:00:00.000Z" } };
+  assert.deepEqual(dueChartMaps(day, { now: Date.parse("2026-11-25T22:09:00Z") }), [{ charts: ["D1", "H4", "H1"], closed: "2026-11-25T22:00:00.000Z" }]);
+  const single = chartMapText(next, { charts: ["H1"], closed: "2026-11-25T05:00:00.000Z" }, { channel: "threads" });
+  assert.match(single, /4050\.00–4051\.00/, "one chart: two a side");
+  assert.deepEqual(chartsOfId("levels:D1+H4+H1:20261125T220000Z:threads"), { charts: ["D1", "H4", "H1"], closed: "20261125T220000Z" });
+  assert.equal(chartsOfId("levels:2026-11-24:threads"), null, "the old daily map's id is not a chart map");
+  // without zones_by_chart (before xauusd KM1): the daily map of 06:09 as before
+  assert.deepEqual(analysisDrafts({ ...A, zones_by_chart: undefined, closed: undefined, zones: [{ role: "supply", low: 4060, high: 4062, strength: "strong", metrics: [] }] }, { now: Date.parse("2026-11-25T06:09:00Z"), channels: ["threads"], levelsRun: true }).map((d) => d.id), ["levels:2026-11-25:threads"]);
+  assert.deepEqual(analysisDrafts(A, { now: Date.parse("2026-11-25T06:09:00Z"), channels: ["threads"], levelsRun: true }).map((d) => d.id), [], "with zones_by_chart the daily map gives way (and the 4:00 close is no longer fresh at 6:09)");
+  assert.equal(MAP_FRESH_MINUTES, 70);
+  // the card (owner 2026-11-25: "apakah post juga termasuk image yang dirender?"): TradingView's chart of the post's largest chart, its zones drawn
+  assert.equal(drafts[0].overlay.chart, "H4");
+  assert.equal(chartOf(drafts[0]), "H4", "H4 + H1: the H4 chart");
+  assert.equal(chartOf({ kind: "key_levels", overlay: { chart: "D1" } }), "D1");
+  assert.equal(chartOf({ kind: "key_levels", overlay: {} }), "H4", "the daily map of 06:09: H4 as before");
+  assert.ok(drafts[0].overlay.zones.length >= 2, "the zones drawn over the chart");
+  // room for a map at every close (owner: "All of H1, 4H and D1"): 24 maps + 4 patterns + the recap = 29, under the cap of 32
+  assert.equal(normalizeSettings("threads", { max_per_day: 29 }).ok, true);
+  assert.equal(normalizeSettings("threads", { max_per_day: 33 }).ok, false);
 });
