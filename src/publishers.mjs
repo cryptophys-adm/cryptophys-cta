@@ -10,6 +10,7 @@
 // limit endpoint at run time, never assumed.
 export const THREADS_BASE = "https://graph.threads.net/v1.0";
 import { threadsText, validTopicTag, THREADS_TOPIC_TAG } from "./agent/lint.mjs";
+import { cleanInvisible } from "./agent/humanizer.mjs";
 export const INSTAGRAM_BASE = "https://graph.instagram.com";
 // Instagram takes two kinds of token (owner 2026-11-17: Meta's "API setup with Unified login" gives a system-user
 // token). An Instagram-login token (IGAA...) talks to graph.instagram.com, renews every 60 days, and /me names the
@@ -88,6 +89,32 @@ export async function publishThreads({ account, text: draftText, imageUrl = null
   await waitReady(fetcher, `${THREADS_BASE}/${container.id}`, account.access_token, "status", { sleep });
   const post = await call(fetcher, "POST", `${THREADS_BASE}/${id}/threads_publish`, { ...publish.params, creation_id: container.id });
   return { remote_id: String(post.id), container_id: String(container.id) };
+}
+
+/**
+ * The replies under one of our Threads posts (the CTA agent's Replies, owner 2026-11-25; permission threads_read_replies).
+ * Each { id, text, username, timestamp, own }: `own` when the account itself wrote it.
+ */
+export async function threadsReplies({ account, mediaId, fetcher = (...a) => fetch(...a) }) {
+  if (!account?.access_token) throw new Error("threads account not configured");
+  if (!/^\d+$/.test(String(mediaId ?? ""))) throw new Error("no Threads post id");
+  const b = await call(fetcher, "GET", `${THREADS_BASE}/${mediaId}/replies`, { fields: "id,text,username,timestamp,is_reply_owned_by_me", access_token: account.access_token });
+  return (b?.data ?? []).map((r) => ({ id: String(r.id ?? ""), text: String(r.text ?? ""), username: String(r.username ?? ""), timestamp: r.timestamp ?? null, own: r.is_reply_owned_by_me === true }))
+    .filter((r) => /^\d+$/.test(r.id));
+}
+
+/**
+ * One reply of ours under a reply to our post (permission threads_manage_replies): a TEXT container with `reply_to_id`,
+ * then publish. Returns { remote_id }.
+ */
+export async function publishThreadsReply({ account, text, replyToId, fetcher = (...a) => fetch(...a), sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+  if (!account?.access_token) throw new Error("threads account not configured");
+  if (!/^\d+$/.test(String(replyToId ?? ""))) throw new Error("no reply to answer");
+  const id = await liveUserId("threads", account, fetcher);
+  const container = await call(fetcher, "POST", `${THREADS_BASE}/${id}/threads`, { media_type: "TEXT", text: cleanInvisible(text).text, reply_to_id: String(replyToId), access_token: account.access_token });
+  await waitReady(fetcher, `${THREADS_BASE}/${container.id}`, account.access_token, "status", { sleep });
+  const post = await call(fetcher, "POST", `${THREADS_BASE}/${id}/threads_publish`, { creation_id: container.id, access_token: account.access_token });
+  return { remote_id: String(post.id) };
 }
 
 /**

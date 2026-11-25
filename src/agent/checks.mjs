@@ -13,7 +13,7 @@ export const AGENT_SKILLS = Object.freeze([
   { id: "humanizer", name: "Humanizer", what: "Scores five checks; removes invisible characters on Threads when it is published; never rewrites the template's words", runs: "each draft", model: "none", live: true },
   { id: "audit", name: "Audit", what: "Which posts of the last full week worked, against the channel's own median", runs: "each WIB week (Monday to Sunday)", model: "Beam writes the week's summary (studio only), once a week", live: true },
   { id: "plan", name: "Plan", what: "The week's mix and posting slots, from the audit; a person adds a slot", runs: "each WIB week", model: "none: the reasons are the audit's numbers", live: true },
-  { id: "replies", name: "Reply triage", what: "Sorts replies under our posts and answers them", runs: "every 15 min", model: "Beam drafts; the guardian checks", live: false }
+  { id: "replies", name: "Replies", what: "Sorts replies under our posts and answers them without approval, within the caps; the first 72 hours a dry run", runs: "every 15 min", model: "Beam answers questions; buy or sell questions get a fixed answer; every answer checked", live: true }
 ]);
 
 /** The Agent page's data for one channel from its latest drafts (newest first). */

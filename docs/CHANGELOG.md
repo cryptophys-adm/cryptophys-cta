@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-11-25 (the CTA agent, PR 4: autonomous Replies on Threads)
+- feat(agent): the agent answers replies under our posts without approval.
+  - Owner, 25 Nov: "semua autonomous jadi reply tanpa approval", "10 an hour, 40 a day", "By themselves after 3 days", and "Use this wording" for the two public sentences.
+  - `src/agent/replies.mjs` (after ig-reply, MIT) runs every 15 minutes on Threads.
+  - Triage:
+    - a buy, sell or price question gets the fixed answer only;
+    - a question or a comment of substance gets a short model answer that must pass `checkReply`: no number, direction, level, trading word or promise, the guardian's rules, at most 280 characters, ending with the disclaimer;
+    - support and noise get no answer.
+  - Caps: 1 answer per person per thread, 10 an hour, 40 a day.
+  - A 72-hour dry run comes first; after it, replies go live on their own, once the About lede about the model carries the owner's words (studio flag `about_lede_ok`). Model text with a link, a mention or a hashtag is refused too, since the comment is untrusted.
+  - Two ways to stop it: the studio switch (`POST /api/studio/agent/replies`) and the var `AGENT_REPLIES`.
+  - The Desk's new `agent_replies` table keeps each reply's author only as a hash. Texts and usernames are forgotten after 30 days.
+  - Threads asks for the new `threads_read_replies` and `threads_manage_replies` permissions at the next Connect.
+  - AGENTS.md rules 2 and 4 record the exception in the owner's words.
+  - About's step 4 and a Privacy sentence (and its date) change word for word as approved; the TH8 fixture follows.
+  - The Agent page gets a Replies tab.
+  - Tests AG9 and the end-to-end Replies test.
+
 ## 2026-11-25 (the CTA agent for every channel; phase 1 Threads)
 - refactor(agent): one agent for every channel. Owner, 25 Nov: "Agent jangan dedicated ke thread, harus untuk semua channel jadi menghandle semua channel, hanya fase 1 ini thread dulu nanti dikembangkan berikutnya".
   - `src/agent/rules.mjs` holds each channel's rules: its limit from `src/channels.mjs`; Threads' topic tag, emoji bytes and 5 links; Instagram's 5 hashtags, 125-character first-line window and links shown as plain text; YouTube's 60 hashtags.

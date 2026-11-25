@@ -109,7 +109,8 @@
       "ACCESS_TEAM_DOMAIN",
       "ACCESS_AUD",
       "PUBLIC_ORIGIN",
-      "CONTENT_INSIGHTS"
+      "CONTENT_INSIGHTS",
+      "AGENT_REPLIES"
     ],
     "secrets_kept": [
       "THREADS_ACCESS_TOKEN",

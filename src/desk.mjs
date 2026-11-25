@@ -64,7 +64,12 @@ export const DESK_SCHEMA = [
   // daily cap holds and the studio shows the spend. Never the prompt or the answer.
   `CREATE TABLE IF NOT EXISTS model_calls (
     id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, purpose TEXT NOT NULL, model TEXT NOT NULL, status TEXT NOT NULL,
-    tokens_in INTEGER NOT NULL DEFAULT 0, tokens_out INTEGER NOT NULL DEFAULT 0, cost_usd REAL NOT NULL DEFAULT 0, retention TEXT, detail TEXT)`
+    tokens_in INTEGER NOT NULL DEFAULT 0, tokens_out INTEGER NOT NULL DEFAULT 0, cost_usd REAL NOT NULL DEFAULT 0, retention TEXT, detail TEXT)`,
+  // The CTA agent's Replies (src/agent/replies.mjs, owner 2026-11-25): each reply under our posts it read, once, and
+  // what it did. The author is a hash for the caps; the username and the reply's text are kept 30 days (Privacy).
+  `CREATE TABLE IF NOT EXISTS agent_replies (
+    reply_id TEXT PRIMARY KEY, channel TEXT NOT NULL, post_id TEXT NOT NULL, author TEXT NOT NULL, username TEXT, text TEXT,
+    bucket TEXT NOT NULL, answer TEXT, status TEXT NOT NULL, remote_id TEXT, detail TEXT, at TEXT NOT NULL)`
 ];
 /** A media chunk: 1 MB of base64 per row (a Durable Object's SQLite row holds up to 2 MB). */
 export const MEDIA_CHUNK = 1_000_000;
@@ -665,4 +670,40 @@ export function modelSpendSince(sql, sinceIso) {
 export function recentModelCalls(sql, { limit = 20 } = {}) {
   ensureDesk(sql);
   return rows(sql, "SELECT at, purpose, model, status, tokens_in, tokens_out, cost_usd, retention, detail FROM model_calls ORDER BY id DESC LIMIT ?", Math.min(100, Math.max(1, Number(limit) || 20)));
+}
+
+// ---- The CTA agent's Replies (src/agent/replies.mjs) ----
+/** Whether a reply was read already. */
+export function replySeen(sql, replyId) {
+  ensureDesk(sql);
+  return rows(sql, "SELECT 1 AS x FROM agent_replies WHERE reply_id = ?", String(replyId)).length > 0;
+}
+/** Whether we answered (or, in the dry run, would have answered) this person in this thread already. */
+export function answeredInThread(sql, postId, author) {
+  ensureDesk(sql);
+  return rows(sql, "SELECT 1 AS x FROM agent_replies WHERE post_id = ? AND author = ? AND status IN ('sent', 'dry_run')", String(postId), String(author)).length > 0;
+}
+/** The answers sent (or, in the dry run, logged as sent) since `sinceIso`: the hourly and daily caps. */
+export function repliesSentSince(sql, sinceIso) {
+  ensureDesk(sql);
+  return Number(rows(sql, "SELECT COUNT(*) AS n FROM agent_replies WHERE status IN ('sent', 'dry_run') AND at >= ?", String(sinceIso))[0]?.n ?? 0);
+}
+/** Records what the agent did with one reply (once per reply). */
+export function recordReply(sql, r) {
+  ensureDesk(sql);
+  sql.exec("INSERT OR IGNORE INTO agent_replies (reply_id, channel, post_id, author, username, text, bucket, answer, status, remote_id, detail, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    String(r.reply_id), clip(r.channel, 20), String(r.post_id), clip(r.author, 64), clip(r.username ?? "", 80) || null, clip(r.text ?? "", 500) || null,
+    clip(r.bucket, 20), clip(r.answer ?? "", 400) || null, clip(r.status, 30), r.remote_id ? String(r.remote_id) : null, clip(r.detail ?? "", 200) || null, String(r.at));
+  return true;
+}
+/** The latest replies the agent read, newest first, with what it did. */
+export function recentReplies(sql, { limit = 30 } = {}) {
+  ensureDesk(sql);
+  return rows(sql, "SELECT reply_id, channel, post_id, username, text, bucket, answer, status, detail, at FROM agent_replies ORDER BY at DESC LIMIT ?", Math.min(100, Math.max(1, Number(limit) || 30)));
+}
+/** Forgets the usernames and texts older than `beforeIso` (Privacy: kept 30 days); the row stays, so a reply is never read twice. */
+export function forgetReplies(sql, beforeIso) {
+  ensureDesk(sql);
+  sql.exec("UPDATE agent_replies SET username = NULL, text = NULL, answer = NULL WHERE at < ? AND (username IS NOT NULL OR text IS NOT NULL OR answer IS NOT NULL)", String(beforeIso));
+  return true;
 }

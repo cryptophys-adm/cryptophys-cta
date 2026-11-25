@@ -15,9 +15,9 @@
 // Kernel: the OrganismDna and CtaHealth entrypoints serve the platform's census and drift checks.
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import puppeteer from "@cloudflare/puppeteer";
-import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls } from "./desk.mjs";
+import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies } from "./desk.mjs";
 import { editCheck } from "./compose.mjs";
-import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, collectInsights, runSchedule, agentWeekly, ANALYSIS_CRON, analysisRunDue } from "./app.mjs";
+import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, collectInsights, runSchedule, agentWeekly, agentReplies, forgetOldReplies, ANALYSIS_CRON, analysisRunDue } from "./app.mjs";
 import { SCHEDULE_CRON } from "./scheduler.mjs";
 import ORGANISM from "../organism.json" with { type: "json" };
 
@@ -68,6 +68,12 @@ export class ContentDesk extends DurableObject {
   async recordModelCall(input, now) { return recordModelCall(this.sql, input, { now }); }
   async modelSpendSince(since) { return modelSpendSince(this.sql, since); }
   async recentModelCalls(n) { return recentModelCalls(this.sql, { limit: n }); }
+  async replySeen(id) { return replySeen(this.sql, id); }
+  async answeredInThread(postId, author) { return answeredInThread(this.sql, postId, author); }
+  async repliesSentSince(since) { return repliesSentSince(this.sql, since); }
+  async recordReply(r) { return recordReply(this.sql, r); }
+  async recentReplies(n) { return recentReplies(this.sql, { limit: n }); }
+  async forgetReplies(before) { return forgetReplies(this.sql, before); }
   async kindMix(from, to) { return kindMixSince(this.sql, from, to); }
   async addAbTest(input, now) { addAbTest(this.sql, input, { now }); return true; }
   async abTests() { return listAbTests(this.sql); }
@@ -105,6 +111,12 @@ export default {
     if (event?.cron === SCHEDULE_CRON) {
       const r = await runSchedule(env, { now: event.scheduledTime || Date.now() }).catch(fail);
       if (r?.slots?.length || r?.status === "error") console.log("cta_schedule", JSON.stringify(r));
+      // The CTA agent's Replies, every 15 minutes (src/agent/replies.mjs).
+      const at = event.scheduledTime || Date.now();
+      if (new Date(at).getUTCMinutes() % 15 === 0) {
+        const replies = await agentReplies(env, { now: at }).catch(fail);
+        if (replies?.status !== "off") console.log("cta_agent_replies", JSON.stringify(replies));
+      }
       return;
     }
     if (event?.cron === ANALYSIS_CRON) {
@@ -122,6 +134,7 @@ export default {
     if (publishOn(env)) console.log("cta_insights", JSON.stringify(await collectInsights(env).catch(fail)));
     // The CTA agent's weekly Audit summary (src/agent/weekly.mjs): once a WIB week, with the model's key only.
     const weekly = await agentWeekly(env).catch(fail);
+    await forgetOldReplies(env).catch(fail);
     if (weekly?.status !== "no_key" && weekly?.status !== "done_already") console.log("cta_agent_weekly", JSON.stringify(weekly));
   }
 };

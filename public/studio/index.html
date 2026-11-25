@@ -126,7 +126,7 @@
 
     <section class="view" id="view-agent" aria-labelledby="h-agent" hidden>
       <div class="crumbs">CTA Studio / Agent</div>
-      <div class="pagehead"><div><h1 id="h-agent">Agent</h1><p>The CTA agent's skills, one agent for every channel; phase 1 manages Threads, and the others join one at a time. Posts still come from the xauusd analysis templates; the agent checks each one before it goes out. Nothing here posts or changes a draft.</p></div></div>
+      <div class="pagehead"><div><h1 id="h-agent">Agent</h1><p>The CTA agent's skills, one agent for every channel; phase 1 manages Threads, and the others join one at a time. Posts still come from the xauusd analysis templates; the agent checks each one before it goes out and never changes a draft. Replies under our posts go out on their own, within the caps, after a 72-hour dry run.</p></div></div>
       <div class="card">
         <div class="tabs chtabs" id="agentchannels" role="tablist" aria-label="Channel"></div>
         <div class="pad" id="agentinactive" hidden></div>
@@ -136,11 +136,13 @@
           <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="agent-checks" id="agenttab-checks" data-tab="checks" tabindex="-1">Checks</button>
           <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="agent-audit" id="agenttab-audit" data-tab="audit" tabindex="-1">Audit</button>
           <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="agent-plan" id="agenttab-plan" data-tab="plan" tabindex="-1">Plan</button>
+          <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="agent-replies" id="agenttab-replies" data-tab="replies" tabindex="-1">Replies</button>
         </div>
         <div id="agent-overview" role="tabpanel" aria-labelledby="agenttab-overview"><div class="grid tiles pad" id="agenttiles"></div><div class="pad" id="agentmodel"></div><div id="agentskills"></div></div>
         <div id="agent-checks" role="tabpanel" aria-labelledby="agenttab-checks" hidden><div class="list" id="agentchecks"></div></div>
         <div id="agent-audit" role="tabpanel" aria-labelledby="agenttab-audit" hidden><div class="pad" id="agentaudit"></div></div>
         <div id="agent-plan" role="tabpanel" aria-labelledby="agenttab-plan" hidden><div class="pad" id="agentplan"></div></div>
+        <div id="agent-replies" role="tabpanel" aria-labelledby="agenttab-replies" hidden><div class="pad" id="agentreplies"></div></div>
         </div>
       </div>
     </section>
