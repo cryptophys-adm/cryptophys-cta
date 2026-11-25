@@ -212,11 +212,11 @@ export async function channelSettings(env, { strict = false } = {}) {
   return { settings: effectiveSettings(stored?.settings ?? {}), meta: stored?.meta ?? {} };
 }
 /** The settings applied to fresh drafts: kinds, the daily maximum (WIB day) and the hashtag line (guardian again). */
-async function settled(env, drafts, settings, now) {
+async function settled(env, drafts, settings, now, dropped = null) {
   if (!drafts.length) return drafts;
   let today = {};
   try { today = await desk(env).channelCounts(wibDayStart(now)); } catch { today = {}; }
-  return applySettings(drafts, settings, { today, recheck: (d) => recheck(d, { delayHours: delayOf(env), now }) });
+  return applySettings(drafts, settings, { today, recheck: (d) => recheck(d, { delayHours: delayOf(env), now }), dropped });
 }
 
 /** The daily recap drafts (decisions older than 24 hours), queued once. */
@@ -238,9 +238,22 @@ export async function draftAnalysis(env, { now = Date.now() } = {}) {
   const knownLevels = new Set(await d.idsWithPrefix("levels:"));
   const postedToday = await d.kindCounts("pattern", new Date(now).toISOString().slice(0, 10));
   const { settings } = await channelSettings(env);
-  const drafts = await settled(env, analysisDrafts(analysis, { now, channels: draftingChannels(channelsOf(env), settings), levelsRun: new Date(now).getUTCHours() === 6, postedToday, known, knownLevels }), settings, now);
+  const dropped = [];
+  const drafts = await settled(env, analysisDrafts(analysis, { now, channels: draftingChannels(channelsOf(env), settings), levelsRun: new Date(now).getUTCHours() === 6, postedToday, known, knownLevels }), settings, now, dropped);
   const added = drafts.length ? await d.add(drafts, now) : [];
-  return { zones: analysis?.zones?.length ?? 0, patterns: analysis?.patterns?.length ?? 0, drafts: drafts.map((x) => ({ id: x.id, status: x.status })), added };
+  // What the run read, for its log every hour (orchestrator review, 2026-11-25, after the 07:09 UTC miss): each chart's
+  // latest close and how many zones it has, and each draft left out with why.
+  const read = analysisRead(analysis);
+  return { zones: analysis?.zones?.length ?? 0, patterns: analysis?.patterns?.length ?? 0, ...read, drafts: drafts.map((x) => ({ id: x.id, status: x.status })), added, ...(dropped.length ? { dropped } : {}) };
+}
+
+/** Pure: each chart's latest close (PublicProjection.analysis().closed) and its zone count (zones_by_chart), H1, H4, D1. */
+export function analysisRead(analysis) {
+  const charts = ["H1", "H4", "D1"];
+  return {
+    closed: Object.fromEntries(charts.map((c) => [c, typeof analysis?.closed?.[c] === "string" ? analysis.closed[c] : null])),
+    zones_by_chart: Object.fromEntries(charts.map((c) => [c, Array.isArray(analysis?.zones_by_chart?.[c]) ? analysis.zones_by_chart[c].length : null]))
+  };
 }
 
 /**

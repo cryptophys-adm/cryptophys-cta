@@ -7,7 +7,8 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
 1. **Deploy only through `main`: the bridge workflow now, the platform's native deploy later.** Owner 2026-11-15:
    "gunakan native deployment pakai forge"; owner 2026-11-16: "setuju, buatkan PR workflow deploy CTA" (the platform
    session's faster path: the Forge cannot bind or check a Worker that does not exist yet, and native deploy of an
-   external organ, ADR-0018, is not built). Until it is, `.github/workflows/deploy.yml` deploys a PR merged into `main`
+   external organ, ADR-0018, is not built; held: owner 2026-11-25, dynamic-worker budget, "cancel cta sekarang jangn
+   pakai forge dulu karena isu budget dynamic worker"). Until it is, `.github/workflows/deploy.yml` deploys a PR merged into `main`
    (or a run by hand), using the repository secret `CLOUDFLARE_API_TOKEN` the owner adds; without it the deploy job is
    skipped with a warning. Once the Forge deploys this organ, `deploy.yml` is removed in the same change that hands it
    over. `organism.json` `deploy` declares what the Forge will deploy, and `test/app.test.mjs` keeps that block equal
