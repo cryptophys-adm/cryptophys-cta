@@ -97,15 +97,19 @@ export function roomOf(text) {
   if (/\b(4 ?h|h4|4[- ]?hour)\b/.test(t)) return "4h";
   return "1d";
 }
+/** How old a room's reading may be, in minutes: one bar of its chart plus 15 (orchestrator review of #82). */
+export const ROOM_MAX_AGE_MIN = Object.freeze({ "15m": 30, "1h": 75, "4h": 255, "1d": 1455 });
 /**
  * The fixed War Room answer from a reading (PublicProjection.warroom): the room, its bias, how many analysts were heard,
- * the close it was read at, and that it is no call; null without a usable reading.
+ * the close it was read at, and that it is no call; null without a usable reading, and null when the reading has no
+ * close or is older than one bar of its chart plus 15 minutes, so an old bias is never shown as the room's latest.
  */
-export function roomReply(reading) {
+export function roomReply(reading, { now = Date.now() } = {}) {
   const room = ROOM_NAMES[reading?.source], bias = BIAS[reading?.bias];
   if (!room || !bias || reading?.error) return null;
   const at = Date.parse(reading.at ?? "");
-  const close = Number.isFinite(at) ? ` at the ${new Date(at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "UTC" }).replace(/\u202f/g, " ")} UTC close` : "";
+  if (!Number.isFinite(at) || now - at > ROOM_MAX_AGE_MIN[reading.source] * 60_000 || at > now + 60_000) return null;
+  const close = ` at the ${new Date(at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "UTC" }).replace(/\u202f/g, " ")} UTC close`;
   const heard = Number.isFinite(reading.analysts) && reading.analysts > 0 ? `, ${reading.analysts} analysts heard` : "";
   return `The room's latest reading of the ${room} chart${close}: ${bias}${heard}. It's a reading for education, not a call to buy or sell. ${DISCLAIMER}`;
 }
@@ -168,7 +172,7 @@ export async function runReplies(channel, mode, deps, { now = Date.now() } = {})
       let answer = MARKET_REPLY, fromModel = false;
       if (bucket === "room") {
         const reading = deps.room ? await deps.room(roomOf(r.text)).catch(() => null) : null;
-        answer = roomReply(reading);
+        answer = roomReply(reading, { now });
         if (!answer) { await deps.record({ ...row, status: "no_reading" }); skip("no_reading"); continue; }
       } else if (bucket !== "market") {
         const m = await deps.ask(replyPrompt({ postHead: String(post.text ?? "").split("\n")[0], reply: r.text }));

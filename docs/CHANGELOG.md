@@ -5,7 +5,7 @@
   - Owner, 25 Nov: "War room opsional jika ada pertanyaan butuh reply", then "Yes, from a fixed template".
   - Triage has a new bucket, `room`: the bias, the outlook, the room's view, or "bullish or bearish". A buy or sell question still goes to the fixed no-calls answer first.
   - `roomReply` fills the template from `PROJECTION.warroom` for the chart the comment names (15m, 1H or 4H, else daily). The model is never called for it.
-  - Without a reading, no answer is sent.
+  - Without a reading, or with one older than a bar of its chart plus 15 minutes, no answer is sent.
   - AGENTS.md rule 2 and SSOT are updated.
   - Test AG11.
 
