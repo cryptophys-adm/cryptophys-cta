@@ -10,7 +10,7 @@ import { ABOUT_LEDE } from "../src/agent/write.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
 import { AGENT_SECRETS } from "../src/agent/router.mjs";
-import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites, claimPublish } from "../src/desk.mjs";
+import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites, claimPublish, failStuckPublishing, STUCK_NOTE } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
@@ -31,7 +31,7 @@ async function jwt(claims) {
 
 function sqlite() {
   const db = new DatabaseSync(":memory:");
-  return { exec(q, ...b) { const s = db.prepare(q); const out = /^\s*SELECT/i.test(q) ? s.all(...b) : (s.run(...b), []); return { toArray: () => out.map((r) => ({ ...r })) }; } };
+  return { exec(q, ...b) { const s = db.prepare(q); const out = /^\s*SELECT|\bRETURNING\b/i.test(q) ? s.all(...b) : (s.run(...b), []); return { toArray: () => out.map((r) => ({ ...r })) }; } };
 }
 /** The ContentDesk Durable Object's RPC surface over node:sqlite. */
 function deskStub() {
@@ -1058,12 +1058,15 @@ test("one claim before publishing (orchestrator review of #93): two runs publish
   assert.ok([a, b].some((x) => x.status === "published") && [a, b].some((x) => x.held === "already_publishing"), JSON.stringify([a, b]));
   assert.equal(getDraft(d.sql, "t1").status, "published");
   assert.deepEqual(draftEvents(d.sql, "t1").filter((x) => x.action === "publishing").length, 1, "one claim");
-  // a claim left by a run that died is taken again after CLAIM_STALE_MS; a fresh one is not
+  // a claim left by a run that died: failed after CLAIM_STALE_MS, for a person to check; never republished by itself
   addDrafts(d.sql, [{ id: "t2", channel: "telegram", kind: "daily_recap", text: "Education only. Not financial advice.", status: "pending" }]);
   decideDraft(d.sql, { id: "t2", decision: "approve", actor: "owner" });
   const T = Date.now();
   assert.equal(claimPublish(d.sql, { id: "t2" }, { now: T }).ok, true);
-  assert.deepEqual(claimPublish(d.sql, { id: "t2" }, { now: T + 60_000 }), { ok: false, status: "publishing" });
-  assert.equal(claimPublish(d.sql, { id: "t2" }, { now: T + 11 * 60_000 }).ok, true, "a stale claim is taken again");
+  assert.deepEqual(claimPublish(d.sql, { id: "t2" }, { now: T + 60_000 }), { ok: false, status: "publishing" }, "never claimed twice");
+  assert.deepEqual(failStuckPublishing(d.sql, { now: T + 5 * 60_000 }), [], "a fresh claim stays");
+  assert.deepEqual(failStuckPublishing(d.sql, { now: T + 11 * 60_000 }), ["t2"]);
+  assert.deepEqual([getDraft(d.sql, "t2").status, getDraft(d.sql, "t2").error], ["failed", STUCK_NOTE]);
+  assert.deepEqual(claimPublish(d.sql, { id: "t2" }, { now: T + 12 * 60_000 }), { ok: false, status: "failed" }, "a failed draft is not claimed: a person uses Publish now");
   assert.deepEqual(claimPublish(d.sql, { id: "t1" }, { now: T }), { ok: false, status: "published" }, "a published draft is never claimed");
 });

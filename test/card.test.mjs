@@ -13,7 +13,7 @@ import { checkContentDraft } from "../src/guardian.mjs";
 const brand = BRANDS["xauusd-ai-cta"];
 const sqlite = () => {
   const db = new DatabaseSync(":memory:");
-  return { exec(q, ...b) { const s = db.prepare(q); const out = /^\s*SELECT/i.test(q) ? s.all(...b) : (s.run(...b), []); return { toArray: () => out.map((r) => ({ ...r })) }; } };
+  return { exec(q, ...b) { const s = db.prepare(q); const out = /^\s*SELECT|\bRETURNING\b/i.test(q) ? s.all(...b) : (s.run(...b), []); return { toArray: () => out.map((r) => ({ ...r })) }; } };
 };
 const ANALYSIS = {
   at: "2026-11-17T06:09:00.000Z", price: 4087.35,

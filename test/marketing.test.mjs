@@ -8,7 +8,7 @@ import { normalizeLink, linkHosts, redirectTarget, shortUrl, randomSlug, SLUG, G
 import { addLink, getLink, countClick, listLinks, saveHashtagSet, listHashtagSets, kindMixSince, addDrafts, decideDraft, recordPublish } from "../src/desk.mjs";
 import { checkContentDraft } from "../src/guardian.mjs";
 
-const sqlite = () => { const db = new DatabaseSync(":memory:"); return { exec(q, ...b) { const s = db.prepare(q); const out = /^\s*SELECT/i.test(q) ? s.all(...b) : (s.run(...b), []); return { toArray: () => out.map((r) => ({ ...r })) }; } }; };
+const sqlite = () => { const db = new DatabaseSync(":memory:"); return { exec(q, ...b) { const s = db.prepare(q); const out = /^\s*SELECT|\bRETURNING\b/i.test(q) ? s.all(...b) : (s.run(...b), []); return { toArray: () => out.map((r) => ({ ...r })) }; } }; };
 
 test("a tracked link: our own or the brand's profile hosts only, https, the UTM tags of the channel and campaign", () => {
   const hosts = linkHosts({});

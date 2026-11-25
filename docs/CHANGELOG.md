@@ -6,7 +6,7 @@
   - `AUTO_WINDOW_MINUTES` is now 0.
   - The analysis run (and the daily run) runs the scheduler's steps right after its cards: cta-write, then auto-approve, then publishing. With an empty slot grid on Threads (owner: "langsung post begitu di approve"), an H1 map goes out about 10 minutes after the close; it used to take about 25.
   - An edited draft still waits for a person. The guardian, the 2-hour expiry and the daily cap still apply.
-  - One claim before the platform is called (orchestrator review): `claimPublish` moves a draft from approved to `publishing` inside the Desk's single call, and only that run posts. A second run at the same moment gets "already_publishing" and calls nothing. A claim older than 10 minutes, left by a run that died, may be taken again. The studio shows "Publishing".
+  - One claim before the platform is called (orchestrator review): `claimPublish` moves a draft from approved to `publishing` inside the Desk's single call, and only that run posts. A second run at the same moment gets "already_publishing" and calls nothing. The claim is one conditional UPDATE (`approved` → `publishing` … `RETURNING id`). A claim older than 10 minutes, left by a run that died, becomes `failed` with a note to check the channel first; it is retried only through the existing "Publish now" and never republished by itself. The studio shows "Publishing".
 - content(about): About's step 4 text changed, word for word. The owner chose "Usulan dengan kata 'checked'".
   - Before: "… or lets a kind of post be approved automatically after 15 minutes, while a person can still stop it; …"
   - After: "… or lets a kind of post be approved automatically once it is ready and checked; …"
