@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-25 (the CTA agent: key-level maps per chart)
+- feat(agent): a key-level map at each H1, H4 and D1 close; charts that close at the same time share one post.
+  - Owner, 25 Nov: "pull keymap dari xauusd per 1h dan 4h dan 1D", and "Jika waktunya sama berarti digabung".
+  - Reads xauusd KM1's `zones_by_chart` and `closed`.
+  - `dueChartMaps` posts each chart once per new close, never for a close older than 70 minutes, and never twice; `chartMapText` writes the post.
+  - Candidates come first: two zones a side for one chart, one when charts are merged.
+  - Without KM1 the daily map of 06:09 UTC stays.
+  - The queue's line in the studio says when drafts are made.
+  - Test AG12.
+
 ## 2026-11-25 (the CTA agent: War Room in replies)
 - feat(agent): a reply asking what the room reads now gets the War Room's latest reading, from a fixed template.
   - Owner, 25 Nov: "War room opsional jika ada pertanyaan butuh reply", then "Yes, from a fixed template".
