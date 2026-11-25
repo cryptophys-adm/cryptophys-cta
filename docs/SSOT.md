@@ -184,7 +184,7 @@ the studio's Channels page). Per channel, set by a person:
 | `format` | text, image, video: only what the channel's publisher posts today (Threads, X, Telegram text; Instagram image; YouTube, TikTok video); the rest is shown as planned and refused | recorded; a new format needs its publisher first |
 | `kinds` | key-level map, chart pattern, daily recap | a kind not listed is not drafted for the channel |
 | `max_per_day` | 1–24 (default 6: one key-level map, four patterns, one recap) | drafts over it in the WIB day (00:00 Asia/Jakarta) are not made |
-| `schedule` | up to 12 slots, each days of the week and a time in WIB | the scheduler (`src/scheduler.mjs`, every 5 minutes) publishes the channel's oldest approved draft at each slot, one per slot; a slot missed by over 30 minutes is skipped; no slots: a draft is published at its approval |
+| `schedule` | up to 96 slots (owner 2026-11-25: "24x4 slot per hari"), each days of the week and a time in WIB; the studio edits them as a grid of the 96 quarter hours with one set of days, quick fills, and a row per slot at another minute, one channel per tab | the scheduler (`src/scheduler.mjs`, every 5 minutes) publishes the channel's oldest approved draft at each slot, one per slot; a slot missed by over 30 minutes is skipped; no slots: a draft is published at its approval |
 | `hashtags` | up to 8 `#words`; never the internal names | replaces the channel's default hashtag line; the guardian checks the draft again, and a failing line keeps the default |
 
 The defaults are what the engine did before settings existed; a stored row that no longer validates falls back to

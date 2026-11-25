@@ -44,7 +44,7 @@ test("validation: kinds, the daily maximum, schedule slots in WIB, hashtags; any
   const bad = [
     ["unknown", {}], ["x", null], ["x", []], ["x", { enabled: "yes" }], ["x", { kinds: ["meme"] }], ["x", { max_per_day: 0 }], ["x", { max_per_day: 33 }],
     ["x", { max_per_day: 2.5 }], ["x", { schedule: [{ days: ["mon"], time: "24:00" }] }], ["x", { schedule: [{ days: [], time: "10:00" }] }],
-    ["x", { schedule: [{ days: ["someday"], time: "10:00" }] }], ["x", { schedule: Array.from({ length: 13 }, () => ({ days: ["mon"], time: "10:00" })) }],
+    ["x", { schedule: [{ days: ["someday"], time: "10:00" }] }], ["x", { schedule: Array.from({ length: 97 }, (_, i) => ({ days: ["mon"], time: `${String(Math.floor(i / 4) % 24).padStart(2, "0")}:${String((i % 4) * 15).padStart(2, "0")}` })) }],
     ["x", { hashtags: "gold" }], ["x", { hashtags: "#a #b #c #d #e #f #g #h #i" }], ["x", { hashtags: "#gold<script>" }], ["x", { hashtags: "#NexusRoom" }], ["x", { hashtags: "#omega" }]
   ];
   for (const [c, input] of bad) assert.equal(normalizeSettings(c, input).ok, false, JSON.stringify([c, input]));
@@ -114,4 +114,21 @@ test("the format a person chose drives the draft (owner 2026-11-17: Telegram wit
   const settings = effectiveSettings({ telegram: { format: "image" } });
   const out = applySettings([d, { ...d, id: "th1", channel: "threads" }], settings);
   assert.deepEqual(out.map((x) => [x.channel, x.status]), [["telegram", "needs_image"], ["threads", "pending"]], "scheduled drafts follow the channel's format");
+});
+
+test("the schedule (owner 2026-11-25: \"slot bisa 24H sekitar 24x4 slot per hari\", \"layoutnya dibuat per tab saja per page\"): 96 slots a channel, a grid of quarter hours, one channel per tab", async () => {
+  const { MAX_SLOTS, QUARTERS } = await import("../src/settings.mjs");
+  assert.equal(MAX_SLOTS, 96);
+  assert.equal(QUARTERS.length, 96);
+  assert.deepEqual([QUARTERS[0], QUARTERS[1], QUARTERS[95]], ["00:00", "00:15", "23:45"]);
+  const every15 = QUARTERS.map((time) => ({ days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"], time }));
+  const r = normalizeSettings("threads", { schedule: every15 });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(r.settings?.schedule?.length ?? r.value?.schedule?.length ?? 96, 96);
+  const { readFileSync } = await import("node:fs");
+  const js = readFileSync(new URL("../public/studio/studio.js", import.meta.url), "utf8"), html = readFileSync(new URL("../public/studio/index.html", import.meta.url), "utf8");
+  assert.match(html, /<div class="tabs chtabs" id="chsettabs" role="tablist" aria-label="Channel"><\/div>\n\s+<div class="grid" id="channels"><\/div>/, "one channel per tab, full width");
+  assert.match(js, /if \(settingsChannel\) box\.appendChild\(channelCard\(settingsChannel, cfg\)\);/);
+  for (const t of ["Every hour at", "Every 2 hours at :30", "Every 15 minutes", "Clear the grid", "Add a slot at another minute"]) assert.ok(js.includes(t), t);
+  assert.match(js, /for \(const \[from, to\] of \[\[0, 12\], \[12, 24\]\]\)/, "two halves of the day");
 });

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-25 (Channels: one channel per tab, a 96-slot schedule)
+- feat(studio): a channel can now hold up to 96 posting slots a day, one every 15 minutes. Channels shows one channel per tab.
+  - Owner, 25 Nov: "scheduling channel sekarang terlalu kaku hanya max 12 slot padahal butuh 24 atau mungkin layoutnya dibuat per tab saja per page, sehingga slot bisa 24H sekitar 24x4 slot per hari".
+  - `MAX_SLOTS` went from 12 to 96, and `QUARTERS` is added.
+  - The schedule editor is a grid of the day's 96 quarter hours (WIB), in two halves of 12 hours. One set of days applies to all the grid's slots.
+  - Quick fills: every hour at a chosen minute, every 2 hours at :30, every 15 minutes, clear the grid.
+  - A slot at another minute stays in its own row, as before.
+  - The scheduler is unchanged: one approved post per slot, and the newest map per chart wins.
+  - Screenshots in `docs/screenshots/channel-slots/`.
+  - TH24 counts the studio's new CSS rules. A settings test covers 96 slots.
+
 ## 2026-11-25 (posts without a delay)
 - feat(guardian): a decision may be posted as a recap without the 24-hour hold. Owner, 25 Nov, through the orchestrator: "Posts juga realtime".
   - `PUBLIC_DELAY_HOURS` is "0" in `wrangler.jsonc`. "24" restores the old hold; unset, empty or invalid is 24.

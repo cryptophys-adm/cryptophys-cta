@@ -667,15 +667,16 @@ test("TH24 cta.css is the studio's own (PR 5; E2 in PR 4): only rules the studio
   // class, so it passed with nothing to match; the four .topbar nav rules name real classes (topbar, on) but need a nav in
   // the top bar, which the studio has none of; span.num's class is real on td, th and input, never on a span (review of
   // #71). The studio's screens at 1440 and 390 px are pixel-identical before and after. A deliberate change to its look
-  // updates this.
+  // updates this: 2026-11-25, the schedule's grid of 96 quarter hours and its quick fills (owner: "slot bisa 24H sekitar
+  // 24x4 slot per hari"), eight rules more.
   const parts = rulesOf(css).flatMap(([media, sel, body]) => sel.split(",").map((x) => [media, x.trim(), body]));
   const studioRules = parts.filter(([, x]) => [...x.matchAll(/\.([a-zA-Z][\w-]*)/g)].every((m) => used.has(m[1]))).map(([media, x, body]) => `${media}|${x}{${body}}`);
   assert.equal(studioRules.length, parts.length, "every rule in cta.css is one the studio can match");
-  assert.equal(studioRules.length, 246, "the rules the studio can match");
-  assert.equal(createHash("sha256").update([...studioRules].sort().join("\n")).digest("hex").slice(0, 16), "176669ef1344a5cd", "the studio's rules are unchanged");
+  assert.equal(studioRules.length, 254, "the rules the studio can match");
+  assert.equal(createHash("sha256").update([...studioRules].sort().join("\n")).digest("hex").slice(0, 16), "3de0d9a25190fae3", "the studio's rules are unchanged");
   // and in file order: a reorder changes the cascade (review of #71: @media (max-width:900px) moved above .shell left the
   // 390 px studio on two columns with a sticky side navigation, and the sorted hash still passed)
-  assert.equal(createHash("sha256").update(studioRules.join("\n")).digest("hex").slice(0, 16), "15bd473e37be5c9f", "the studio's rules keep their order");
+  assert.equal(createHash("sha256").update(studioRules.join("\n")).digest("hex").slice(0, 16), "3398c6fb158a56f3", "the studio's rules keep their order");
   // no public page's rule: the old public page's and sub-pages' classes, the public top bar's nav, the steps' number,
   // the old Studio link; the only id a rule names is one the studio's markup has
   const PUBLIC = ["public", "hero", "hero-card", "hero-more", "eyebrow", "facts", "section", "chan", "disclaimer", "site-foot", "pagehero", "meta-p", "steps", "prose", "never", "links", "post", "narrow", "lg", "three", "sr"];

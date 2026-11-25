@@ -286,6 +286,7 @@
   const FORMAT_NOTE = { planned: "planned", na: "not available" };
   const DAY_NAMES = { mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun" };
 
+  let settingsChannel = null;
   async function loadChannels() {
     try {
       const [cfg, conns] = await Promise.all([call("/api/studio/settings"), call("/api/studio/connections").catch(() => null)]);
@@ -297,8 +298,20 @@
       line.appendChild(document.createTextNode(status?.publish === "on"
         ? `Publishing on for ${pubList()}; other channels wait. At each slot, the channel's oldest approved post goes out (one per slot). A channel without slots posts at approval.`
         : "Publishing is off: the slots pass without posting and approved posts wait. Once publishing is on, each slot posts the channel's oldest approved post."));
+      // One channel per tab (owner 2026-11-25: "layoutnya dibuat per tab saja per page"), so the schedule's grid of 96
+      // slots has the page's width.
+      const chans = Object.keys(cfg.settings || {});
+      if (!chans.includes(settingsChannel)) settingsChannel = chans[0];
+      const tabs = $("chsettabs"); tabs.textContent = "";
+      for (const c of chans) {
+        const on = c === settingsChannel;
+        const b = make("button", `tab${on ? " on" : ""}`, status?.channels?.[c]?.name ?? c); b.type = "button";
+        b.setAttribute("role", "tab"); b.setAttribute("aria-selected", String(on)); b.tabIndex = on ? 0 : -1;
+        b.addEventListener("click", () => { settingsChannel = c; loadChannels(); });
+        tabs.appendChild(b);
+      }
       const box = $("channels"); box.textContent = "";
-      for (const c of Object.keys(cfg.settings || {})) box.appendChild(channelCard(c, cfg));
+      if (settingsChannel) box.appendChild(channelCard(settingsChannel, cfg));
       showErr(null);
       oauthNotice();
     } catch (e) { showErr(e); }
@@ -389,27 +402,88 @@
     mf.appendChild(max);
     bd.appendChild(mf);
 
-    // Schedule
-    const sf = field("Posting schedule (WIB)", `Up to ${cfg.max_slots ?? 12} slots. Each slot: the days and the time an approved post goes out.`);
+    // Schedule (owner 2026-11-25: "slot bisa 24H sekitar 24x4 slot per hari"): a grid of the day's 96 quarter hours, one
+    // set of days for all of them, quick fills, and any slot at another minute listed below it, as before.
+    const maxSlots = cfg.max_slots ?? 96;
+    const sf = field("Posting schedule (WIB)", `Up to ${maxSlots} slots: tick the times an approved post goes out (one post per slot), on the days chosen above the grid.`);
     const slots = make("div", "slots");
+    const QUARTER = /^([01]\d|2[0-3]):(00|15|30|45)$/;
+    const ALL_DAYS = cfg.days ?? ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+    const inGrid = (x) => QUARTER.test(x.time);
+    const gridDays = () => { const d = new Set(s.schedule.filter(inGrid).flatMap((x) => x.days)); return d.size ? ALL_DAYS.filter((x) => d.has(x)) : [...ALL_DAYS]; };
+    let days = gridDays();
+    const setGrid = (times) => { s.schedule = [...s.schedule.filter((x) => !inGrid(x)), ...[...new Set(times)].sort().map((t) => ({ days: [...days], time: t }))].slice(0, maxSlots); };
+    const gridTimes = () => [...new Set(s.schedule.filter(inGrid).map((x) => x.time))];
     const drawSlots = () => {
       slots.textContent = "";
-      if (!s.schedule.length) slots.appendChild(make("div", "hint", "No slot yet: approved posts go out right after approval, once publishing is on."));
+      const count = make("div", "hint", s.schedule.length ? `${s.schedule.length} of ${maxSlots} slots` : "No slot yet: approved posts go out right after approval, once publishing is on.");
+      // the days of every grid slot
+      const dayRow = make("div", "days"); dayRow.setAttribute("aria-label", "Days of the grid's slots");
+      for (const d of ALL_DAYS) {
+        const b = make("button", days.includes(d) ? "on" : null, DAY_NAMES[d] ?? d);
+        b.type = "button"; b.disabled = !edit; b.setAttribute("aria-pressed", String(days.includes(d)));
+        b.addEventListener("click", () => {
+          const next = days.includes(d) ? days.filter((x) => x !== d) : ALL_DAYS.filter((x) => x === d || days.includes(x));
+          if (!next.length) return; // a slot needs one day at least
+          days = next; setGrid(gridTimes()); drawSlots();
+        });
+        dayRow.appendChild(b);
+      }
+      // quick fills
+      const quick = make("div", "quick");
+      if (edit) {
+        const fill = (label, times) => { const b = make("button", "btn sm outline", label); b.type = "button"; b.addEventListener("click", () => { setGrid(times); drawSlots(); }); quick.appendChild(b); };
+        const pick = make("select", "minute"); pick.setAttribute("aria-label", "Minute");
+        for (const m of ["00", "15", "30", "45"]) { const o = make("option", null, `:${m}`); o.value = m; if (m === "30") o.selected = true; pick.appendChild(o); }
+        const hourly = make("button", "btn sm outline", "Every hour at"); hourly.type = "button";
+        hourly.addEventListener("click", () => { setGrid(Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, "0")}:${pick.value}`)); drawSlots(); });
+        quick.append(hourly, pick);
+        fill("Every 2 hours at :30", Array.from({ length: 12 }, (_, i) => `${String(i * 2).padStart(2, "0")}:30`));
+        fill("Every 15 minutes", Array.from({ length: 96 }, (_, i) => `${String(Math.floor(i / 4)).padStart(2, "0")}:${String((i % 4) * 15).padStart(2, "0")}`));
+        fill("Clear the grid", []);
+      }
+      // the grid: 24 hours by four quarters, in two halves of the day (side by side on a wide screen)
+      const on = new Set(gridTimes());
+      const grid = make("div", "qgrids"); grid.setAttribute("role", "group"); grid.setAttribute("aria-label", "Posting times (WIB)");
+      for (const [from, to] of [[0, 12], [12, 24]]) {
+      const half = make("div", "qgrid");
+      half.appendChild(make("span", "qh", ""));
+      for (const m of ["00", "15", "30", "45"]) half.appendChild(make("span", "qh", `:${m}`));
+      for (let h = from; h < to; h++) {
+        const hh = String(h).padStart(2, "0");
+        half.appendChild(make("span", "qh", hh));
+        for (const m of ["00", "15", "30", "45"]) {
+          const t = `${hh}:${m}`;
+          const b = make("button", on.has(t) ? "on" : null, ""); b.type = "button"; b.disabled = !edit;
+          b.setAttribute("aria-pressed", String(on.has(t))); b.setAttribute("aria-label", `${t} WIB`); b.title = `${t} WIB`;
+          b.addEventListener("click", () => {
+            const cur = gridTimes();
+            if (cur.includes(t)) setGrid(cur.filter((x) => x !== t)); else if (s.schedule.length < maxSlots) setGrid([...cur, t]);
+            drawSlots();
+          });
+          half.appendChild(b);
+        }
+      }
+      grid.appendChild(half);
+      }
+      slots.append(count, dayRow, quick, grid);
+      // slots at another minute (kept as they were set)
       s.schedule.forEach((slot, idx) => {
+        if (inGrid(slot)) return;
         const r = make("div", "slot");
-        const days = make("div", "days");
-        for (const d of cfg.days ?? []) {
+        const ds = make("div", "days");
+        for (const d of ALL_DAYS) {
           const b = make("button", slot.days.includes(d) ? "on" : null, DAY_NAMES[d] ?? d);
           b.type = "button"; b.disabled = !edit; b.setAttribute("aria-pressed", String(slot.days.includes(d)));
           b.addEventListener("click", () => {
-            slot.days = slot.days.includes(d) ? slot.days.filter((x) => x !== d) : (cfg.days ?? []).filter((x) => x === d || slot.days.includes(x));
+            slot.days = slot.days.includes(d) ? slot.days.filter((x) => x !== d) : ALL_DAYS.filter((x) => x === d || slot.days.includes(x));
             b.classList.toggle("on", slot.days.includes(d)); b.setAttribute("aria-pressed", String(slot.days.includes(d)));
           });
-          days.appendChild(b);
+          ds.appendChild(b);
         }
         const t = make("input", "time"); t.type = "time"; t.value = slot.time; t.disabled = !edit; t.setAttribute("aria-label", "Time (WIB)");
-        t.addEventListener("input", () => { slot.time = t.value; });
-        r.append(days, t, make("span", "meta", "WIB"), make("span", "grow"));
+        t.addEventListener("change", () => { slot.time = t.value; drawSlots(); });
+        r.append(ds, t, make("span", "meta", "WIB"), make("span", "grow"));
         if (edit) {
           const rm = make("button", "btn sm outline", "Remove"); rm.type = "button";
           rm.addEventListener("click", () => { s.schedule.splice(idx, 1); drawSlots(); });
@@ -417,9 +491,9 @@
         }
         slots.appendChild(r);
       });
-      if (edit && s.schedule.length < (cfg.max_slots ?? 12)) {
-        const add = make("button", "btn sm outline", "Add slot"); add.type = "button";
-        add.addEventListener("click", () => { s.schedule.push({ days: ["mon", "tue", "wed", "thu", "fri"], time: "19:00" }); drawSlots(); });
+      if (edit && s.schedule.length < maxSlots) {
+        const add = make("button", "btn sm outline", "Add a slot at another minute"); add.type = "button";
+        add.addEventListener("click", () => { s.schedule.push({ days: [...days], time: "19:05" }); drawSlots(); });
         slots.appendChild(add);
       }
     };
