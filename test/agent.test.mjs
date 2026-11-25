@@ -14,7 +14,7 @@ import { lintPost, textFor } from "../src/agent/lint.mjs";
 import { CHANNELS } from "../src/channels.mjs";
 import { askModel, modelConfig, costOf, wibDayStartIso, MODEL_DEFAULTS, AGENT_SECRETS } from "../src/agent/router.mjs";
 import { weeklySummary, summaryOk, summaryKey } from "../src/agent/weekly.mjs";
-import { triage, checkReply, shapeAnswer, replyMode, runReplies, MARKET_REPLY, DISCLAIMER, REPLY_CHANNELS, REPLY_CAPS, DRY_RUN_HOURS } from "../src/agent/replies.mjs";
+import { triage, checkReply, shapeAnswer, replyMode, runReplies, roomReply, roomOf, ROOM_MAX_AGE_MIN, MARKET_REPLY, DISCLAIMER, REPLY_CHANNELS, REPLY_CAPS, DRY_RUN_HOURS } from "../src/agent/replies.mjs";
 import { autoAt, dueNow, AUTO_WINDOW_MINUTES } from "../src/agent/auto-approve.mjs";
 import { AUTO_KINDS, AUTO_DEFAULTS, normalizeSettings } from "../src/settings.mjs";
 import { draftedPatterns } from "../src/analysis-drafts.mjs";
@@ -321,4 +321,34 @@ test("AG10 auto-approve: 15 minutes after a draft is ready, never an edited one;
   const js = read("public/studio/studio.js");
   assert.match(js, /Auto-approves \$\{clock12\(d\.auto_at\)\} UTC/);
   assert.match(js, /field\("Auto-approve"/);
+});
+
+test("AG11 the War Room in replies (owner 2026-11-25: \"Yes, from a fixed template\"): the room's reading, never model text; a buy or sell question still gets no call", async () => {
+  assert.deepEqual(["what is the room's bias today?", "bullish or bearish on the 4h?", "what does the war room read on 15m?", "should I buy, what's the bias?"].map((t) => [triage(t), roomOf(t)]),
+    [["room", "1d"], ["room", "4h"], ["room", "15m"], ["market", "1d"]]);
+  const NOW = Date.parse("2026-11-25T06:00:00Z");
+  const r = roomReply({ source: "1d", bias: "bearish", analysts: 17, at: "2026-11-24T22:00:00Z" }, { now: NOW });
+  assert.equal(r, "The room's latest reading of the daily chart at the 10:00 PM UTC close: Bearish, 17 analysts heard. It's a reading for education, not a call to buy or sell. Not financial advice.");
+  assert.ok(checkReply(r, { fromModel: false }).ok, "the fixed template passes the guardian and the reply checks");
+  assert.equal(roomReply({ error: "no reading" }, { now: NOW }), null);
+  assert.equal(roomReply({ source: "1d", bias: "buy", at: "2026-11-24T22:00:00Z" }, { now: NOW }), null, "only bullish, bearish or neutral");
+  // staleness (orchestrator review of #82): one bar of the chart plus 15 minutes, and never without a close
+  assert.deepEqual(ROOM_MAX_AGE_MIN, { "15m": 30, "1h": 75, "4h": 255, "1d": 1455 });
+  const fresh = (source, minutesAgo) => roomReply({ source, bias: "neutral", at: new Date(NOW - minutesAgo * 60_000).toISOString() }, { now: NOW }) !== null;
+  assert.deepEqual([fresh("15m", 30), fresh("15m", 31), fresh("1h", 75), fresh("1h", 76), fresh("4h", 255), fresh("4h", 256), fresh("1d", 1455), fresh("1d", 1456)], [true, false, true, false, true, false, true, false]);
+  assert.equal(roomReply({ source: "1d", bias: "bearish", analysts: 17 }, { now: NOW }), null, "no close: no answer");
+  const log = [], sends = [], asked = [], rooms = [];
+  const deps = {
+    posts: [{ id: "d1", remote_id: "111", text: "Education · x" }],
+    fetchReplies: async () => [{ id: "1", text: "what's the room's bias on the 4h?", username: "a" }, { id: "2", text: "and the room outlook on 1h?", username: "b" }],
+    seen: async () => false, answeredInThread: async () => false, sentSince: async () => 0,
+    record: async (x) => { log.push(x); }, ask: async (m) => { asked.push(m); return { ok: true, text: "x" }; },
+    room: async (source) => { rooms.push(source); return source === "4h" ? { source: "4h", bias: "bullish", analysts: 16, at: "2026-11-25T04:00:00Z" } : { source: "1h", bias: "bearish", analysts: 16, at: "2026-11-25T03:00:00Z" }; },
+    send: async (text, id) => { sends.push([text, id]); return { remote_id: "r" }; }
+  };
+  await runReplies("threads", { mode: "live" }, deps, { now: Date.parse("2026-11-25T06:00:00Z") });
+  assert.deepEqual(rooms, ["4h", "1h"]);
+  assert.equal(asked.length, 0, "no model call for the room");
+  assert.deepEqual(sends, [["The room's latest reading of the 4-hour chart at the 4:00 AM UTC close: Bullish, 16 analysts heard. It's a reading for education, not a call to buy or sell. Not financial advice.", "1"]]);
+  assert.deepEqual(log.map((x) => [x.reply_id, x.bucket, x.status]), [["1", "room", "sent"], ["2", "room", "no_reading"]], "the 1H reading of 3:00 is three hours old at 6:00: no answer");
 });

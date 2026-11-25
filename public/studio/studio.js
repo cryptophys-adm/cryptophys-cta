@@ -1251,7 +1251,7 @@
     box.appendChild(list);
   }
   // Replies (src/agent/replies.mjs): the mode (dry run, live, off), the caps, the switch, and what it did with each reply.
-  const REPLY_STATUS = { sent: ["green", "Sent"], dry_run: ["blue", "Would send"], no_answer: ["", "No answer"], blocked: ["red", "Blocked"], capped_person: ["", "Answered already"], no_model: ["amber", "No model"], model_skipped: ["", "Model skipped"], send_failed: ["red", "Not sent"] };
+  const REPLY_STATUS = { sent: ["green", "Sent"], dry_run: ["blue", "Would send"], no_answer: ["", "No answer"], blocked: ["red", "Blocked"], capped_person: ["", "Answered already"], no_model: ["amber", "No model"], model_skipped: ["", "Model skipped"], send_failed: ["red", "Not sent"], no_reading: ["amber", "No reading"] };
   function renderReplies(r, canEdit) {
     const box = $("agentreplies"); box.textContent = "";
     if (!r) { box.appendChild(make("div", "empty", "Replies are not on for this channel yet.")); return; }

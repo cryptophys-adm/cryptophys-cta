@@ -1128,6 +1128,7 @@ export async function agentReplies(env, { now = Date.now(), fetcher, sleep } = {
       seen: (id) => d.replySeen(id), answeredInThread: (postId, author) => d.answeredInThread(postId, author),
       sentSince: (s) => d.repliesSentSince(s), record: (r) => d.recordReply(r),
       ask: (messages) => askModel(env, store, { purpose: `reply:${channel}`, messages, maxTokens: 1500, now, ...f }),
+      room: async (source) => (typeof env.PROJECTION?.warroom === "function" ? env.PROJECTION.warroom({ source }) : null),
       send: (text, replyToId) => publishThreadsReply({ account, text, replyToId, ...f, ...(sleep ? { sleep } : {}) })
     }, { now });
   }

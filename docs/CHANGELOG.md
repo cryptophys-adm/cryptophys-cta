@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-25 (the CTA agent: War Room in replies)
+- feat(agent): a reply asking what the room reads now gets the War Room's latest reading, from a fixed template.
+  - Owner, 25 Nov: "War room opsional jika ada pertanyaan butuh reply", then "Yes, from a fixed template".
+  - Triage has a new bucket, `room`: the bias, the outlook, the room's view, or "bullish or bearish". A buy or sell question still goes to the fixed no-calls answer first.
+  - `roomReply` fills the template from `PROJECTION.warroom` for the chart the comment names (15m, 1H or 4H, else daily). The model is never called for it.
+  - Without a reading, or with one older than a bar of its chart plus 15 minutes, no answer is sent.
+  - AGENTS.md rule 2 and SSOT are updated.
+  - Test AG11.
+
 ## 2026-11-25 (the CTA agent, PR 5: auto-approve; confirmed patterns only)
 - feat(agent): posts approved by a rule.
   - The owner, 25 Nov:
