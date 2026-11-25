@@ -132,7 +132,8 @@
       "INSTAGRAM_APP_SECRET",
       "X_CLIENT_ID",
       "X_CLIENT_SECRET",
-      "TOKEN_ENC_KEY"
+      "TOKEN_ENC_KEY",
+      "REFLECTION_API_KEY"
     ],
     "health": {
       "path": "/health",

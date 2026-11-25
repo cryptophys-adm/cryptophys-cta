@@ -17,6 +17,8 @@ import { PROVIDERS, BOT_CHANNELS, CONNECT_SECRETS, appOf, newAttempt, authorizeU
 import { bestTimes, abResult, evergreen, EVERGREEN_MIN_DAYS } from "./growth.mjs";
 import { agentChecks } from "./agent/checks.mjs";
 import { auditThreads, planThreads } from "./agent/audit.mjs";
+import { modelStatus } from "./agent/router.mjs";
+import { weeklySummary, SUMMARY_KEY } from "./agent/weekly.mjs";
 import { linkHosts, normalizeLink, randomSlug, shortUrl, redirectTarget, GO_PATH, normalizeHashtagSet, MAX_SETS, normalizeMix, DEFAULT_MIX, MIX_KINDS, wibWeek, mixReport } from "./marketing.mjs";
 import { templateTexts, checkPost, composeDrafts, overlayFor, recapWindow, COMPOSE_KINDS, COMPOSE_KIND_NAMES } from "./compose.mjs";
 import { sourceOf } from "./warroom-drafts.mjs";
@@ -435,7 +437,7 @@ async function rpc(fn, failure) {
 }
 
 const isStudio = (path) => path === "/studio" || path.startsWith("/studio/") || path.startsWith("/api/studio/");
-const STUDIO_ROUTES = ["/api/studio/agent", "/api/studio/connections", "/api/studio/connect/app", "/api/studio/connect/token", "/api/studio/connect/start", "/api/studio/connect/disconnect", "/api/studio/connect/check", "/api/studio/growth", "/api/studio/links", "/api/studio/hashtag-sets", "/api/studio/mix", "/api/studio/schedule", "/api/studio/library", "/api/studio/edit", "/api/studio/duplicate", "/api/studio/calendar", "/api/studio/media-library", "/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/publish-now", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
+const STUDIO_ROUTES = ["/api/studio/agent/model", "/api/studio/agent", "/api/studio/connections", "/api/studio/connect/app", "/api/studio/connect/token", "/api/studio/connect/start", "/api/studio/connect/disconnect", "/api/studio/connect/check", "/api/studio/growth", "/api/studio/links", "/api/studio/hashtag-sets", "/api/studio/mix", "/api/studio/schedule", "/api/studio/library", "/api/studio/edit", "/api/studio/duplicate", "/api/studio/calendar", "/api/studio/media-library", "/api/studio/templates", "/api/studio/check", "/api/studio/compose", "/api/studio/settings", "/api/studio/performance", "/api/studio/insights-now", "/api/studio/drafts", "/api/studio/draft", "/api/studio/preview", "/api/studio/status", "/api/studio/decide", "/api/studio/publish-now", "/api/studio/draft-now", "/api/studio/render-now", "/api/studio/media", "/api/studio/whoami"];
 /** The public origin of the cards Instagram fetches (GET /media/<id>.jpg). */
 export const originOf = (env) => String(env?.PUBLIC_ORIGIN || "https://cta.cryptophys.work").replace(/\/+$/, "");
 const MEDIA_PATH = /^\/media\/([0-9a-f]{32})\.(jpg|webm)$/;
@@ -693,8 +695,19 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
           const posts = await d.measuredPosts();
           const audit = auditThreads(posts, { now: at });
           const schedule = (await channelSettings(env)).settings.threads?.schedule ?? [];
-          return { ...agentChecks(await d.list({ channel: "threads", limit: 30 })), audit, plan: planThreads(audit, posts, { now: at, schedule }), can_edit: role === "approver" };
+          const summary = (await d.studioSetting(SUMMARY_KEY))?.value ?? null;
+          return { ...agentChecks(await d.list({ channel: "threads", limit: 30 })), audit: { ...audit, summary: summary?.week === audit.week.from ? summary.text : null },
+            plan: planThreads(audit, posts, { now: at, schedule }), model: await modelStatus(env, modelStore(env, at), { now: at }), can_edit: role === "approver" };
         }, "agent_failed");
+      }
+      // The model's switch (src/agent/router.mjs): an approver turns it off or on; the studio's event log keeps who and when.
+      if (route === "POST /api/studio/agent/model") {
+        const r = await personJson(request, url, identity);
+        if (r.response) return r.response;
+        const denied = approverOnly(role);
+        if (denied) return denied;
+        if (typeof r.body.enabled !== "boolean") return json({ error: "enabled must be true or false" }, 400);
+        return rpc(() => desk(env).saveStudioSetting({ key: "agent_model", value: { enabled: r.body.enabled, reason: r.body.enabled ? null : "turned off in the studio" }, actor: identity.subject }, now ? now * 1000 : Date.now()), "model_switch_failed");
       }
       // Growth (src/growth.mjs): A/B results, best posting times per channel, evergreen suggestions.
       if (route === "GET /api/studio/growth") {
@@ -1006,3 +1019,14 @@ async function asset(env, request, url, rewrite, status) {
   return new Response(res.body, { status: status && res.ok ? status : res.status, headers });
 }
 
+
+/** The router's store on the Desk (src/agent/router.mjs): the switch, the call log and the spend. */
+export const modelStore = (env, now = Date.now()) => {
+  const d = desk(env);
+  return { setting: (k) => d.studioSetting(k), saveSetting: (i) => d.saveStudioSetting(i, now), record: (c) => d.recordModelCall(c, now), spendSince: (s) => d.modelSpendSince(s), recent: (n) => d.recentModelCalls(n) };
+};
+/** The Audit's weekly summary (src/agent/weekly.mjs), at the daily run: once a WIB week, only with the model's key. */
+export async function agentWeekly(env, { now = Date.now(), fetcher } = {}) {
+  if (!String(env?.REFLECTION_API_KEY ?? "").trim()) return { status: "no_key" };
+  return weeklySummary(env, modelStore(env, now), await desk(env).measuredPosts(), { now, ...(fetcher ? { fetcher } : {}) });
+}

@@ -59,7 +59,12 @@ export const DESK_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS connect_creds (
     channel TEXT NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL, hint TEXT, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL, PRIMARY KEY (channel, kind))`,
   `CREATE TABLE IF NOT EXISTS ab_tests (
-    draft_id TEXT PRIMARY KEY, grp TEXT NOT NULL, variant TEXT NOT NULL, channel TEXT NOT NULL, created_at TEXT NOT NULL)`
+    draft_id TEXT PRIMARY KEY, grp TEXT NOT NULL, variant TEXT NOT NULL, channel TEXT NOT NULL, created_at TEXT NOT NULL)`,
+  // The CTA agent's model calls (src/agent/router.mjs, owner 2026-11-25): one row a call, its tokens and its cost, so the
+  // daily cap holds and the studio shows the spend. Never the prompt or the answer.
+  `CREATE TABLE IF NOT EXISTS model_calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, purpose TEXT NOT NULL, model TEXT NOT NULL, status TEXT NOT NULL,
+    tokens_in INTEGER NOT NULL DEFAULT 0, tokens_out INTEGER NOT NULL DEFAULT 0, cost_usd REAL NOT NULL DEFAULT 0, retention TEXT, detail TEXT)`
 ];
 /** A media chunk: 1 MB of base64 per row (a Durable Object's SQLite row holds up to 2 MB). */
 export const MEDIA_CHUNK = 1_000_000;
@@ -638,4 +643,26 @@ export function credsStatus(sql) {
   const out = {};
   for (const r of rows(sql, "SELECT channel, kind, hint, updated_at, updated_by FROM connect_creds")) (out[r.channel] ||= {})[r.kind] = { hint: r.hint, updated_at: r.updated_at, updated_by: r.updated_by };
   return out;
+}
+
+// ---- The CTA agent's model calls (src/agent/router.mjs) ----
+/** Records one model call (never its text). */
+export function recordModelCall(sql, c, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  const n = (v) => Math.max(0, Math.round(Number(v) || 0));
+  sql.exec("INSERT INTO model_calls (at, purpose, model, status, tokens_in, tokens_out, cost_usd, retention, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    iso(now), clip(c?.purpose, 40) || "unknown", clip(c?.model, 80) || "unknown", clip(c?.status, 40) || "unknown", n(c?.tokens_in), n(c?.tokens_out),
+    Math.max(0, Number(c?.cost_usd) || 0), clip(c?.retention ?? "", 20) || null, clip(c?.detail ?? "", 200) || null);
+  return true;
+}
+/** The calls and their cost since `sinceIso`. */
+export function modelSpendSince(sql, sinceIso) {
+  ensureDesk(sql);
+  const r = rows(sql, "SELECT COUNT(*) AS calls, COALESCE(SUM(tokens_in), 0) AS tokens_in, COALESCE(SUM(tokens_out), 0) AS tokens_out, COALESCE(SUM(cost_usd), 0) AS cost_usd FROM model_calls WHERE at >= ?", String(sinceIso))[0];
+  return { calls: Number(r?.calls ?? 0), tokens_in: Number(r?.tokens_in ?? 0), tokens_out: Number(r?.tokens_out ?? 0), cost_usd: Math.round(Number(r?.cost_usd ?? 0) * 1e6) / 1e6 };
+}
+/** The latest model calls, newest first. */
+export function recentModelCalls(sql, { limit = 20 } = {}) {
+  ensureDesk(sql);
+  return rows(sql, "SELECT at, purpose, model, status, tokens_in, tokens_out, cost_usd, retention, detail FROM model_calls ORDER BY id DESC LIMIT ?", Math.min(100, Math.max(1, Number(limit) || 20)));
 }

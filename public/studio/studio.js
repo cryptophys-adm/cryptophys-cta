@@ -1141,6 +1141,7 @@
       t.appendChild(tile("Ready", String(a.summary.ready), `${a.summary.review} to review · ${a.summary.fix} to fix`));
       t.appendChild(tile("Humanizer pass", String(a.summary.human_pass), "five checks; information only"));
       t.appendChild(tile("Topic tag", a.topic_tag, "one per post, set through the API"));
+      renderModel(a.model, a.can_edit);
       const sk = $("agentskills"); sk.textContent = "";
       // A list, not a table: it fits a phone (each skill, its state, then what it does, when and with which model).
       const list = make("div", "list");
@@ -1175,10 +1176,30 @@
       renderPlan(a.plan, a.can_edit);
     } catch (e) { showErr(e); }
   }
+  // The model router (src/agent/router.mjs): today's spend against the cap, the switch, the latest calls.
+  const usd = (n, d = 4) => `$${Number(n).toFixed(d)}`;
+  function renderModel(m, canEdit) {
+    const box = $("agentmodel"); box.textContent = "";
+    if (!m) return;
+    const head = make("div");
+    head.append(badge(!m.has_key ? "" : m.enabled ? "green" : "red", !m.has_key ? "No key" : m.enabled ? "On" : "Off"), " ", make("b", null, `${m.model} on ${m.host}`));
+    box.appendChild(head);
+    box.appendChild(make("div", "meta", `Today (WIB): ${usd(m.today.cost_usd)} of ${usd(m.cap_usd, 2)} · ${m.today.calls} call(s) · ${m.today.tokens_in + m.today.tokens_out} tokens`));
+    if (!m.has_key) box.appendChild(make("div", "meta", "The key (REFLECTION_API_KEY) is set as a Worker secret through the platform; until then the agent uses no model."));
+    if (m.reason) box.appendChild(make("div", "meta warn", `Off: ${m.reason}${m.switched_by ? ` (${m.switched_by}, ${when(m.switched_at)})` : ""}`));
+    for (const c of m.recent ?? []) box.appendChild(make("div", "meta", `${when(c.at)} · ${c.purpose} · ${c.status} · ${c.tokens_in + c.tokens_out} tokens · ${usd(c.cost_usd)}${c.retention ? ` · retention ${c.retention}` : ""}`));
+    if (m.has_key) {
+      const b = make("button", m.enabled ? "btn outline sm" : "btn primary sm", m.enabled ? "Turn the model off" : "Turn the model on"); b.type = "button"; b.disabled = !canEdit;
+      if (!canEdit) b.title = "Approvers only";
+      b.addEventListener("click", async () => { b.disabled = true; try { await call("/api/studio/agent/model", "POST", { enabled: !m.enabled }); await loadAgent(); } catch (e) { showErr(e); b.disabled = false; } });
+      box.appendChild(b);
+    }
+  }
   // Audit: the last complete WIB week on Threads against our own median (src/agent/audit.mjs).
   function renderAudit(au) {
     const box = $("agentaudit"); box.textContent = "";
     if (!au) return;
+    if (au.summary) { const s = make("div", "notice info"); s.append(make("b", null, "Beam's summary: "), au.summary); box.appendChild(s); }
     box.appendChild(make("div", "meta", `Week ${au.week.from.slice(0, 10)} to ${au.week.to.slice(0, 10)} (WIB, Monday to Sunday) · median ${fmt(au.median_views)} views over the ${au.baseline_days} days before · ${au.measured} measured posts`));
     for (const f of au.findings) box.appendChild(make("p", null, f));
     if (!au.posts.length) return;

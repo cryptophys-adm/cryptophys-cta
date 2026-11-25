@@ -8,7 +8,8 @@ import { DatabaseSync } from "node:sqlite";
 import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule, cardPathOf } from "../src/app.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
-import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus } from "../src/desk.mjs";
+import { AGENT_SECRETS } from "../src/agent/router.mjs";
+import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
@@ -51,6 +52,7 @@ function deskStub() {
     slotOutcome: async (i) => { slotOutcome(sql, i); return true; }, recentSlots: async (n) => recentSlots(sql, { limit: n }),
     addLink: async (i, now) => addLink(sql, i, { now }), link: async (s) => getLink(sql, s), click: async (i, now) => { countClick(sql, i, { now }); return true; },
     links: async () => listLinks(sql), hashtagSets: async () => listHashtagSets(sql), saveHashtagSet: async (i, now) => saveHashtagSet(sql, i, { now }),
+    recordModelCall: async (i, now) => recordModelCall(sql, i, { now }), modelSpendSince: async (s) => modelSpendSince(sql, s), recentModelCalls: async (n) => recentModelCalls(sql, { limit: n }),
     studioSetting: async (k) => studioSetting(sql, k), saveStudioSetting: async (i, now) => saveStudioSetting(sql, i, { now }), kindMix: async (f, t) => kindMixSince(sql, f, t),
     addAbTest: async (i, now) => { addAbTest(sql, i, { now }); return true; }, abTests: async () => listAbTests(sql), measuredPosts: async () => measuredPosts(sql), copiedSince: async (s) => copiedSince(sql, s),
     putOAuthState: async (i, now) => putOAuthState(sql, i, { now }), takeOAuthState: async (i, now) => takeOAuthState(sql, i, { now }),
@@ -213,7 +215,7 @@ test("the native deploy block in organism.json equals wrangler.jsonc, and the or
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   assert.deepEqual(Object.keys(pkg.dependencies ?? {}), ["@cloudflare/puppeteer"], "one runtime dependency, declared in the deploy block");
   assert.deepEqual(d.crons, cfg.triggers.crons);
-  assert.deepEqual(d.secrets_kept, [...Object.values(SECRETS).flatMap((s) => Object.values(s)), ...STUDIO_SECRETS, ...CONNECT_SECRETS]);
+  assert.deepEqual(d.secrets_kept, [...Object.values(SECRETS).flatMap((s) => Object.values(s)), ...STUDIO_SECRETS, ...CONNECT_SECRETS, ...AGENT_SECRETS]);
   const src = readFileSync(new URL("../src/index.mjs", import.meta.url), "utf8");
   for (const e of [...d.entrypoints, ...d.durable_objects.map((o) => o.class_name)]) assert.match(src, new RegExp(`export class ${e}\\b`));
   assert.equal(d.via, "forge");
@@ -851,4 +853,23 @@ test("the Agent page's API (owner 2026-11-25, the CTA agent's Checks): a person 
   assert.equal(a.checks[0].text.endsWith("Not financial advice."), true, "what Threads gets: no hashtag line");
   assert.equal(a.topic_tag, "XAUUSD");
   assert.equal(getDraft(d.sql, "th1").text.endsWith("#education"), true, "the draft itself is unchanged");
+});
+
+test("the model's switch (the CTA agent's router): an approver turns it off and on, same origin; the Agent page shows it", async () => {
+  resetKeyCacheForTests();
+  const { env: e } = env({ REFLECTION_API_KEY: "rk-test" });
+  const person = await jwt({ email: "owner@example.com", sub: "u1" });
+  const service = await jwt({ common_name: "svc.access", sub: "" });
+  const post = (body, extra = {}) => handle(req("/api/studio/agent/model", { method: "POST", body, ...extra }), e, opts);
+  const first = await (await handle(req("/api/studio/agent", { token: person }), e, opts)).json();
+  assert.deepEqual([first.model.enabled, first.model.reason], [false, "not turned on yet"], "off until an approver turns it on");
+  assert.equal((await post({ enabled: false }, { token: service })).status, 403, "never a service token");
+  assert.equal((await post({ enabled: false }, { token: person, origin: "https://evil.example" })).status, 403, "same origin only");
+  assert.equal((await post({ enabled: "no" }, { token: person })).status, 400);
+  assert.equal((await post({ enabled: false }, { token: person })).status, 200);
+  const a = await (await handle(req("/api/studio/agent", { token: person }), e, opts)).json();
+  assert.deepEqual([a.model.enabled, a.model.has_key, a.model.reason, a.model.host, a.model.cap_usd], [false, true, "turned off in the studio", "api.reflection.ai", 1]);
+  assert.ok(!JSON.stringify(a).includes("rk-test"), "the key never reaches the page");
+  await post({ enabled: true }, { token: person });
+  assert.equal((await (await handle(req("/api/studio/agent", { token: person }), e, opts)).json()).model.enabled, true);
 });
