@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-25 (a confirmed pattern is posted once)
+- fix(analysis): a confirmed chart pattern is posted once per channel, not again every hour while xauusd keeps it. Owner, 25 Nov: "chart pattern kalau sudah dipost jangan dipost ulang, dia ditrigger oleh xauusd ketika ada confirmed jadi tidak mengikuti tiap jam".
+  - The cause: the draft id holds the pattern's rounded upper and lower bounds, and xauusd moves a fitted line's end every bar. Telegram got the H1 rounding top at 15:15 (3690:3571) and again at 17:09 (3690:3575), and the H1 descending right-angled broadening at 16:09 (3600:3483) and again at 17:09 (3602:3479).
+  - `patternDrafted` treats a pattern as already drafted when an earlier draft for that channel has the same chart, catalogue name and status and an overlapping band, within 120 bars of its chart: 5 days on H1, 20 on H4 and 120 on D1.
+  - Another channel, a band that does not overlap, another status or another chart is still a new post. Ids and public wording are unchanged.
+  - New test in `test/engine.test.mjs`.
+
 ## 2026-11-25 (Beam: CTA's share of the free plan)
 - chore(router): CTA's share of the organisation's free Beam plan is set as the defaults: 1,000,000 input and 200,000 output tokens a day (`MODEL_DAILY_TOKENS_IN`, `MODEL_DAILY_TOKENS_OUT`), and 20 calls a minute (`MODEL_RPM`).
   - The organisation's plan is 10M input, 1M output and 60 calls a minute. The orchestrator set CTA's share on 25 Nov.

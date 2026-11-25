@@ -150,8 +150,8 @@ test("the quota is read from Meta, never assumed; a token is refreshed through i
 
 // Real-time analysis (owner 2026-11-14: "fokus pada hasil analytics dan key level ... kecuali info buy/sell zone";
 // "Real-time, hanya analisa").
-import { analysisDrafts, keyLevelsText, patternText, postablePatterns, MAX_PATTERN_DRAFTS_PER_DAY } from "../src/analysis-drafts.mjs";
-import { draftIdsWithPrefix, kindCountsSince } from "../src/desk.mjs";
+import { analysisDrafts, keyLevelsText, patternText, postablePatterns, MAX_PATTERN_DRAFTS_PER_DAY, PATTERN_LOOKBACK_MS, patternDrafted, patternOfId } from "../src/analysis-drafts.mjs";
+import { draftIdsWithPrefix, kindCountsSince, draftsWithPrefixSince } from "../src/desk.mjs";
 
 
 // The analysis as the xauusd AI Worker's PublicProjection.analysis() returns it (src/public-analysis.mjs there).
@@ -256,4 +256,29 @@ test("RT1 posts without a delay (owner 2026-11-25: \"Posts juga realtime\"): PUB
   assert.equal(delayOf(undefined), 24);
   const cfg = JSON.parse((await import("node:fs")).readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8").replace(/^\s*\/\/.*$/gm, ""));
   assert.equal(cfg.vars.PUBLIC_DELAY_HOURS, "0", "the deployed var: no delay");
+});
+
+test("a confirmed pattern is posted once while xauusd keeps it, even as its lines move (owner 2026-11-25)", () => {
+  // The 15:15 and 17:09 UTC runs of 25 Nov: the same H1 rounding top read 3690:3571, then 3690:3575, and was posted twice.
+  const p = (upper, lower, extra = {}) => ({ tf: "60", id: "rounding_top", status: "confirmed", direction: -1, upper, lower, target: 3500, ...extra });
+  const at1 = Date.parse("2026-11-25T15:09:30Z"), at2 = Date.parse("2026-11-25T17:09:30Z");
+  const first = analysisDrafts(publicAnalysis({ ...KEY_LEVELS, patterns: [p(3690.2, 3571.4)] }, { now: at1 }), { now: at1, channels: ["threads", "telegram"] }).filter((d) => d.kind === "pattern");
+  assert.deepEqual(first.map((d) => d.id), ["pattern:H1:rounding_top:confirmed:3690:3571:threads", "pattern:H1:rounding_top:confirmed:3690:3571:telegram"]);
+  const sql = sqlite();
+  addDrafts(sql, first, { now: at1 });
+  const history = draftsWithPrefixSince(sql, "pattern:", new Date(at2 - PATTERN_LOOKBACK_MS).toISOString());
+  assert.equal(history.length, 2);
+  const later = publicAnalysis({ ...KEY_LEVELS, patterns: [p(3690.4, 3575.2), p(3602, 3479, { id: "broadening_right_angled_descending" })] }, { now: at2 });
+  const again = analysisDrafts(later, { now: at2, channels: ["threads", "telegram"], history }).filter((d) => d.kind === "pattern");
+  assert.deepEqual(again.map((d) => d.id), ["pattern:H1:broadening_right_angled_descending:confirmed:3602:3479:threads", "pattern:H1:broadening_right_angled_descending:confirmed:3602:3479:telegram"], "the moved rounding top is not posted again; a different pattern is");
+  // A channel that never had it still gets it; a band that does not overlap is a new pattern; a forming one is another status.
+  assert.equal(patternDrafted({ chart: "H1", pattern: "rounding_top", status: "confirmed", upper: 3690, lower: 3575 }, "instagram", history, at2), false);
+  assert.equal(patternDrafted({ chart: "H1", pattern: "rounding_top", status: "confirmed", upper: 3420, lower: 3300 }, "threads", history, at2), false);
+  assert.equal(patternDrafted({ chart: "H1", pattern: "rounding_top", status: "forming", upper: 3690, lower: 3575 }, "threads", history, at2), false);
+  assert.equal(patternDrafted({ chart: "H4", pattern: "rounding_top", status: "confirmed", upper: 3690, lower: 3575 }, "threads", history, at2), false);
+  // After 120 bars of its chart (5 days on H1) the same band may be posted again.
+  assert.equal(patternDrafted({ chart: "H1", pattern: "rounding_top", status: "confirmed", upper: 3690, lower: 3575 }, "threads", history, at1 + 121 * 3_600_000), false);
+  assert.equal(patternDrafted({ chart: "H1", pattern: "rounding_top", status: "confirmed", upper: 3690, lower: 3575 }, "threads", history, at1 + 119 * 3_600_000), true);
+  assert.deepEqual(patternOfId("pattern:D1:flag:confirmed:4020:3980:threads"), { chart: "D1", pattern: "flag", status: "confirmed", upper: 4020, lower: 3980, channel: "threads" });
+  assert.equal(patternOfId("manual:2026-11-24:b50daba1:threads"), null);
 });
