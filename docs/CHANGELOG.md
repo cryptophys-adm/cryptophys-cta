@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-25 (Beam: CTA's share of the free plan)
+- chore(router): CTA's share of the organisation's free Beam plan is set as the defaults: 4,000,000 input and 400,000 output tokens a day (`MODEL_DAILY_TOKENS_IN`, `MODEL_DAILY_TOKENS_OUT`), and 20 calls a minute (`MODEL_RPM`). The organisation's plan is 10M input, 1M output and 60 calls a minute; the orchestrator set CTA's share on 25 Nov. Tests AG6 and AG18 follow.
+
 ## 2026-11-25 (Beam free-only guards; publish failures logged; a longer Threads wait)
 - feat(router): Beam is used on the free plan only, with CTA's own limits. Owner, 25 Nov: "tetap siapkan callback jika beam tidak bisa dijangkau atau menjadi berbayar atau lebih dari batasan".
   - `MODEL_FREE_ONLY` is on by default. A 402, a billing or credit error, or an answer that reports a cost turns the model off in the studio, with the reason. It also logs `cta_model_off`.

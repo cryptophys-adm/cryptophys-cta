@@ -17,14 +17,14 @@
 //     organisation): MODEL_FREE_ONLY "on" by default; a 402, a billing or credit error, or an answer that reports a cost
 //     above 0 turns the model off in the studio with the reason and logs `cta_model_off` once; CTA's own daily token
 //     caps (MODEL_DAILY_TOKENS_IN, MODEL_DAILY_TOKENS_OUT; CTA's share until the organisation's split is set) and a
-//     per-minute guard (MODEL_RPM, default 50) skip the call. Every skip leaves the caller's fallback: the template, or
+//     per-minute guard (MODEL_RPM, default 20; CTA's share of the free Beta, orchestrator 2026-11-25: 4M input, 400k output, 20 a minute) skip the call. Every skip leaves the caller's fallback: the template, or
 //     no reply.
 // Every call is logged (tokens, cost, status, retention), never its prompt or answer. Text it writes is shown only in
 // the studio until the owner's Replies PR says otherwise; it never states a price or a level it was not given.
 /** The router's Worker secret, set by the owner through the platform (organism.json `deploy.secrets_kept`). */
 export const AGENT_SECRETS = Object.freeze(["REFLECTION_API_KEY"]);
 export const MODEL_DEFAULTS = Object.freeze({ base: "https://api.reflection.ai/openai/v1", model: "Beam-1.0-501B-A23B", daily_usd: 1, price_in: 0.4, price_out: 1.2,
-  free_only: true, tokens_in_day: 2_000_000, tokens_out_day: 200_000, rpm: 50 });
+  free_only: true, tokens_in_day: 4_000_000, tokens_out_day: 400_000, rpm: 20 });
 /** The skips that end a run quietly: the caller falls back (the template, or no reply) and tries again later. */
 export const MODEL_STOPS = Object.freeze(["off", "no_key", "budget", "retention", "tokens", "rpm", "paid"]);
 const BILLING = /billing|credit|payment|insufficient[_ ]?(funds|balance)|prepaid|paid[_ ]?plan|upgrade|subscription/i;
