@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-25 (the CTA agent: cta-lint and cta-human in full; rule 4 amended)
+- feat(agent): the humanizer now rewrites every post before it goes out, templates included, and the linter runs all of caption.py's checks.
+  - Owner, 25 Nov: "lengkapi semua tidak boleh ada sebagian, tiru semuanya", and for the rewrite "Everything, templates too".
+  - `humanize` ports humanize.py in full: URLs and hashtags are kept, then invisible characters, typography, the lexicon with its clean-up, and restored capitals. `scanStructures` flags what it cannot rewrite.
+  - Visible effect on posts: "·" and "•" become "-", an en dash in a price range becomes a hyphen, an em dash becomes a comma, and a slop word is swapped (e.g. "robust" becomes "solid").
+  - `publishDraft` runs it on every channel. If the guardian fails on the new text, the approved text goes out unchanged. The Archive stores the text that went out.
+  - Replies are humanized before their checks.
+  - The linter adds HOOK IS CONCRETE, TAG PLACEMENT, ONE ASK and SEARCH TERMS (XAUUSD, gold). These are advisory: a template with no call to action now reads REVIEW.
+  - The Agent page's Checks show each draft as it will go out, with the flagged shapes.
+  - AGENTS.md rule 4 amended (owner: "amandemen aturan 4 agar bisa mengadopsi semua"): every CTA skill may write public text with the model, behind the guards the rule lists. Templates stay the default and the fallback.
+  - The skills carry the CTA's own names (owner: "gunakan nama cta lebih general"): five `cta-*` skills are live, and ten more are listed as Next on the Agent page.
+  - Test AG13; AG2, AG4, AG8 and the Telegram publishing test updated.
+
 ## 2026-11-25 (the CTA agent: key-level maps per chart)
 - feat(agent): a key-level map at each H1, H4 and D1 close; charts that close at the same time share one post.
   - Owner, 25 Nov: "pull keymap dari xauusd per 1h dan 4h dan 1D", and "Jika waktunya sama berarti digabung".
@@ -39,7 +52,7 @@
 ## 2026-11-25 (the CTA agent, PR 4: autonomous Replies on Threads)
 - feat(agent): the agent answers replies under our posts without approval.
   - Owner, 25 Nov: "semua autonomous jadi reply tanpa approval", "10 an hour, 40 a day", "By themselves after 3 days", and "Use this wording" for the two public sentences.
-  - `src/agent/replies.mjs` (after ig-reply, MIT) runs every 15 minutes on Threads.
+  - `src/agent/replies.mjs` (skill cta-reply, adapted, MIT) runs every 15 minutes on Threads.
   - Triage:
     - a buy, sell or price question gets the fixed answer only;
     - a question or a comment of substance gets a short model answer that must pass `checkReply`: no number, direction, level, trading word or promise, the guardian's rules, at most 280 characters, ending with the disclaimer;
@@ -77,7 +90,7 @@
   - Tests AG6, AG7 and the switch test. SSOT and the Overview screenshot.
 
 ## 2026-11-25 (the CTA agent, PR 2: Audit and Plan)
-- feat(agent): the Agent page gets Audit and Plan for Threads (`src/agent/audit.mjs`, after ig-audit and ig-plan, MIT). The owner approved them with "setuju semua".
+- feat(agent): the Agent page gets Audit and Plan for Threads (`src/agent/audit.mjs`, skills cta-audit and cta-plan, adapted, MIT). The owner approved them with "setuju semua".
   - Audit: the last full WIB week, each post by its views over our own 28-day median, by post and by kind. A finding needs 3 posts behind it.
   - Plan: the kinds ranked from the audit, and daily slots at the WIB hours with the most views (at least 2 measured posts each).
   - An approver adds the slots with one click, through the existing settings route; the page warns that analysis drafts expire after 2 hours.

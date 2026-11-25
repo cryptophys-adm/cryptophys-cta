@@ -198,9 +198,11 @@ export function decideDraft(sql, { id, decision, actor, reason = "", delayHours 
 }
 
 /** The outcome of a publishing attempt of an approved draft. */
-export function recordPublish(sql, { id, remoteId = null, error = null }, { now = Date.now() } = {}) {
+export function recordPublish(sql, { id, remoteId = null, error = null, text = null }, { now = Date.now() } = {}) {
   ensureDesk(sql);
   const status = remoteId ? "published" : "failed";
+  // The humanized text that went out (src/agent/humanizer.mjs publishText), so the Archive shows the post as published.
+  if (remoteId && typeof text === "string" && text.trim()) sql.exec("UPDATE drafts SET text = ? WHERE id = ? AND status = 'approved'", text, String(id));
   sql.exec("UPDATE drafts SET status = ?, published_at = ?, remote_id = ?, error = ? WHERE id = ? AND status = 'approved'", status, remoteId ? iso(now) : null, remoteId, error ? clip(String(error), 300) : null, String(id));
   event(sql, { at: iso(now), id: String(id), action: status, actor: "content-engine", detail: remoteId ?? clip(String(error ?? ""), 300) });
   return { status };

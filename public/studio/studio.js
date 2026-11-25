@@ -1185,7 +1185,7 @@
       for (const s of a.skills) {
         const item = make("div", "draft");
         const top = make("div");
-        top.append(badge(s.live ? "green" : "", s.live ? "On" : "Next"), " ", make("b", null, s.name));
+        top.append(badge(s.live ? "green" : "", s.live ? "On" : "Next"), " ", make("b", null, s.name), " ", make("span", "meta", s.id));
         item.append(top, make("div", null, s.what), make("div", "meta", `Runs ${s.runs} · model: ${s.model}`));
         list.appendChild(item);
       }
@@ -1207,6 +1207,8 @@
         }
         item.appendChild(list);
         item.appendChild(make("div", "meta", `Humanizer ${c.human.score} (${c.human.verdict.toLowerCase()}): ${Object.entries(c.human.checks).map(([k, v]) => `${HUMAN[k] ?? k} ${v.score}`).join(" · ")}`));
+        if (c.humanized) item.appendChild(make("div", "meta", "Shown as it goes out: the humanizer rewrites it at publish, and the guardian checks it again."));
+        for (const f of c.structures ?? []) item.appendChild(make("div", "meta", `Shape: ${f.name}. ${f.fix}`));
         box.appendChild(item);
       }
       renderAudit(a.audit);

@@ -24,7 +24,7 @@ export function videoScript(draft, brand, { disclaimers = [] } = {}) {
   return {
     brand: brand.name,
     kind: `Education · ${KIND_LABEL[draft?.kind] ?? "Analysis"}`,
-    title: title.replace(/^Education\s*·\s*/i, ""),
+    title: title.replace(/^Education\s*[·-]\s*/i, ""),
     lines,
     end: [brand.chart_attribution, brand.card_disclaimer, "cta.cryptophys.work"]
   };

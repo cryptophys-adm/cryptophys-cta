@@ -1,5 +1,5 @@
 // The humanizer's lexicon (the CTA agent's Checks skill, owner 2026-11-25: "setuju semua, mulai dari Checks"), taken
-// unchanged from instagram-agent-skill skills/ig-human/slop.json v1.0 (https://github.com/Jakeschincariol/instagram-agent-skill,
+// unchanged from instagram-agent-skill's slop.json v1.0 (https://github.com/Jakeschincariol/instagram-agent-skill,
 // commit d03c56b). MIT License, Copyright (c) 2026 Jake Schincariol: the full notice is in src/agent/LICENSE-instagram-agent-skill.
 // Data only: src/agent/humanizer.mjs reads it. Python's inline flags in `structures[].regex` are turned into JavaScript flags there.
 export const SLOP = Object.freeze({

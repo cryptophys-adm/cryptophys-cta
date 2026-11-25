@@ -5,11 +5,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { SLOP } from "../src/agent/slop.mjs";
-import { cleanInvisible, humanScore, jsRegex, HUMAN_CHECKS } from "../src/agent/humanizer.mjs";
+import { cleanInvisible, humanScore, jsRegex, HUMAN_CHECKS, humanize, publishText, scanStructures } from "../src/agent/humanizer.mjs";
 import { lintThreads, threadsText, threadsLength, validTopicTag, THREADS_TOPIC_TAG, THREADS_LIMIT } from "../src/agent/lint.mjs";
 import { agentChecks, AGENT_SKILLS } from "../src/agent/checks.mjs";
 import { auditChannel, planChannel, bestHours, wibWeekStart, MIN_FINDING } from "../src/agent/audit.mjs";
-import { rulesOf, agentChannels, AGENT_CHANNELS, TOPIC_TAGS } from "../src/agent/rules.mjs";
+import { rulesOf, agentChannels, AGENT_CHANNELS, TOPIC_TAGS, SEARCH_TERMS } from "../src/agent/rules.mjs";
+import { checkContentDraft } from "../src/guardian.mjs";
 import { lintPost, textFor } from "../src/agent/lint.mjs";
 import { CHANNELS } from "../src/channels.mjs";
 import { askModel, modelConfig, costOf, wibDayStartIso, MODEL_DEFAULTS, AGENT_SECRETS } from "../src/agent/router.mjs";
@@ -51,7 +52,9 @@ test("AG2 the Threads linter: 500 characters (an emoji by its bytes), one topic 
   assert.equal(THREADS_TOPIC_TAG, "XAUUSD");
   assert.ok(validTopicTag("XAUUSD")); assert.ok(!validTopicTag("")); assert.ok(!validTopicTag("a.b")); assert.ok(!validTopicTag("a&b")); assert.ok(!validTopicTag("x".repeat(51)));
   const ok = lintThreads(threadsText(POST));
-  assert.equal(ok.verdict, "READY", JSON.stringify(ok.checks));
+  // A template has no call to action and the map does not say "gold": caption.py's ONE ASK and SEARCH TERMS warn.
+  assert.equal(ok.verdict, "REVIEW", JSON.stringify(ok.checks));
+  assert.deepEqual(ok.checks.filter((c) => c.status !== "PASS").map((c) => c.check), ["ONE ASK", "SEARCH TERMS"]);
   const tagged = lintThreads(POST);
   assert.equal(tagged.checks.find((c) => c.check === "TOPIC TAG").status, "WARN", "in-text hashtags: Threads uses only the first");
   const st = (t, check) => lintThreads(t).checks.find((c) => c.check === check).status;
@@ -99,10 +102,15 @@ test("AG4 the Agent page: Threads drafts only, read only, each with its Threads 
   ];
   const a = agentChecks(drafts);
   assert.deepEqual(a.checks.map((c) => c.id), ["a", "c"]);
-  assert.equal(a.checks[0].text, threadsText(POST));
-  assert.deepEqual(a.summary, { checked: 2, ready: 1, review: 0, fix: 1, human_pass: a.checks.filter((c) => c.human.verdict === "PASS").length });
+  assert.equal(a.checks[0].text, threadsText(humanize(POST).text), "the text as it goes out: humanized, then Threads' form");
+  assert.equal(a.checks[0].humanized, true);
+  assert.equal(a.checks[1].humanized, false, "a published post shows the text that went out");
+  assert.deepEqual(a.summary, { checked: 2, ready: 0, review: 1, fix: 1, human_pass: a.checks.filter((c) => c.human.verdict === "PASS").length });
   assert.equal(a.topic_tag, "XAUUSD");
-  assert.deepEqual(AGENT_SKILLS.map((s) => [s.id, s.live]), [["linter", true], ["humanizer", true], ["audit", true], ["plan", true], ["replies", true]]);
+  // the CTA's own names (owner 2026-11-25: "gunakan nama cta lebih general"); every adopted skill listed
+  assert.deepEqual(AGENT_SKILLS.map((s) => [s.id, s.live]), [["cta-lint", true], ["cta-human", true], ["cta-audit", true], ["cta-plan", true], ["cta-reply", true],
+    ["cta-write", false], ["cta-hook", false], ["cta-carousel", false], ["cta-repurpose", false], ["cta-profile", false], ["cta-reel", false], ["cta-story", false], ["cta-trends", false], ["cta-comment", false], ["cta-dm", false]]);
+  assert.ok(AGENT_SKILLS.every((s) => /^cta-[a-z]+$/.test(s.id)));
   const html = read("public/studio/index.html"), js = read("public/studio/studio.js"), app = read("src/app.mjs");
   assert.match(html, /<a href="#agent" data-view="agent">/);
   assert.match(html, /id="view-agent"/);
@@ -224,7 +232,7 @@ test("AG8 one agent for every channel (owner 2026-11-25): each channel's own rul
   assert.equal(textFor("telegram", "a\n#XAUUSD #gold"), "a\n#XAUUSD #gold", "the other channels' text as drafted");
   assert.equal(textFor("threads", "a\n#XAUUSD #gold"), "a");
   const c = agentChecks([{ id: "t", channel: "telegram", kind: "custom", status: "pending", text: "Education\n#XAUUSD #gold" }], { channel: "telegram" });
-  assert.deepEqual([c.channel, c.topic_tag, c.checks.length, c.checks[0].lint.verdict], ["telegram", null, 1, "READY"]);
+  assert.deepEqual([c.channel, c.topic_tag, c.checks.length, c.checks[0].lint.verdict], ["telegram", null, 1, "REVIEW"], "no number or name in the first line, no ask");
   assert.match(read("public/studio/studio.js"), /inactive\.appendChild\(make\("p", null, `The agent does not manage/);
 });
 
@@ -394,4 +402,47 @@ test("AG12 key-level maps per chart (owner 2026-11-25): each chart's map once pe
   // room for a map at every close (owner: "All of H1, 4H and D1"): 24 maps + 4 patterns + the recap = 29, under the cap of 32
   assert.equal(normalizeSettings("threads", { max_per_day: 29 }).ok, true);
   assert.equal(normalizeSettings("threads", { max_per_day: 33 }).ok, false);
+});
+
+test("AG13 cta-lint and cta-human in full: four more caption checks; humanize.py's four passes on every post, checked by the guardian again", () => {
+  // caption.py: HOOK IS CONCRETE, TAG PLACEMENT, ONE ASK, SEARCH TERMS
+  const st = (c, t, check, o) => lintPost(c, t, o).checks.find((k) => k.check === check);
+  assert.equal(st("instagram", "Gold held 4,120 today\nmore", "HOOK IS CONCRETE").status, "PASS");
+  assert.equal(st("instagram", "something happened today\nmore", "HOOK IS CONCRETE").status, "WARN");
+  assert.equal(st("threads", "the first line\nGold 4,120", "HOOK IS CONCRETE").status, "WARN", "Threads has no documented window: the first line");
+  assert.equal(st("instagram", "Gold today #XAUUSD\nmore", "TAG PLACEMENT").status, "WARN");
+  assert.equal(st("instagram", `Gold today ${"x".repeat(130)}\n#XAUUSD`, "TAG PLACEMENT").status, "PASS", "below Instagram's 125");
+  assert.equal(st("instagram", "Gold", "TAG PLACEMENT").detail, "no tags to place");
+  assert.equal(st("x", "Gold. Save this.", "ONE ASK").status, "PASS");
+  assert.equal(st("x", "Gold. Save this and tell me which one.", "ONE ASK").status, "WARN");
+  assert.equal(st("x", "Gold.", "ONE ASK").status, "WARN");
+  assert.deepEqual(SEARCH_TERMS, ["XAUUSD", "gold"]);
+  assert.equal(st("x", "XAUUSD and gold", "SEARCH TERMS").status, "PASS");
+  assert.equal(st("x", "XAUUSD", "SEARCH TERMS").status, "WARN");
+  assert.equal(st("x", "silver", "SEARCH TERMS").status, "FAIL");
+  assert.equal(st("x", "silver", "SEARCH TERMS", { keywords: [] }), undefined, "no terms, no check");
+
+  // humanize.py: URLs kept, invisible, typography, lexicon (longest first, case kept), capitals restored, structures
+  const h = humanize("Education · Gold — moreover, a robust​ move… “up” → 4,120–4,131 https://cta.cryptophys.work/a—b #XAUUSD");
+  assert.equal(h.text, "Education - Gold. Also, a solid move... \"up\" -> 4,120-4,131 https://cta.cryptophys.work/a—b #XAUUSD");
+  assert.equal(h.report.invisible, 1);
+  assert.deepEqual(h.report.lexical.map((x) => [x.find, x.replace]), [["moreover", "also"], ["robust", "solid"]]);
+  assert.equal(humanize("Delve into the zone.").text, "Look at the zone.", "the case of the first letter is kept");
+  assert.equal(humanize("Notably, the zone held. Then it broke.").text, "The zone held. Then it broke.", "a deletion leaves no stray comma and the capital comes back");
+  assert.equal(humanize("Price 3,544.30 · range 3595.29 – 3600.00").text, "Price 3,544.30 - range 3595.29-3600.00", "an en dash before a number becomes a hyphen");
+  assert.equal(humanize("Education. Not financial advice.").text, "Education. Not financial advice.", "a clean post is left as it is");
+  assert.ok(scanStructures("one two three four. five six seven eight. nine ten eleven twelve. aa bb cc dd.").some((f) => f.id === "uniform-length"));
+
+  // publishText: the humanized text only if it still passes the guardian, else the approved text
+  const d = { kind: "key_levels", text: POST, image_url: null };
+  const check = (x) => checkContentDraft({ text: x.text, allowLevels: true });
+  const out = publishText(d, check);
+  assert.deepEqual([out.changed, out.kept], [true, false]);
+  assert.ok(!/[·•–]/.test(out.text) && check({ text: out.text }).pass);
+  const refused = publishText(d, () => ({ pass: false, failures: [{ check: "x" }] }));
+  assert.deepEqual([refused.text, refused.changed, refused.kept], [POST, false, true]);
+  assert.deepEqual(publishText({ text: "Education." }, check), { text: "Education.", changed: false, kept: false, report: humanize("Education.").report });
+  const src = read("src/app.mjs");
+  assert.match(src, /const out = publishText\(draft, \(d\) => recheck\(d, \{ delayHours: delayOf\(env\), now \}\)\);/, "every channel, at publish");
+  assert.match(read("src/agent/replies.mjs"), /answer = humanize\(answer\)\.text;\n\s+const c = checkReply\(answer/, "replies too, before their checks");
 });

@@ -54,11 +54,21 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
      measured projection are drawn as an overlay over TradingView's chart, from its own price mapping (owner
      2026-11-15: "Overlay on TradingView"); the overlay carries only the draft's own numbers;
    - news is never republished, only our own summary with the source named.
-4. **No model writes public text.** Drafts come from fixed templates over the xauusd `PublicProjection` (read-only
-   RPC). Adding a model-written step needs the owner's approval and a guardian check after it. Approved so far: the
-   agent's replies (owner 2026-11-25, rule 2's exception), written by the model behind `src/agent/router.mjs` and kept
-   from any number, price, level, direction, forecast or advice by `checkReply` and the guardian, or not sent; and the
-   weekly audit summary, which is studio-only text.
+4. **Model-written public text only behind the CTA's guards** (amended 2026-11-25, owner: "amandemen aturan 4 agar
+   bisa mengadopsi semua"; before, "No model writes public text"). Fixed templates over the xauusd `PublicProjection`
+   (read-only RPC) stay the default. Every skill of the CTA agent (`src/agent/`, the `cta-*` skills) may use the model
+   behind `src/agent/router.mjs` (off until an approver turns it on, within its daily cap) to write public text, posts,
+   replies, comments and messages included, and each text it writes:
+   - is written only from the facts the step hands it (the `PublicProjection`, or the comment it answers, which is
+     untrusted), and names no number those facts do not hold;
+   - is no advice, signal, forecast, promise or direction call, and carries the disclaimer;
+   - passes the guardian, the channel's linter with no FAIL, and the humanizer, then the guardian again;
+   - or is not sent: a post falls back to its fixed template, a reply, comment or message is not sent.
+   Replies, comments and messages stay within their caps; a message goes only to a person who wrote to us first. A new
+   kind of model-written text still needs the owner's word and these guards, and public pages change only with the
+   owner's word (rule 3). The humanizer's rewrite at publish (`src/agent/humanizer.mjs`, owner 2026-11-25: "Everything,
+   templates too") is a fixed script, not a model: the guardian checks its text again, and the approved text goes out
+   if it fails.
 5. **Kernel.** This is an external organ (tier 1, no council seat, `signals.observe` and `reports.publish` only),
    declared in `organism.json` and read by the platform Forge over `EXT_ORGANISM_CTA`. Platform-side changes (the
    origin entry, the bindings, Access paths) go through the platform's own repository and its consensus.

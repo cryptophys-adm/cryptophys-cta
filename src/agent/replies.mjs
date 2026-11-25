@@ -1,9 +1,9 @@
 // The CTA agent's Replies (owner 2026-11-25: "semua autonomous jadi reply tanpa approval"; caps "10 an hour, 40 a day";
-// "By themselves after 3 days"; after instagram-agent-skill's ig-reply, MIT: src/agent/LICENSE-instagram-agent-skill).
+// "By themselves after 3 days"; skill cta-reply, adapted from instagram-agent-skill, MIT: src/agent/LICENSE-instagram-agent-skill).
 // One agent for every channel (src/agent/rules.mjs); phase 1 answers on Threads only (REPLY_CHANNELS).
 //
 // What it does, every 15 minutes: reads the replies under our posts of the last REPLY_WINDOW_DAYS, sorts each one
-// (ig-reply's triage: market, question, substance, support, noise), and answers only what deserves it:
+// (cta-reply's triage: market, question, substance, support, noise), and answers only what deserves it:
 //   - market (buy, sell, entry, target, stop, a price prediction): always the fixed MARKET_REPLY, never model text;
 //   - question and substance: a short model answer (Beam through src/agent/router.mjs) that must pass checkReply, or none;
 //   - room (what the room reads: the bias, the outlook, the War Room; owner 2026-11-25: "War room opsional jika ada
@@ -17,7 +17,7 @@
 // the studio's switch (studio setting `agent_replies`, an approver, logged) and the Worker var AGENT_REPLIES ("off"
 // stops it at the next deploy) turn it off.
 import { checkContentDraft } from "../guardian.mjs";
-import { cleanInvisible } from "./humanizer.mjs";
+import { cleanInvisible, humanize } from "./humanizer.mjs";
 
 export const REPLY_CHANNELS = Object.freeze(["threads"]);
 export const REPLY_CAPS = Object.freeze({ hour: 10, day: 40, per_person_per_thread: 1 });
@@ -37,7 +37,7 @@ const DIRECTION = /\b(bullish|bearish|rally|crash|breakout|break out|breakdown|s
 const LINKISH = /(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|net|org|io|ai|co|me|app|link|ly|gg|xyz|work)\b|t\.me\/|wa\.me\/)/i;
 const QUALITY = /\b(guarantee\w*|promise\w*|risk[- ]?free|sure win|can't lose|cannot lose|we recommend|you should (buy|sell|trade|invest))\b/i;
 
-/** ig-reply's triage of one reply: "market", "room", "question", "substance", "support" or "noise". */
+/** cta-reply's triage of one reply: "market", "room", "question", "substance", "support" or "noise". */
 export function triage(text) {
   const t = cleanInvisible(String(text ?? "")).text.trim();
   if (!t) return "noise";
@@ -180,6 +180,7 @@ export async function runReplies(channel, mode, deps, { now = Date.now() } = {})
         answer = shapeAnswer(m.text); fromModel = true;
         if (!answer) { await deps.record({ ...row, status: "model_skipped" }); skip("model_skipped"); continue; }
       }
+      answer = humanize(answer).text;
       const c = checkReply(answer, { fromModel });
       if (!c.ok) { await deps.record({ ...row, answer, status: "blocked", detail: c.failures.join(",") }); skip("blocked"); continue; }
       if (mode.mode === "dry_run") { await deps.record({ ...row, answer, status: "dry_run" }); out.logged += 1; continue; }

@@ -126,6 +126,10 @@ test("YouTube: refreshes the token, opens a resumable session, uploads the bytes
   assert.equal(meta.status.privacyStatus, "public");
   assert.equal(p.calls[1].headers["x-upload-content-length"], "1234");
   assert.equal(p.calls[2].method, "PUT");
+  // the humanized text (src/agent/humanizer.mjs at publish): "Education - " is dropped from the title the same way
+  const h = platform((url) => url === GOOGLE_TOKEN_URL ? { body: { access_token: "ya29.x" } } : url === YOUTUBE_UPLOAD_URL ? { headers: { location: "https://upload.example/s2" } } : { body: { id: "v2", status: { privacyStatus: "private" } } });
+  await publishYouTube({ account, text: "Education - Pattern breakout - XAUUSD H4\nline\nNot financial advice.", video: VIDEO, fetcher: h.fetcher });
+  assert.equal(JSON.parse(h.calls[1].body).snippet.title, "Pattern breakout - XAUUSD H4");
   assert.equal(p.calls[2].body, VIDEO.bytes);
   assert.equal(p.calls[2].headers.authorization, "Bearer ya29.x");
   const dry = JSON.stringify(await publishYouTube({ account, text, video: VIDEO, dryRun: true }));

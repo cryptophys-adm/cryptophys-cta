@@ -1,11 +1,11 @@
 // The CTA agent's Audit and Plan skills, for every channel (owner 2026-11-25: "setuju semua"; "Agent jangan
-// dedicated ke thread, harus untuk semua channel"; the mockup "CTA Studio: the Agent page"), after instagram-agent-skill's ig-audit and ig-plan (MIT, Copyright (c) 2026 Jake Schincariol:
+// dedicated ke thread, harus untuk semua channel"; the mockup "CTA Studio: the Agent page"), skills cta-audit and cta-plan, adapted from instagram-agent-skill (MIT, Copyright (c) 2026 Jake Schincariol:
 // src/agent/LICENSE-instagram-agent-skill). Pure: from a channel's published posts and the metrics the CTA already
 // reads once a day (src/insights.mjs: views, likes, replies as comments, reposts with quotes, shares).
 //
-// ig-audit's rule: raw views say little; a post is judged by its outlier multiple, its views over the account's own
+// cta-audit's rule: raw views say little; a post is judged by its outlier multiple, its views over the account's own
 // median, and a finding needs enough posts behind it (here MIN_FINDING), or it is said to be too few to call.
-// ig-plan's rule: the hour matters far less than what is posted, so the plan names the kinds that travel first and
+// cta-plan's rule: the hour matters far less than what is posted, so the plan names the kinds that travel first and
 // suggests posting hours only where the data has at least MIN_PER_HOUR posts in that hour.
 // Posts stay the xauusd templates; the plan suggests slots and a mix, it never writes a post.
 import { DAYS } from "../settings.mjs";

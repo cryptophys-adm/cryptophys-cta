@@ -9,13 +9,17 @@
 //                YouTube ignores every hashtag past 60), or null for no published cap;
 //   links        the most links a post may hold (Threads 5), or null; `dead_links`: the platform shows links as text
 //                (Instagram captions), so any link is a warning;
-//   window       the characters a feed shows before "more", where the platform documents it (Instagram's 125), or null.
+//   window       the characters a feed shows before "more", where the platform documents it (Instagram's 125), or null
+//                (then the first line is the window).
+// SEARCH_TERMS: the words a person searching for the CTA types (caption.py's SEARCH TERMS), the same on every channel.
 import { CHANNEL_SPECS, CHANNELS } from "../channels.mjs";
 
 /** The channels the agent manages now: phase 1 is Threads (owner 2026-11-25). */
 export const AGENT_CHANNELS = Object.freeze(["threads"]);
 /** The topic tag of the channels that take one through the API. */
 export const TOPIC_TAGS = Object.freeze({ threads: "XAUUSD" });
+/** The search terms every post is checked for (advisory: a WARN, never a block). */
+export const SEARCH_TERMS = Object.freeze(["XAUUSD", "gold"]);
 
 const RULES = {
   threads: { emoji_bytes: true, tags: { mode: "topic_tag" }, links: 5, dead_links: false, window: null },
