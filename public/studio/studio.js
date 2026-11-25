@@ -1243,7 +1243,7 @@
     const head = make("div");
     const tone = r.mode === "live" ? "green" : r.mode === "dry_run" ? "blue" : "red";
     const word = r.mode === "live" ? "Live" : r.mode === "dry_run" ? "Dry run" : "Off";
-    head.append(badge(tone, word), " ", make("b", null, r.mode === "dry_run" ? (r.live_at ? `Nothing is sent; live by itself at ${when(r.live_at)}` : `Nothing is sent; the ${r.dry_run_hours}-hour dry run starts at the next run`) : r.mode === "live" ? "Replies go out without approval, within the caps" : `Stopped: ${r.why ?? "off"}`));
+    head.append(badge(tone, word), " ", make("b", null, r.mode === "dry_run" ? (r.waiting === "about_lede" ? "Nothing is sent; live waits for the About page's sentence about the model (the owner's words)" : r.live_at ? `Nothing is sent; live by itself at ${when(r.live_at)}` : `Nothing is sent; the ${r.dry_run_hours}-hour dry run starts at the next run`) : r.mode === "live" ? "Replies go out without approval, within the caps" : `Stopped: ${r.why ?? "off"}`));
     box.appendChild(head);
     box.appendChild(make("div", "meta", `Caps: ${r.caps.hour} an hour, ${r.caps.day} a day, ${r.caps.per_person_per_thread} per person per thread · ${r.sent_today} in the last 24 hours${r.switched_by ? ` · switch: ${r.switched_by}, ${when(r.switched_at)}` : ""}`));
     const b = make("button", r.mode === "off" ? "btn primary sm" : "btn danger sm", r.mode === "off" ? "Resume replies" : "Stop replies"); b.type = "button"; b.disabled = !canEdit || r.why === "AGENT_REPLIES is not on";

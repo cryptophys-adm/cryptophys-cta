@@ -9,7 +9,7 @@
     - a question or a comment of substance gets a short model answer that must pass `checkReply`: no number, direction, level, trading word or promise, the guardian's rules, at most 280 characters, ending with the disclaimer;
     - support and noise get no answer.
   - Caps: 1 answer per person per thread, 10 an hour, 40 a day.
-  - A 72-hour dry run comes first; after it, replies go live on their own.
+  - A 72-hour dry run comes first; after it, replies go live on their own, once the About lede about the model carries the owner's words (studio flag `about_lede_ok`). Model text with a link, a mention or a hashtag is refused too, since the comment is untrusted.
   - Two ways to stop it: the studio switch (`POST /api/studio/agent/replies`) and the var `AGENT_REPLIES`.
   - The Desk's new `agent_replies` table keeps each reply's author only as a hash. Texts and usernames are forgotten after 30 days.
   - Threads asks for the new `threads_read_replies` and `threads_manage_replies` permissions at the next Connect.

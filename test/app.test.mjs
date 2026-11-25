@@ -904,6 +904,8 @@ test("the agent's Replies end to end (owner 2026-11-25): the first run starts a 
   assert.deepEqual([page.replies.mode, page.replies.recent[0].status, page.replies.recent[0].username], ["dry_run", "dry_run", "alice"]);
   // live after 72 hours (the post still inside the 3-day window): a new reply is answered, the old one is not read again
   const later = T0 + 72 * 3_600_000;
+  assert.equal((await agentReplies(e, { now: later, fetcher, sleep: async () => {} })).status, "dry_run", "live waits for the About lede");
+  assert.equal((await handle(req("/api/studio/agent/replies", { method: "POST", body: { about_lede_ok: true }, token: person }), e, opts)).status, 200);
   const f2 = async (url, init) => (String(url).includes("/999/replies") ? Response.json({ data: [{ id: "501", text: "should I buy now?", username: "alice" }, { id: "502", text: "sell or hold?", username: "bob" }] }) : fetcher(url, init));
   const live = await agentReplies(e, { now: later, fetcher: f2, sleep: async () => {} });
   assert.deepEqual([live.status, live.channels.threads.answered, sent.length, sent[0].reply_to_id, sent[0].text.endsWith("Not financial advice.")], ["live", 1, 1, "502", true]);

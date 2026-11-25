@@ -30,6 +30,7 @@ const MARKET = /\b(buy|sell|long|short|entry|enter|exit|tp|sl|take[- ]?profit|st
 const NOISE = /(https?:\/\/|www\.|t\.me\/|wa\.me\/|\bdm me\b|\bmessage me\b|\bsignal group\b|\bjoin (my|our)\b|\bguaranteed\b|\b\d+%\s*(daily|weekly|monthly|profit)\b|\bfollow (me|back)\b|\bcheck my (bio|profile)\b)/i;
 const SUPPORT = /^(\W|\p{Extended_Pictographic}|nice|great|good|thanks|thank you|thx|cool|wow|love (it|this)|agreed?|true|facts|👍|🔥)+$/iu;
 const DIRECTION = /\b(bullish|bearish|rally|crash|breakout|break out|breakdown|surge|plunge|soar|tank|uptrend|downtrend|going (up|down)|go (up|down)|will (rise|fall|drop|climb)|higher|lower|support|resistance|level|zone|price)\b/i;
+const LINKISH = /(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|net|org|io|ai|co|me|app|link|ly|gg|xyz|work)\b|t\.me\/|wa\.me\/)/i;
 const QUALITY = /\b(guarantee\w*|promise\w*|risk[- ]?free|sure win|can't lose|cannot lose|we recommend|you should (buy|sell|trade|invest))\b/i;
 
 /** ig-reply's triage of one reply: "market", "question", "substance", "support" or "noise". */
@@ -58,6 +59,11 @@ export function checkReply(text, { fromModel = true } = {}) {
   if (QUALITY.test(t.replace(DISCLAIMER, ""))) failures.push("quality");
   if (fromModel) {
     const body = t.replace(DISCLAIMER, "");
+    // The comment is untrusted (orchestrator review of #80): whatever it asked for, model text carries no link, no
+    // mention and no hashtag either.
+    if (LINKISH.test(body)) failures.push("link");
+    if (/(^|\s)@\w/.test(body)) failures.push("mention");
+    if (/(^|\s)#\w/.test(body)) failures.push("hashtag");
     if (/\d/.test(body)) failures.push("number");
     if (DIRECTION.test(body)) failures.push("direction");
     if (MARKET.test(body)) failures.push("market");
@@ -91,7 +97,12 @@ export function replyMode(env, setting, now = Date.now()) {
   const since = Date.parse(setting?.since ?? "");
   if (!Number.isFinite(since)) return { mode: "dry_run", since: null, live_at: null };
   const liveAt = since + DRY_RUN_HOURS * 3_600_000;
-  return now >= liveAt ? { mode: "live", since: new Date(since).toISOString(), live_at: new Date(liveAt).toISOString() } : { mode: "dry_run", since: new Date(since).toISOString(), live_at: new Date(liveAt).toISOString() };
+  const base = { since: new Date(since).toISOString(), live_at: new Date(liveAt).toISOString() };
+  if (now < liveAt) return { mode: "dry_run", ...base };
+  // Live also waits for the About page's lede to match (orchestrator review of #80): while "No post is written freely
+  // by a model" is the public sentence, the dry run continues. An approver sets `about_lede_ok` once the owner's words ship.
+  if (setting?.about_lede_ok !== true) return { mode: "dry_run", ...base, waiting: "about_lede" };
+  return { mode: "live", ...base };
 }
 
 /** An author's id for the caps, without keeping more than needed: a SHA-256 of the channel and the username. */

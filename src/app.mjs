@@ -717,10 +717,14 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
         if (r.response) return r.response;
         const denied = approverOnly(role);
         if (denied) return denied;
-        if (typeof r.body.enabled !== "boolean") return json({ error: "enabled must be true or false" }, 400);
+        const patch = {};
+        if ("enabled" in r.body) { if (typeof r.body.enabled !== "boolean") return json({ error: "enabled must be true or false" }, 400); patch.enabled = r.body.enabled; }
+        // The About lede's gate (orchestrator review of #80): set once the owner's words for it are on the page.
+        if ("about_lede_ok" in r.body) { if (typeof r.body.about_lede_ok !== "boolean") return json({ error: "about_lede_ok must be true or false" }, 400); patch.about_lede_ok = r.body.about_lede_ok; }
+        if (!Object.keys(patch).length) return json({ error: "nothing to change" }, 400);
         return rpc(async () => {
           const cur = (await desk(env).studioSetting("agent_replies"))?.value ?? {};
-          return desk(env).saveStudioSetting({ key: "agent_replies", value: { ...cur, enabled: r.body.enabled }, actor: identity.subject }, now ? now * 1000 : Date.now());
+          return desk(env).saveStudioSetting({ key: "agent_replies", value: { ...cur, ...patch }, actor: identity.subject }, now ? now * 1000 : Date.now());
         }, "replies_switch_failed");
       }
       // The model's switch (src/agent/router.mjs): an approver turns it off or on; the studio's event log keeps who and when.
