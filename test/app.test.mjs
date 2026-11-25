@@ -9,7 +9,7 @@ import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, r
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
 import { AGENT_SECRETS } from "../src/agent/router.mjs";
-import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies } from "../src/desk.mjs";
+import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
@@ -52,6 +52,7 @@ function deskStub() {
     slotOutcome: async (i) => { slotOutcome(sql, i); return true; }, recentSlots: async (n) => recentSlots(sql, { limit: n }),
     addLink: async (i, now) => addLink(sql, i, { now }), link: async (s) => getLink(sql, s), click: async (i, now) => { countClick(sql, i, { now }); return true; },
     links: async () => listLinks(sql), hashtagSets: async () => listHashtagSets(sql), saveHashtagSet: async (i, now) => saveHashtagSet(sql, i, { now }),
+    autoCandidates: async (i) => autoCandidates(sql, i),
     replySeen: async (id) => replySeen(sql, id), answeredInThread: async (p, a) => answeredInThread(sql, p, a), repliesSentSince: async (s) => repliesSentSince(sql, s), recordReply: async (r) => recordReply(sql, r), recentReplies: async (n) => recentReplies(sql, { limit: n }), forgetReplies: async (b) => forgetReplies(sql, b),
     recordModelCall: async (i, now) => recordModelCall(sql, i, { now }), modelSpendSince: async (s) => modelSpendSince(sql, s), recentModelCalls: async (n) => recentModelCalls(sql, { limit: n }),
     studioSetting: async (k) => studioSetting(sql, k), saveStudioSetting: async (i, now) => saveStudioSetting(sql, i, { now }), kindMix: async (f, t) => kindMixSince(sql, f, t),
@@ -915,4 +916,40 @@ test("the agent's Replies end to end (owner 2026-11-25): the first run starts a 
   assert.equal((await post({ enabled: false }, { token: person })).status, 200);
   assert.equal((await agentReplies(e, { now: later, fetcher: f2 })).status, "off");
   assert.equal((await agentReplies({ ...e, AGENT_REPLIES: "off" }, { now: later, fetcher: f2 })).status, "off", "the var stops it too");
+});
+
+test("auto-approve end to end (owner 2026-11-25): a Threads pattern draft goes out by itself 15 minutes after it is ready; an edited one waits", async () => {
+  resetKeyCacheForTests();
+  const { env: e, d } = env({ CONTENT_PUBLISH: "on", PUBLISH_CHANNELS: "threads,telegram", THREADS_ACCESS_TOKEN: "T", THREADS_USER_ID: "77", TELEGRAM_BOT_TOKEN: "B", TELEGRAM_CHAT_ID: "@c" });
+  const T0 = Date.parse("2026-11-25T06:00:00Z");
+  const text = "Education · Pattern breakout · XAUUSD H1\nFlag\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.";
+  addDrafts(d.sql, [
+    { id: "pattern:a:threads", channel: "threads", kind: "pattern", text, status: "pending" },
+    { id: "pattern:b:threads", channel: "threads", kind: "pattern", text, status: "pending" },
+    { id: "pattern:a:telegram", channel: "telegram", kind: "pattern", text, status: "pending" },
+    { id: "custom:x:threads", channel: "threads", kind: "custom", text, status: "pending" }
+  ], { now: T0 });
+  const edited = editDraft(d.sql, { id: "pattern:b:threads", text: text.replace("Flag", "Flag (edited)"), actor: "owner@example.com", check: () => ({ guardian: { pass: true, failures: [] } }) }, { now: T0 + 60_000 });
+  assert.equal(edited.ok, true, JSON.stringify(edited));
+  const posted = [];
+  const fetcher = async (url, init) => {
+    const u = String(url);
+    if (u.includes("/me?")) return Response.json({ id: "77" });
+    if (u.endsWith("/77/threads")) { posted.push(Object.fromEntries(new URLSearchParams(String(init.body)))); return Response.json({ id: "c1" }); }
+    if (u.includes("/c1?")) return Response.json({ status: "FINISHED" });
+    if (u.endsWith("/threads_publish")) return Response.json({ id: "p1" });
+    if (u.includes("threads_publishing_limit")) return Response.json({ data: [{ quota_usage: 0, config: { quota_total: 250 } }] });
+    throw new Error(`unexpected ${u}`);
+  };
+  const person = await jwt({ email: "owner@example.com" });
+  const queue = await (await handle(req("/api/studio/drafts?status=pending&channel=threads", { token: person }), e, opts)).json();
+  assert.equal(queue.drafts.find((x) => x.id === "pattern:a:threads").auto_at, "2026-11-25T06:15:00.000Z", "the queue shows when it goes out by itself");
+  assert.equal(queue.drafts.find((x) => x.id === "pattern:b:threads").auto_at, null, "an edited draft waits for a person");
+  assert.equal("auto_at" in queue.drafts.find((x) => x.id === "custom:x:threads"), false, "never a custom post");
+  assert.equal((await runSchedule(e, { now: T0 + 10 * 60_000, fetcher })).auto, undefined, "nothing inside the window");
+  const r = await runSchedule(e, { now: T0 + 16 * 60_000, fetcher });
+  assert.deepEqual(r.auto.map((x) => [x.id, x.status, x.publish]), [["pattern:a:threads", "approved", "published"]]);
+  assert.equal(getDraft(d.sql, "pattern:a:threads").decided_by, "auto-approve");
+  assert.equal(posted.length, 1);
+  assert.deepEqual([getDraft(d.sql, "pattern:b:threads").status, getDraft(d.sql, "pattern:a:telegram").status, getDraft(d.sql, "custom:x:threads").status], ["pending", "pending", "pending"], "edited, another channel without the rule, a custom post: they wait");
 });

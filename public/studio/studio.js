@@ -368,6 +368,19 @@
     kf.appendChild(checks);
     bd.appendChild(kf);
 
+    // Auto-approve (owner 2026-11-25): the kinds this channel approves by itself, 15 minutes after a draft is ready.
+    const af = field("Auto-approve", "A draft of a kind ticked here is approved by itself 15 minutes after it is ready, on a channel that publishes. Until then you can approve, edit or reject it; an edited draft waits for you. The guardian runs again. Never a custom post.");
+    const autos = make("div", "checks");
+    for (const k of cfg.auto_kinds ?? []) {
+      const l = make("label");
+      const i = make("input"); i.type = "checkbox"; i.checked = (s.auto_approve ?? []).includes(k); i.disabled = !edit;
+      i.addEventListener("change", () => { s.auto_approve = (cfg.auto_kinds ?? []).filter((x) => (x === k ? i.checked : (s.auto_approve ?? []).includes(x))); });
+      l.append(i, make("span", null, cfg.auto_kind_names?.[k] ?? k));
+      autos.appendChild(l);
+    }
+    af.appendChild(autos);
+    bd.appendChild(af);
+
     // Daily maximum
     const mf = field("Drafts per day", `At most this many drafts a day (WIB), every kind together; 1 to ${cfg.max_per_day ?? 24}.`);
     const max = make("input", "num"); max.type = "number"; max.min = "1"; max.max = String(cfg.max_per_day ?? 24); max.value = String(s.max_per_day); max.disabled = !edit;
@@ -485,6 +498,8 @@
     head.appendChild(badge(TONE[d.status] ?? "", LABEL[d.status] ?? d.status));
     head.appendChild(badge("purple", status?.channels?.[d.channel]?.name ?? d.channel));
     head.appendChild(make("span", "badge plain", KIND[d.kind] ?? d.kind));
+    // Under the channel's auto-approve rule (src/agent/auto-approve.mjs): when it goes out by itself, unless a person acts first.
+    if (d.status === "pending" && d.auto_at) head.appendChild(badge("blue", `Auto-approves ${clock12(d.auto_at)} UTC`));
     head.appendChild(make("span", "grow"));
     const limit = { threads: 500, instagram: 2200, x: 280, telegram: 4096, youtube: 5000, tiktok: 2200 }[d.channel];
     head.appendChild(make("span", "meta count", `${d.text.length}${limit ? `/${limit}` : ""} characters · ${when(d.created_at)}`));

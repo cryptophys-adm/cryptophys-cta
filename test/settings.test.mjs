@@ -39,7 +39,7 @@ test("validation: kinds, the daily maximum, schedule slots in WIB, hashtags; any
     schedule: [{ days: ["fri", "mon"], time: "19:30" }, { days: ["mon", "fri"], time: "19:30" }, { days: ["sat"], time: "08:05" }], hashtags: "  #XAUUSD   #gold_edu " });
   assert.ok(ok.ok, ok.error);
   assert.deepEqual(ok.settings, { enabled: false, format: "text", kinds: ["key_levels", "pattern"], max_per_day: 3,
-    schedule: [{ days: ["sat"], time: "08:05" }, { days: ["mon", "fri"], time: "19:30" }], hashtags: "" }, "Threads takes no hashtag line: one topic tag through the API (owner 2026-11-25)");
+    schedule: [{ days: ["sat"], time: "08:05" }, { days: ["mon", "fri"], time: "19:30" }], hashtags: "", auto_approve: ["key_levels", "pattern", "daily_recap", "warroom"] }, "Threads takes no hashtag line: one topic tag through the API; it approves the owner's four kinds automatically (owner 2026-11-25)");
   assert.equal(normalizeSettings("telegram", { hashtags: "  #XAUUSD   #gold_edu " }).settings.hashtags, "#XAUUSD #gold_edu", "the other channels keep theirs");
   const bad = [
     ["unknown", {}], ["x", null], ["x", []], ["x", { enabled: "yes" }], ["x", { kinds: ["meme"] }], ["x", { max_per_day: 0 }], ["x", { max_per_day: 25 }],

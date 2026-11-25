@@ -4,7 +4,8 @@
 // "Semua content in english"; no model writes public text):
 //   - the key-level map, once a weekday at 06:09 UTC (13:09 WIB, before London): the demand zones ("buy area")
 //     and supply zones ("sell area") as information, the price when read, the structure per chart;
-//   - a pattern post when an H1, H4 or D1 pattern is confirmed (its breakout), or an H4 or D1 pattern is forming:
+//   - a pattern post when an H1, H4 or D1 pattern is confirmed (its breakout); the scheduled run drafts confirmed ones only
+//     (owner 2026-11-25: "Only confirmed"), while Create still offers an H4 or D1 pattern forming to a person:
 //     its name (no catalogue reference: owner 2026-11-15), its lines, what undoes it, the measured projection as analysis.
 // Never the system's decision, an entry, a stop, a take profit or BUY/SELL as a signal: the content guardian's
 // signal_words rule refuses them. Price levels are allowed here (allowLevels): they are the analysis itself.
@@ -89,7 +90,9 @@ export function patternText(p, analysis, { channel = "threads" } = {}) {
   return finish(lines, channel);
 }
 
-/** Which patterns are posted: confirmed on H1, H4, D1; forming on H4 and D1. */
+/** The patterns the scheduled run drafts: confirmed only (owner 2026-11-25: "Only confirmed"). */
+export const draftedPatterns = (analysis) => postablePatterns(analysis).filter((p) => p.status === "confirmed");
+/** Which patterns may be posted (Create's choice too): confirmed on H1, H4, D1; forming on H4 and D1. */
 export function postablePatterns(analysis) {
   return (analysis?.patterns ?? []).filter((p) => (p.status === "confirmed" && ["H1", "H4", "D1"].includes(p.chart)) || (p.status === "forming" && ["H4", "D1"].includes(p.chart)));
 }
@@ -146,7 +149,7 @@ export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS
       if (text) out.push(draft({ id: `levels:${day}:${channel}`, kind: "key_levels", channel, text, now, overlay: overlayOf(analysis, { maxZones: 3 }) }));
     }
     let room = MAX_PATTERN_DRAFTS_PER_DAY - (Number(postedToday[channel]) || 0);
-    for (const p of postablePatterns(analysis)) {
+    for (const p of draftedPatterns(analysis)) {
       if (room <= 0) break;
       const id = `pattern:${patternKey(p)}:${channel}`;
       if (known.has(id)) continue;

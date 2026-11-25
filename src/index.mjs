@@ -15,7 +15,7 @@
 // Kernel: the OrganismDna and CtaHealth entrypoints serve the platform's census and drift checks.
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import puppeteer from "@cloudflare/puppeteer";
-import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies } from "./desk.mjs";
+import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates } from "./desk.mjs";
 import { editCheck } from "./compose.mjs";
 import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, collectInsights, runSchedule, agentWeekly, agentReplies, forgetOldReplies, ANALYSIS_CRON, analysisRunDue } from "./app.mjs";
 import { SCHEDULE_CRON } from "./scheduler.mjs";
@@ -74,6 +74,7 @@ export class ContentDesk extends DurableObject {
   async recordReply(r) { return recordReply(this.sql, r); }
   async recentReplies(n) { return recentReplies(this.sql, { limit: n }); }
   async forgetReplies(before) { return forgetReplies(this.sql, before); }
+  async autoCandidates(input) { return autoCandidates(this.sql, input); }
   async kindMix(from, to) { return kindMixSince(this.sql, from, to); }
   async addAbTest(input, now) { addAbTest(this.sql, input, { now }); return true; }
   async abTests() { return listAbTests(this.sql); }

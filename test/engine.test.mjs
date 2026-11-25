@@ -206,7 +206,8 @@ test("the key-level map and the pattern posts pass the guardian with levels allo
   assert.match(c, /The pattern fails if an H4 candle closes back below 3719\.57/);
   assert.match(c, /Measured projection: 4020\.50 \(analysis, not a trade objective\)/);
   const drafts = analysisDrafts(a, { now: AT, levelsRun: true, channels: ["threads"] });
-  assert.deepEqual(drafts.map((d) => [d.kind, d.status, d.guardian.pass]), [["key_levels", "pending", true], ["pattern", "pending", true], ["pattern", "pending", true]], "H1 forming is not posted");
+  assert.deepEqual(drafts.map((d) => [d.kind, d.status, d.guardian.pass]), [["key_levels", "pending", true], ["pattern", "pending", true]], "confirmed patterns only (owner 2026-11-25: \"Only confirmed\"); a forming one, H1 or H4, is not drafted");
+  assert.match(drafts[1].text, /Pattern breakout/);
   for (const d of drafts) assert.ok(!/\b(entry|SL|TP\d?|BUY|SELL|stop loss|take profit)\b/.test(d.text), d.text);
 });
 

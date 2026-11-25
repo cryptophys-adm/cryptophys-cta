@@ -27,6 +27,12 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
    answer passes the guardian's rules, the reply checks and carries "Not financial advice."; at most 1 answer per person
    per thread, 10 an hour and 40 a day; never a DM, never another account's thread. The studio's switch and the var
    `AGENT_REPLIES` stop it.
+   **Posts approved by a rule** (owner 2026-11-25: "Yes, posted by itself"; kinds "Chart pattern (confirmed), Key-level
+   map, Daily recap, War Room"; the public wording "Use the mockup's sentences"; the lawyer "No, go ahead"): a channel's
+   settings may approve those kinds automatically (`auto_approve`, Threads by default; never a custom post), 15 minutes
+   after a draft is ready, unless a person edited it; the approval is a person's in every other way (the guardian again,
+   an aged analysis draft expires), it is logged as "auto-approve", and in the window a person can approve, edit or
+   reject it (`src/agent/auto-approve.mjs`). The scheduled run drafts confirmed chart patterns only ("Only confirmed").
    An analysis draft (the key-level map, a pattern post) expires 2 hours after it was made from the analysis (owner
    2026-11-17: "kadaluwarsa otomatis"): it is never approved, sent again, copied or published after that; a fresh one is
    made from Create with the latest analysis. A recap is about the past and does not expire.

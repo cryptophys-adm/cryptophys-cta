@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-11-25 (the CTA agent, PR 5: auto-approve; confirmed patterns only)
+- feat(agent): posts approved by a rule.
+  - The owner, 25 Nov:
+    - "Yes, posted by itself";
+    - kinds "Chart pattern (confirmed), Key-level map, Daily recap, War Room";
+    - "Use the mockup's sentences";
+    - "No, go ahead" to waiting for the lawyer;
+    - "Only confirmed".
+  - Channel settings: `auto_approve` per channel. Threads has all four kinds by default; custom posts are never approved by the rule.
+  - The scheduler approves a pending draft of those kinds 15 minutes after it is ready, unless a person edited it. The guardian runs again, and the approval is logged as "auto-approve". The draft then goes out at once, or at the channel's next slot.
+  - The queue shows "Auto-approves <time> UTC", and Channels has an Auto-approve field.
+  - The scheduled run drafts confirmed patterns only. Create still offers forming ones.
+  - Six public sentences changed as the mockup proposed: About's step 4 and description (with its Open Graph line and llms.txt), the Archive's lede, Privacy, Home's "how it works", and the Content Guardian's role.
+  - AGENTS.md rule 2.
+  - Tests AG10 and the auto-approve end-to-end test; the fixtures follow.
+
 ## 2026-11-25 (the CTA agent, PR 4: autonomous Replies on Threads)
 - feat(agent): the agent answers replies under our posts without approval.
   - Owner, 25 Nov: "semua autonomous jadi reply tanpa approval", "10 an hour, 40 a day", "By themselves after 3 days", and "Use this wording" for the two public sentences.

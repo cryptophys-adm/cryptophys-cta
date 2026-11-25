@@ -17,6 +17,14 @@ import { CHART_CREDIT } from "./drafts.mjs";
 
 export const KINDS = Object.freeze(["key_levels", "pattern", "daily_recap"]);
 export const KIND_NAMES = Object.freeze({ key_levels: "Key-level map", pattern: "Chart pattern", daily_recap: "Daily recap" });
+/**
+ * The kinds a channel may approve automatically, 15 minutes after a draft is ready (owner 2026-11-25: "Chart pattern
+ * (confirmed), Key-level map, Daily recap, War Room"; src/agent/auto-approve.mjs). Never a custom post.
+ */
+export const AUTO_KINDS = Object.freeze(["key_levels", "pattern", "daily_recap", "warroom"]);
+export const AUTO_KIND_NAMES = Object.freeze({ ...KIND_NAMES, warroom: "War Room" });
+/** The channels that approve automatically by default: the agent's phase 1, Threads, with the four kinds the owner chose. */
+export const AUTO_DEFAULTS = Object.freeze({ threads: AUTO_KINDS });
 export const DAYS = Object.freeze(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
 export const TIMEZONE = "Asia/Jakarta";
 const MEDIA_FORMAT = { none: "text", image: "image", video: "video" };
@@ -42,7 +50,8 @@ export function defaultSettings(channel) {
     kinds: [...KINDS],
     max_per_day: 6,
     schedule: [],
-    hashtags: HASHTAGS[channel] ?? ""
+    hashtags: HASHTAGS[channel] ?? "",
+    auto_approve: [...(AUTO_DEFAULTS[channel] ?? [])]
   };
 }
 
@@ -84,6 +93,10 @@ export function normalizeSettings(channel, input) {
     const seen = new Set();
     out.schedule = slots.filter((s) => { const k = s.days.join(",") + "@" + s.time; if (seen.has(k)) return false; seen.add(k); return true; })
       .sort((a, b) => a.time.localeCompare(b.time));
+  }
+  if ("auto_approve" in input) {
+    if (!Array.isArray(input.auto_approve) || input.auto_approve.some((k) => !AUTO_KINDS.includes(k))) return { ok: false, error: `auto_approve: kinds among ${AUTO_KINDS.join(", ")}` };
+    out.auto_approve = AUTO_KINDS.filter((k) => input.auto_approve.includes(k));
   }
   // Threads takes one topic tag instead (owner 2026-11-25): its hashtag line stays empty, whatever was stored.
   if ("hashtags" in input && channel !== "threads") {

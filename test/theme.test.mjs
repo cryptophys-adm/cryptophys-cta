@@ -249,7 +249,7 @@ test("TH12 About (PR 2): every part keeps its words, the steps are h2 under the 
   const steps = block(main, '<ol class="a-steps">', "</ol>");
   const items = [...steps.matchAll(/<li><span class="num">(\d)<\/span><div><h2>([^<]+)<\/h2><p>([\s\S]*?)<\/p><\/div><\/li>/g)];
   assert.deepEqual(items.map((m) => m[1]), ["1", "2", "3", "4", "5"], "five numbered steps");
-  assert.deepEqual(items.map((m) => m[2]), ["The system reads the market", "A draft from a fixed template", "Automatic checks", "A person approves", "Published on each channel's schedule"]);
+  assert.deepEqual(items.map((m) => m[2]), ["The system reads the market", "A draft from a fixed template", "Automatic checks", "A person approves, or sets the rule", "Published on each channel's schedule"], "step 4 as the owner approved (2026-11-25, auto-approve)");
   assert.doesNotMatch(steps, /<h3/, "the steps' headings are h2");
   assert.deepEqual(all(/<section class="a-sec" aria-labelledby="[^"]+">\n {4}<h2 id="[^"]+">([^<]+)<\/h2>/g), ["What each post type means", "What we never post"], "the two sections");
   for (const m of main.matchAll(/aria-labelledby="([^"]+)"/g)) assert.match(main, new RegExp(`<h2 id="${m[1]}">`), `#${m[1]} names its section`);
