@@ -1185,7 +1185,7 @@
       for (const s of a.skills) {
         const item = make("div", "draft");
         const top = make("div");
-        top.append(badge(s.live ? "green" : "", s.live ? "On" : "Next"), " ", make("b", null, s.name));
+        top.append(badge(s.live ? "green" : "", s.live ? "On" : "Next"), " ", make("b", null, s.name), " ", make("span", "meta", s.id));
         item.append(top, make("div", null, s.what), make("div", "meta", `Runs ${s.runs} · model: ${s.model}`));
         list.appendChild(item);
       }

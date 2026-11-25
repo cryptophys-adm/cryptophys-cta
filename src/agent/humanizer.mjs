@@ -1,6 +1,6 @@
 // The humanizer of the CTA agent's Checks skill (owner 2026-11-25: "setuju semua, mulai dari Checks"; the studio's
-// Agent page). A JavaScript port of instagram-agent-skill's skills/ig-human (detect.py, and humanize.py's invisible
-// pass), MIT License, Copyright (c) 2026 Jake Schincariol: src/agent/LICENSE-instagram-agent-skill. Pure, no network.
+// Agent page). Skill cta-human: adapted from instagram-agent-skill's detector and humanizer (detect.py, humanize.py),
+// MIT License, Copyright (c) 2026 Jake Schincariol: src/agent/LICENSE-instagram-agent-skill. Pure, no network.
 //
 // In full since 2026-11-25 (owner: "lengkapi semua tidak boleh ada sebagian, tiru semuanya"; the humanizer's rewrite on
 // "Everything, templates too"): `humanize` is humanize.py's four passes on every post before it goes out (URLs

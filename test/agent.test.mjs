@@ -107,7 +107,10 @@ test("AG4 the Agent page: Threads drafts only, read only, each with its Threads 
   assert.equal(a.checks[1].humanized, false, "a published post shows the text that went out");
   assert.deepEqual(a.summary, { checked: 2, ready: 0, review: 1, fix: 1, human_pass: a.checks.filter((c) => c.human.verdict === "PASS").length });
   assert.equal(a.topic_tag, "XAUUSD");
-  assert.deepEqual(AGENT_SKILLS.map((s) => [s.id, s.live]), [["linter", true], ["humanizer", true], ["audit", true], ["plan", true], ["replies", true]]);
+  // the CTA's own names (owner 2026-11-25: "gunakan nama cta lebih general"); every adopted skill listed
+  assert.deepEqual(AGENT_SKILLS.map((s) => [s.id, s.live]), [["cta-lint", true], ["cta-human", true], ["cta-audit", true], ["cta-plan", true], ["cta-reply", true],
+    ["cta-write", false], ["cta-hook", false], ["cta-carousel", false], ["cta-repurpose", false], ["cta-profile", false], ["cta-reel", false], ["cta-story", false], ["cta-trends", false], ["cta-comment", false], ["cta-dm", false]]);
+  assert.ok(AGENT_SKILLS.every((s) => /^cta-[a-z]+$/.test(s.id)));
   const html = read("public/studio/index.html"), js = read("public/studio/studio.js"), app = read("src/app.mjs");
   assert.match(html, /<a href="#agent" data-view="agent">/);
   assert.match(html, /id="view-agent"/);
@@ -401,7 +404,7 @@ test("AG12 key-level maps per chart (owner 2026-11-25): each chart's map once pe
   assert.equal(normalizeSettings("threads", { max_per_day: 33 }).ok, false);
 });
 
-test("AG13 ig-caption and ig-human in full: four more caption checks; humanize.py's four passes on every post, checked by the guardian again", () => {
+test("AG13 cta-lint and cta-human in full: four more caption checks; humanize.py's four passes on every post, checked by the guardian again", () => {
   // caption.py: HOOK IS CONCRETE, TAG PLACEMENT, ONE ASK, SEARCH TERMS
   const st = (c, t, check, o) => lintPost(c, t, o).checks.find((k) => k.check === check);
   assert.equal(st("instagram", "Gold held 4,120 today\nmore", "HOOK IS CONCRETE").status, "PASS");

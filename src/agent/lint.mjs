@@ -1,5 +1,5 @@
 // The CTA agent's linter, one for every channel (owner 2026-11-25: "Agent ... harus untuk semua channel ... hanya fase 1
-// ini thread dulu"). The rules of instagram-agent-skill's skills/ig-caption/caption.py (MIT, Copyright (c) 2026 Jake
+// ini thread dulu"). Skill cta-lint: the caption rules adapted from instagram-agent-skill's caption.py (MIT, Copyright (c) 2026 Jake
 // Schincariol: src/agent/LICENSE-instagram-agent-skill), read against each channel's own limits (src/agent/rules.mjs).
 // Pure: the studio's Agent page shows the result for each draft of a channel the agent manages. A FAIL is a post the
 // platform would refuse or that breaks a rule; the publishers still refuse only what the platform refuses, as before.

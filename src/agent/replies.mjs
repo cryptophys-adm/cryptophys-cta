@@ -1,9 +1,9 @@
 // The CTA agent's Replies (owner 2026-11-25: "semua autonomous jadi reply tanpa approval"; caps "10 an hour, 40 a day";
-// "By themselves after 3 days"; after instagram-agent-skill's ig-reply, MIT: src/agent/LICENSE-instagram-agent-skill).
+// "By themselves after 3 days"; skill cta-reply, adapted from instagram-agent-skill, MIT: src/agent/LICENSE-instagram-agent-skill).
 // One agent for every channel (src/agent/rules.mjs); phase 1 answers on Threads only (REPLY_CHANNELS).
 //
 // What it does, every 15 minutes: reads the replies under our posts of the last REPLY_WINDOW_DAYS, sorts each one
-// (ig-reply's triage: market, question, substance, support, noise), and answers only what deserves it:
+// (cta-reply's triage: market, question, substance, support, noise), and answers only what deserves it:
 //   - market (buy, sell, entry, target, stop, a price prediction): always the fixed MARKET_REPLY, never model text;
 //   - question and substance: a short model answer (Beam through src/agent/router.mjs) that must pass checkReply, or none;
 //   - room (what the room reads: the bias, the outlook, the War Room; owner 2026-11-25: "War room opsional jika ada
@@ -37,7 +37,7 @@ const DIRECTION = /\b(bullish|bearish|rally|crash|breakout|break out|breakdown|s
 const LINKISH = /(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|net|org|io|ai|co|me|app|link|ly|gg|xyz|work)\b|t\.me\/|wa\.me\/)/i;
 const QUALITY = /\b(guarantee\w*|promise\w*|risk[- ]?free|sure win|can't lose|cannot lose|we recommend|you should (buy|sell|trade|invest))\b/i;
 
-/** ig-reply's triage of one reply: "market", "room", "question", "substance", "support" or "noise". */
+/** cta-reply's triage of one reply: "market", "room", "question", "substance", "support" or "noise". */
 export function triage(text) {
   const t = cleanInvisible(String(text ?? "")).text.trim();
   if (!t) return "noise";
