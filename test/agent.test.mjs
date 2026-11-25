@@ -13,7 +13,7 @@ import { rulesOf, agentChannels, AGENT_CHANNELS, TOPIC_TAGS, SEARCH_TERMS } from
 import { checkContentDraft } from "../src/guardian.mjs";
 import { HOOKS } from "../src/agent/hooks-data.mjs";
 import { hookScore, hookFormula, openingLine, HOOK_CHECKS } from "../src/agent/hook.mjs";
-import { splitPost, joinPost, checkWritten, writeMode, runWrite, factTokens, WRITE_KINDS } from "../src/agent/write.mjs";
+import { splitPost, joinPost, checkWritten, writeMode, runWrite, factTokens, WRITE_KINDS, OUTCOME_WORDS } from "../src/agent/write.mjs";
 import { lintPost, textFor } from "../src/agent/lint.mjs";
 import { CHANNELS } from "../src/channels.mjs";
 import { askModel, modelConfig, costOf, wibDayStartIso, MODEL_DEFAULTS, AGENT_SECRETS } from "../src/agent/router.mjs";
@@ -496,6 +496,19 @@ test("AG15 cta-write: the template's own facts reworded behind rule 4's guards, 
   const tf = { ...lv, text: lv.text.replace("Support 4,100 to 4,110. Resistance 4,150 to 4,160.", "H1 support 4,100. 4H support 4,050.") };
   assert.deepEqual(checkWritten({ draft: tf, written: "4H support 4,100. H1 support 4,050.", channel: "threads", check: () => ({ pass: true }) }).failures, ["role_binding"], "a timeframe swap");
   assert.deepEqual(checkWritten({ draft: tf, written: "On the 1-hour chart, support is 4,100. On the 4-hour chart, support is 4,050.", channel: "threads", check: () => ({ pass: true }) }).failures, [], "the same charts in other spellings");
+  // a negation or an outcome word changed (orchestrator review of #85); OUTCOME_WORDS is a closed list on purpose
+  assert.deepEqual(lvFails("Support is not at 4,100 to 4,110. Resistance 4,150 to 4,160."), ["negation_changed"]);
+  assert.deepEqual(lvFails("Support 4,100 to 4,110. Resistance isn't 4,150 to 4,160."), ["negation_changed"], "a contraction counts");
+  const held = { ...lv, text: lv.text.replace("Support 4,100 to 4,110. Resistance 4,150 to 4,160.", "The 4,100 level held 3 times.") };
+  const heldFails = (w) => checkWritten({ draft: held, written: w, channel: "threads", check: () => ({ pass: true }) }).failures;
+  assert.deepEqual(heldFails("The 4,100 level broke 3 times."), ["outcome_changed"]);
+  assert.deepEqual(heldFails("The level at 4,100 held 3 times."), [], "the same outcome, reworded");
+  assert.deepEqual(heldFails("The 4,100 level stood firm 3 times."), ["outcome_changed"], "dropping a listed word fails too");
+  const firm = { ...lv, text: lv.text.replace("Support 4,100 to 4,110. Resistance 4,150 to 4,160.", "The 4,100 level stood firm 3 times.") };
+  // OUTCOME_WORDS is deliberate and closed: a word not on it ("stood firm", "gave way") is not compared, and the list
+  // grows with the templates' own outcome words.
+  assert.deepEqual(checkWritten({ draft: firm, written: "The 4,100 level gave way 3 times.", channel: "threads", check: () => ({ pass: true }) }).failures, [], "a synonym not on the list passes");
+  assert.ok(OUTCOME_WORDS.includes("held") && OUTCOME_WORDS.includes("between") && OUTCOME_WORDS.length === 32);
   assert.deepEqual(factTokens("Demand (buy area): 3534.96 (4H Camarilla L5)").filter((t) => t.type === "number").map((t) => t.value), ["3534.96"], "H4 and L5 are names, not numbers");
   assert.ok(fails(GOOD + " You should sell now.").includes("forbidden_word"));
   assert.ok(fails(GOOD + " See cta.cryptophys.work").includes("link"));

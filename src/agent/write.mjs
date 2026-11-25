@@ -10,7 +10,8 @@
 //   - the facts only: the same numbers as the template's body, none added and none dropped, in the same order
 //     (`number_order`); the same role and timeframe words (`role_changed`); and each number under the same role word as
 //     in the template (`role_binding`), so "Support 4,100" can never become "Resistance 4,100" (orchestrator review
-//     of #85);
+//     of #85); the same negations (`negation_changed`) and the same outcome words of OUTCOME_WORDS
+//     (`outcome_changed`), so "Support 4,100" never becomes "Support is not at 4,100" and "held" never "broke";
 //   - no link, mention, hashtag or emoji; no advice, call, forecast, promise or certainty word the template does not
 //     itself use (WRITE_FORBIDDEN);
 //   - humanized (src/agent/humanizer.mjs), then the guardian (the draft's own check) and the channel's linter, no FAIL;
@@ -93,6 +94,19 @@ export function factTokens(text) {
   return out;
 }
 const multiset = (list) => list.slice().sort().join("|");
+
+/** Negations: a model's text must hold the same ones as the template's body (orchestrator review of #85). */
+const NEGATION = /\b(?:not|no|never|none|nor|without|cannot|\w+n['’]t)\b/gi;
+/**
+ * The state and outcome words of a level or a pattern, a closed list on purpose (orchestrator review of #85): a model's
+ * text must hold the same ones as the template's body, as many times. A word not on the list is free; template authors
+ * who add an outcome word to a template add it here too.
+ */
+export const OUTCOME_WORDS = Object.freeze(["held", "holds", "holding", "broke", "breaks", "broken", "break", "rejected", "rejection", "bounced", "bounce",
+  "tested", "retested", "reclaimed", "lost", "swept", "sweep", "filled", "unfilled", "mitigated", "fresh", "worn", "untested", "intact", "invalidated",
+  "confirmed", "formed", "failed", "crossed", "inside", "outside", "between"]);
+const OUTCOME = new RegExp(`\\b(?:${OUTCOME_WORDS.join("|")})\\b`, "gi");
+const listOf = (re, text) => (String(text ?? "").match(re) ?? []).map((w) => w.toLowerCase().replace(/’/g, "'"));
 const wordsOf = (text) => new Set((String(text ?? "").toLowerCase().match(WRITE_FORBIDDEN) ?? []).map((w) => w.toLowerCase()));
 
 /** The prompt: the template's body is the only source; the model rewords it, nothing more. */
@@ -140,6 +154,8 @@ export function checkWritten({ draft, written, channel, check }) {
   if (multiset(words(tIn)) !== multiset(words(tOut))) failures.push("role_changed");
   const bound = (t) => nums(t).map((x) => `${x.value}@${x.role}@${x.chart}`).join("|");
   if (bound(tIn) !== bound(tOut)) failures.push("role_binding");
+  if (multiset(listOf(NEGATION, parts.body)) !== multiset(listOf(NEGATION, body))) failures.push("negation_changed");
+  if (multiset(listOf(OUTCOME, parts.body)) !== multiset(listOf(OUTCOME, body))) failures.push("outcome_changed");
   const allowed = wordsOf(parts.body);
   if ([...wordsOf(body)].some((w) => !allowed.has(w))) failures.push("forbidden_word");
   const text = humanize(joinPost({ ...parts, body })).text;
