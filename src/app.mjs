@@ -23,7 +23,7 @@ import { modelStatus, askModel } from "./agent/router.mjs";
 import { dueNow, autoAt, AUTO_ACTOR } from "./agent/auto-approve.mjs";
 import { runReplies, replyMode, REPLY_CHANNELS, REPLY_CAPS, REPLY_WINDOW_DAYS, KEEP_DAYS, DRY_RUN_HOURS } from "./agent/replies.mjs";
 import { weeklySummary, summaryKey } from "./agent/weekly.mjs";
-import { runWrite, writeMode, WRITE_CHANNELS, WRITE_KINDS, WRITE_WINDOW_MINUTES, WRITE_ACTOR } from "./agent/write.mjs";
+import { runWrite, writeMode, WRITE_CHANNELS, WRITE_KINDS, WRITE_WINDOW_MINUTES, WRITE_ACTOR, ABOUT_LEDE } from "./agent/write.mjs";
 import { linkHosts, normalizeLink, randomSlug, shortUrl, redirectTarget, GO_PATH, normalizeHashtagSet, MAX_SETS, normalizeMix, DEFAULT_MIX, MIX_KINDS, wibWeek, mixReport } from "./marketing.mjs";
 import { templateTexts, checkPost, composeDrafts, overlayFor, recapWindow, COMPOSE_KINDS, COMPOSE_KIND_NAMES } from "./compose.mjs";
 import { sourceOf } from "./warroom-drafts.mjs";
@@ -753,7 +753,7 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
           const replies = REPLY_CHANNELS.includes(channel) ? { ...replyMode(env, rs?.value ?? null, at), caps: REPLY_CAPS, dry_run_hours: DRY_RUN_HOURS, switched_by: rs?.updated_by ?? null, switched_at: rs?.updated_at ?? null,
             sent_today: await d.repliesSentSince(new Date(at - 86_400_000).toISOString()), recent: (await d.recentReplies(30)).filter((x) => x.channel === channel) } : null;
           const ws = (await d.studioSetting("agent_write")) ?? null;
-          const write = WRITE_CHANNELS.includes(channel) ? { ...writeMode(env, ws?.value ?? null, rs?.value ?? null), enabled: ws?.value?.enabled === true, kinds_all: WRITE_KINDS,
+          const write = WRITE_CHANNELS.includes(channel) ? { ...writeMode(env, ws?.value ?? null, rs?.value ?? null), enabled: ws?.value?.enabled === true, kinds_all: WRITE_KINDS, lede_ok: rs?.value?.about_lede_ok === true,
             switched_by: ws?.updated_by ?? null, switched_at: ws?.updated_at ?? null, recent: (await d.recentWrites(20)).filter((x) => x.channel === channel) } : null;
           return { ...base, ...agentChecks(await d.list({ channel, limit: 30 }), { channel }), write, audit: { ...audit, summary: summary?.week === audit.week.from ? summary.text : null },
             plan: planChannel(audit, posts, { now: at, schedule }), replies };
@@ -770,6 +770,12 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
         // The About lede's gate (orchestrator review of #80): set once the owner's words for it are on the page.
         if ("about_lede_ok" in r.body) { if (typeof r.body.about_lede_ok !== "boolean") return json({ error: "about_lede_ok must be true or false" }, 400); patch.about_lede_ok = r.body.about_lede_ok; }
         if (!Object.keys(patch).length) return json({ error: "nothing to change" }, 400);
+        // Set only while the Worker's own /about carries the owner's sentence (orchestrator review of #85); the settings
+        // event keeps who set it and when.
+        if (patch.about_lede_ok === true) {
+          if (!(await aboutLedeLive(env, url))) return json({ error: "lede_not_live", detail: "the About page does not show the approved sentence yet" }, 409);
+          patch.about_lede_set_by = identity.subject; patch.about_lede_set_at = new Date(now ? now * 1000 : Date.now()).toISOString();
+        }
         return rpc(async () => {
           const cur = (await desk(env).studioSetting("agent_replies"))?.value ?? {};
           return desk(env).saveStudioSetting({ key: "agent_replies", value: { ...cur, ...patch }, actor: identity.subject }, now ? now * 1000 : Date.now());
@@ -1096,6 +1102,16 @@ export async function trackRecord(env, request, cache) {
   const res = new Response(JSON.stringify(body ?? { available: false, unit: "R", simulated: true, scenarios: [], notice: TRACK_NOTICE }), { status: 200, headers: trackHeaders(Boolean(body)) });
   if (body && cache) await cache.put(key, res.clone()).catch(() => {});
   return res;
+}
+
+/** Whether the Worker's own About page (its static assets) carries the owner's sentence about the model. */
+export async function aboutLedeLive(env, url) {
+  if (!env?.ASSETS) return false;
+  try {
+    let res = await env.ASSETS.fetch(new Request(new URL("/about", url.origin).toString()));
+    if (res.status >= 300 && res.status < 400 && res.headers.get("location")) res = await env.ASSETS.fetch(new Request(new URL(res.headers.get("location"), url.origin).toString()));
+    return res.ok && (await res.text()).includes(ABOUT_LEDE);
+  } catch { return false; }
 }
 
 async function asset(env, request, url, rewrite, status) {

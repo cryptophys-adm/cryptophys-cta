@@ -26,6 +26,11 @@ import { lintPost, textFor, postLength } from "./lint.mjs";
 import { rulesOf, AGENT_CHANNELS } from "./rules.mjs";
 import { hookScore, openingLine } from "./hook.mjs";
 
+/**
+ * The About page's sentence about the model (owner 2026-11-25: "Ok" to this exact sentence, #86). The studio accepts
+ * `about_lede_ok` only while the Worker's own /about carries it (orchestrator review of #85).
+ */
+export const ABOUT_LEDE = "Every post starts as numbers from the Cryptophys system. Some are worded by a model from those numbers only, then checked by the same rules; a person approves each post or sets the rule that approves it.";
 export const WRITE_KINDS = Object.freeze(["key_levels", "pattern", "daily_recap", "warroom"]);
 export const WRITE_CHANNELS = AGENT_CHANNELS;
 export const WRITE_WINDOW_MINUTES = 60;

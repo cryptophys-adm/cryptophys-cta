@@ -1237,6 +1237,14 @@
       box.appendChild(b);
     }
   }
+  // The About page's gate (about_lede_ok): an approver confirms the owner's sentence about the model is live; the Worker
+  // checks its own /about first (409 lede_not_live otherwise). Live replies and cta-write wait for it.
+  function ledeButton(canEdit) {
+    const b = make("button", "btn outline sm", "About's sentence about the model is live"); b.type = "button"; b.disabled = !canEdit;
+    b.title = canEdit ? "Confirms /about shows the owner's sentence; the studio checks the page first" : "Approvers only";
+    b.addEventListener("click", async () => { b.disabled = true; try { await call("/api/studio/agent/replies", "POST", { about_lede_ok: true }); await loadAgent(); } catch (e) { showErr(e); b.disabled = false; } });
+    return b;
+  }
   // cta-write (src/agent/write.mjs): its switch, the kill switch (off: every post keeps its template), and what it did.
   function renderWrite(w, canEdit) {
     const box = $("agentwrite"); box.textContent = "";
@@ -1250,6 +1258,7 @@
     if (!canEdit) b.title = "Approvers only";
     b.addEventListener("click", async () => { b.disabled = true; try { await call("/api/studio/agent/write", "POST", { enabled: !w.enabled }); await loadAgent(); } catch (e) { showErr(e); b.disabled = false; } });
     box.appendChild(b);
+    if (!w.lede_ok) { box.append(" "); box.appendChild(ledeButton(canEdit)); }
   }
   // Audit: the last complete WIB week on Threads against our own median (src/agent/audit.mjs).
   function renderAudit(au) {
@@ -1283,6 +1292,7 @@
     if (!canEdit) b.title = "Approvers only";
     b.addEventListener("click", async () => { b.disabled = true; try { await call("/api/studio/agent/replies", "POST", { enabled: r.mode === "off" }); await loadAgent(); } catch (e) { showErr(e); b.disabled = false; } });
     box.appendChild(b);
+    if (r.waiting === "about_lede") { box.append(" "); box.appendChild(ledeButton(canEdit)); }
     const list = make("div", "list");
     if (!r.recent.length) list.appendChild(make("div", "empty", "No reply read yet."));
     for (const x of r.recent) {

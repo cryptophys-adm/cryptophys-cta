@@ -5,7 +5,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule, cardPathOf, agentReplies } from "../src/app.mjs";
+import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule, cardPathOf, agentReplies, aboutLedeLive } from "../src/app.mjs";
+import { ABOUT_LEDE } from "../src/agent/write.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
 import { AGENT_SECRETS } from "../src/agent/router.mjs";
@@ -64,7 +65,9 @@ function deskStub() {
   };
   return { sql, api, ns: { idFromName: () => "desk", get: () => api } };
 }
-const ASSETS = { fetch: async (req) => new Response(`asset ${new URL(req.url).pathname}`, { status: 200, headers: { "content-type": "text/html" } }) };
+// The static files: /about is the real page (the about_lede_ok gate reads it); any other path names itself.
+const ASSETS = { fetch: async (req) => new URL(req.url).pathname === "/about" ? new Response(readFileSync("public/about.html", "utf8"), { status: 200, headers: { "content-type": "text/html" } })
+  : new Response(`asset ${new URL(req.url).pathname}`, { status: 200, headers: { "content-type": "text/html" } }) };
 // Two decisions inside the window the recap covers (between 48 and 24 hours before the run).
 const ago = (h) => new Date(Math.floor((Date.now() - h * 3_600_000) / 900_000) * 900_000).toISOString();
 const RECAPS = [
@@ -1015,4 +1018,30 @@ test("cta-write end to end (rule 4 amended): the switch, a written post auto-app
   answers.push("should never be asked");
   await runSchedule(e, { now: T0 + 25 * 60_000, fetcher });
   assert.deepEqual([getDraft(d.sql, "pattern:c:threads").text, answers.length], [TEMPLATE, 1]);
+});
+
+test("the About gate (about_lede_ok): set by an approver only while /about carries the owner's sentence; the event keeps who and when", async () => {
+  resetKeyCacheForTests();
+  const OLD = "Every post starts as numbers from the Cryptophys system and ends as a short, checked text that a person approved. No post is written freely by a model.";
+  assert.ok(readFileSync("public/about.html", "utf8").includes(`<p class="lede">${ABOUT_LEDE}</p>`), "the page carries the owner's sentence (#86)");
+  const page = (html) => ({ fetch: async (r) => new URL(r.url).pathname === "/about" ? new Response(html, { status: 200 }) : new Response("x", { status: 404 }) });
+  const owner = await jwt({ email: "owner@example.com", sub: "u1" }), viewer = await jwt({ email: "writer@example.com", sub: "u2" });
+  const set = (e, token) => handle(req("/api/studio/agent/replies", { method: "POST", body: { about_lede_ok: true }, token }), e, opts);
+  const old = env({ STUDIO_APPROVERS: "owner@example.com", ASSETS: page(`<p class="lede">${OLD}</p>`) });
+  const r409 = await set(old.env, owner);
+  assert.equal(r409.status, 409);
+  assert.equal((await r409.json()).error, "lede_not_live");
+  assert.equal(studioSetting(old.d.sql, "agent_replies"), null, "nothing saved");
+  const live = env({ STUDIO_APPROVERS: "owner@example.com" });
+  assert.equal(await aboutLedeLive(live.env, new URL("https://cta.cryptophys.work/")), true);
+  assert.equal((await set(live.env, viewer)).status, 403, "not an approver");
+  const ok = await set(live.env, owner);
+  assert.equal(ok.status, 200);
+  const v = studioSetting(live.d.sql, "agent_replies").value;
+  assert.deepEqual([v.about_lede_ok, v.about_lede_set_by], [true, "owner@example.com"]);
+  assert.ok(Number.isFinite(Date.parse(v.about_lede_set_at)));
+  assert.ok(draftEvents(live.d.sql, "studio:agent_replies").some((x) => x.action === "settings_saved" && x.actor === "owner@example.com"), "an event: who and when");
+  assert.equal((await handle(req("/api/studio/agent/replies", { method: "POST", body: { about_lede_ok: false }, token: owner }), old.env, opts)).status, 200, "turning it off needs no check");
+  const js = readFileSync("public/studio/studio.js", "utf8");
+  assert.match(js, /About's sentence about the model is live/);
 });

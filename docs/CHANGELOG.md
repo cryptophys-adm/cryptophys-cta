@@ -7,6 +7,7 @@
   - It accepts the model's body only if the numbers match exactly, in the same order, each under the same role word and chart (orchestrator review: no role or timeframe swap), with the same negations and the same outcome words of `OUTCOME_WORDS`, with no link, mention, hashtag or emoji, no advice or forecast word the template does not use, within the length, and passing the guardian and the linter after the humanizer. Otherwise the template stays and the reason is logged.
   - The auto-approve window starts again after a write.
   - Off by default. An approver turns it on (`POST /api/studio/agent/write`); it also waits for `about_lede_ok`. `AGENT_WRITE` "off" stops it. Each call counts against the model's daily cap.
+  - The About gate: the studio button "About's sentence about the model is live" sets `about_lede_ok`, approvers only, and only while the Worker's own `/about` carries the owner's sentence (`ABOUT_LEDE`). Otherwise it answers 409 `lede_not_live`. The settings event keeps who set it and when.
   - `src/agent/hook.mjs` ports hookscore.py's five checks and hooks.json's 26 formulas. It is advisory and appears in Checks.
   - Agent page: a Writing block with its switch and the latest outcomes. cta-write and cta-hook are now listed as live.
   - AGENTS.md rule 4 lists cta-write as approved. Tests AG14, AG15 and the cta-write end-to-end test.
