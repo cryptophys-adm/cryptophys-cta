@@ -7,7 +7,7 @@
 - [Home](https://cta.cryptophys.work/)
 - [Performance](https://cta.cryptophys.work/performance): What the rooms' plans would have returned, simulated in R: win rate, expectancy, net R and profit factor, followed three ways. Not advice.
 - [Archive](https://cta.cryptophys.work/archive): Every published Cryptophys XAUUSD post: key-level maps, chart patterns and daily recaps. Education, not financial advice.
-- [About the system](https://cta.cryptophys.work/about): How Cryptophys makes its XAUUSD posts: from the system's analysis to fixed templates, automatic checks and a person's approval.
+- [About the system](https://cta.cryptophys.work/about): How Cryptophys makes its XAUUSD posts: from the system's analysis to fixed templates, automatic checks and approval by a person or a person's rule.
 
 ## Policies
 

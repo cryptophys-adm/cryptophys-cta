@@ -10,7 +10,7 @@ import { renderCard, renderVideo, toBase64, fromBase64 } from "./render.mjs";
 import { DISCLAIMER } from "./drafts.mjs";
 import { postInsights, performanceReport, insightChannelsOf, INSIGHTS_DAYS } from "./insights.mjs";
 import { ANALYSIS_DISCLAIMER } from "./analysis-drafts.mjs";
-import { effectiveSettings, normalizeSettings, draftingChannels, applySettings, withFormat, wibDayStart, FORMATS, PLANNED_FORMATS, KINDS, KIND_NAMES, DAYS, TIMEZONE, MAX_PER_DAY, MAX_SLOTS } from "./settings.mjs";
+import { effectiveSettings, normalizeSettings, draftingChannels, applySettings, withFormat, wibDayStart, FORMATS, PLANNED_FORMATS, KINDS, KIND_NAMES, DAYS, TIMEZONE, MAX_PER_DAY, MAX_SLOTS, AUTO_KINDS, AUTO_KIND_NAMES } from "./settings.mjs";
 import { recheck, isStale, EXPIRED_NOTE } from "./desk.mjs";
 import { dueSlots, nextSlots } from "./scheduler.mjs";
 import { PROVIDERS, BOT_CHANNELS, CONNECT_SECRETS, appOf, newAttempt, authorizeUrl, exchangeCode, refreshX, identify, checkTelegram, telegramChatIdProblem, TELEGRAM_CHAT_NOT_FOUND, redirectUri, sealToken, openToken, encryptionReady, STATE_RE, CALLBACK_PATH } from "./oauth.mjs";
@@ -19,6 +19,7 @@ import { agentChecks } from "./agent/checks.mjs";
 import { auditChannel, planChannel } from "./agent/audit.mjs";
 import { AGENT_CHANNELS, agentChannels } from "./agent/rules.mjs";
 import { modelStatus, askModel } from "./agent/router.mjs";
+import { dueNow, autoAt, AUTO_ACTOR } from "./agent/auto-approve.mjs";
 import { runReplies, replyMode, REPLY_CHANNELS, REPLY_CAPS, REPLY_WINDOW_DAYS, KEEP_DAYS, DRY_RUN_HOURS } from "./agent/replies.mjs";
 import { weeklySummary, summaryKey } from "./agent/weekly.mjs";
 import { linkHosts, normalizeLink, randomSlug, shortUrl, redirectTarget, GO_PATH, normalizeHashtagSet, MAX_SETS, normalizeMix, DEFAULT_MIX, MIX_KINDS, wibWeek, mixReport } from "./marketing.mjs";
@@ -246,6 +247,7 @@ export async function runSchedule(env, { now = Date.now(), fetcher } = {}) {
   if (!publishOn(env)) return { status: "publishing_off" };
   const { settings } = await channelSettings(env, { strict: true });
   const d = desk(env);
+  const auto = await autoApprove(env, settings, { now, fetcher });
   const slots = [];
   for (const channel of channelsOf(env)) {
     const s = settings[channel];
@@ -260,7 +262,30 @@ export async function runSchedule(env, { now = Date.now(), fetcher } = {}) {
       slots.push({ channel, slot: slot.key, id: draft.id, outcome, ...(r?.held ? { held: r.held } : {}) });
     }
   }
-  return { status: "ran", slots };
+  return { status: "ran", slots, ...(auto.length ? { auto } : {}) };
+}
+
+/**
+ * The agent's auto-approve (src/agent/auto-approve.mjs), at each scheduler run: per publishing channel, each pending
+ * draft of a kind it approves automatically whose 15-minute window has passed is approved as a person's approval is
+ * (the guardian again; an aged analysis draft expires), then published at once or left for the channel's next slot.
+ */
+export async function autoApprove(env, settings, { now = Date.now(), fetcher } = {}) {
+  const d = desk(env), out = [];
+  for (const channel of publishChannels(env)) {
+    const kinds = settings[channel]?.enabled === false ? [] : settings[channel]?.auto_approve ?? [];
+    if (!kinds.length) continue;
+    for (const c of dueNow(await d.autoCandidates({ channel, kinds }), now)) {
+      const r = await d.decide({ id: c.id, decision: "approve", actor: AUTO_ACTOR, reason: `rule: ${channel} approves ${c.kind} after 15 minutes` }, now);
+      const row = { channel, id: c.id, status: r?.status ?? "unknown" };
+      if (r?.status === "approved") {
+        const p = await publishDraft(env, await d.get(c.id), { now, ...(fetcher ? { fetcher } : {}) });
+        row.publish = p?.status ?? null; if (p?.held) row.held = p.held;
+      }
+      out.push(row);
+    }
+  }
+  return out;
 }
 
 /** Each channel's next slots, the approved drafts waiting and the next one, and the latest slot runs (the studio). */
@@ -536,7 +561,18 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
       if (route === "GET /api/studio/drafts") {
         const status = url.searchParams.get("status") || null;
         const channel = CHANNELS.includes(url.searchParams.get("channel")) ? url.searchParams.get("channel") : null;
-        return rpc(async () => ({ drafts: await desk(env).list({ status, channel, limit: 50 }), counts: await desk(env).counts(), by_channel: await desk(env).channelCountsByStatus(), can_decide: role === "approver", can_write: role !== "service" }), "drafts_failed");
+        return rpc(async () => {
+          const d = desk(env);
+          const drafts = await d.list({ status, channel, limit: 50 });
+          // When each pending draft under a channel's auto-approve rule goes out by itself (null: it waits for a person).
+          const { settings } = await channelSettings(env);
+          const autoBy = {};
+          for (const c of new Set(drafts.filter((x) => x.status === "pending").map((x) => x.channel))) {
+            const kinds = publishChannels(env).includes(c) ? settings[c]?.auto_approve ?? [] : [];
+            for (const a of kinds.length ? await d.autoCandidates({ channel: c, kinds }) : []) autoBy[a.id] = autoAt(a);
+          }
+          return { drafts: drafts.map((x) => (x.id in autoBy ? { ...x, auto_at: autoBy[x.id] } : x)), counts: await d.counts(), by_channel: await d.channelCountsByStatus(), can_decide: role === "approver", can_write: role !== "service" };
+        }, "drafts_failed");
       }
       if (route === "GET /api/studio/draft") return rpc(async () => (await desk(env).get(String(url.searchParams.get("id") || "").slice(0, 160))) ?? { ok: false, error: "no such draft" }, "draft_failed");
       if (route === "GET /api/studio/preview") {
@@ -864,7 +900,7 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
       }
       // The Channels page: each channel's settings, what it can take, and who changed them last. Never a token.
       if (route === "GET /api/studio/settings") {
-        return rpc(async () => ({ ...(await channelSettings(env, { strict: true })), formats: FORMATS, planned: PLANNED_FORMATS, kinds: KINDS, kind_names: KIND_NAMES, days: DAYS,
+        return rpc(async () => ({ ...(await channelSettings(env, { strict: true })), formats: FORMATS, planned: PLANNED_FORMATS, kinds: KINDS, kind_names: KIND_NAMES, auto_kinds: AUTO_KINDS, auto_kind_names: AUTO_KIND_NAMES, days: DAYS,
           timezone: TIMEZONE, max_per_day: MAX_PER_DAY, max_slots: MAX_SLOTS, can_edit: role === "approver" }), "settings_failed");
       }
       if (route === "POST /api/studio/settings") {

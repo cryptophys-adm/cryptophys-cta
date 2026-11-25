@@ -707,3 +707,18 @@ export function forgetReplies(sql, beforeIso) {
   sql.exec("UPDATE agent_replies SET username = NULL, text = NULL, answer = NULL WHERE at < ? AND (username IS NOT NULL OR text IS NOT NULL OR answer IS NOT NULL)", String(beforeIso));
   return true;
 }
+
+// ---- Auto-approve (src/agent/auto-approve.mjs) ----
+/**
+ * The pending drafts of a channel and kinds, each with the time it became ready (its latest event: drafted, or its card
+ * attached) and whether a person edited it (an edited draft waits for a person). Oldest first.
+ */
+export function autoCandidates(sql, { channel, kinds = [] } = {}) {
+  ensureDesk(sql);
+  const ks = (kinds || []).map(String).filter((k) => /^[a-z_]{1,30}$/.test(k));
+  if (!ks.length || !/^[a-z]{1,20}$/.test(String(channel ?? ""))) return [];
+  return rows(sql, `SELECT d.id, d.kind, d.created_at, (SELECT MAX(e.at) FROM events e WHERE e.draft_id = d.id) AS ready_at,
+      EXISTS (SELECT 1 FROM events e WHERE e.draft_id = d.id AND e.action = 'edited') AS edited
+    FROM drafts d WHERE d.status = 'pending' AND d.channel = ? AND d.kind IN (${ks.map(() => "?").join(", ")}) ORDER BY d.created_at ASC LIMIT 50`, String(channel), ...ks)
+    .map((r) => ({ id: r.id, kind: r.kind, ready_at: r.ready_at ?? r.created_at, edited: Boolean(r.edited) }));
+}

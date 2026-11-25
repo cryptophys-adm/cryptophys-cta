@@ -65,7 +65,7 @@ export const PEOPLE = [
   { id: 'syn_reasoner', dept: 'research', name: 'reasoner', title: 'Reasoner', role: 'Writes the synthesis from the Analyst and the Counselor.' },
   // content studio
   { id: 'cta_editor', dept: 'content', name: 'ctaEditor', title: 'CTA Editor', role: 'Drafts the public posts from the analysis.' },
-  { id: 'cta_guardian', dept: 'content', name: 'ctaGuardian', title: 'CTA Content Guardian', role: 'Checks every post against the content rules before a person approves it.' },
+  { id: 'cta_guardian', dept: 'content', name: 'ctaGuardian', title: 'CTA Content Guardian', role: 'Checks every post against the content rules before it is approved.' },
   // knowledge (they ride the compass ring)
   { id: 'ae_auditor', dept: 'knowledge', name: 'aetherAuditor', title: 'Aether Auditor', role: 'Reviews past readings and finds repeated mistakes.' },
   { id: 'ae_calibrator', dept: 'knowledge', name: 'calibrator', title: 'Aether Calibrator', role: 'Proposes parameter candidates within reviewed ranges.' },

@@ -93,13 +93,13 @@ test("Instagram drafts name TradingView, get a card, then pass the guardian with
   const now = Date.parse("2026-11-17T06:09:30Z");
   const drafts = analysisDrafts(ANALYSIS, { now, channels: ["threads", "instagram"], levelsRun: true });
   const ig = drafts.filter((d) => d.channel === "instagram");
-  assert.deepEqual(ig.map((d) => d.status), ["needs_image", "needs_image"]);
+  assert.deepEqual(ig.map((d) => [d.kind, d.status]), [["key_levels", "needs_image"]], "the forming pattern is no longer drafted (owner 2026-11-25: \"Only confirmed\")");
   for (const d of ig) assert.match(d.text, /Chart by TradingView\./);
   for (const d of drafts.filter((d) => d.channel === "threads")) assert.doesNotMatch(d.text, /TradingView/);
   const recap = dailyDrafts([{ bar_close: "2026-11-15T10:00:00.000Z", stance: "WAIT", bias: "NEUTRAL", session: "london" }], { now: Date.parse("2026-11-16T22:17:00Z"), channels: ["instagram"] }).drafts[0];
   assert.match(recap.text, /Chart by TradingView\./);
   addDrafts(sql, drafts, { now });
-  assert.deepEqual(draftsNeedingImage(sql, { limit: 5 }).map((d) => d.channel), ["instagram", "instagram"]);
+  assert.deepEqual(draftsNeedingImage(sql, { limit: 5 }).map((d) => d.channel), ["instagram"]);
   const levels = ig.find((d) => d.kind === "key_levels");
   const mediaId = "ab".repeat(16);
   assert.equal(attachImage(sql, { id: levels.id, mediaId: "nope", data: "x", imageUrl: `https://cta.cryptophys.work/media/${mediaId}.jpg` }).error, "bad media id");
