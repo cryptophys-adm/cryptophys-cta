@@ -1,7 +1,7 @@
 {
   "measured": "headless Chromium, deviceScaleFactor 1, scripts/track-heights.mjs",
   "chromium": "157.0.8103.78",
-  "layout": "7a4bb7dd7b3b49cd",
+  "layout": "93abb3ddeab27821",
   "held": [
     "320-377:887.14",
     "378-470:858.25",

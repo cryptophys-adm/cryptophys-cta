@@ -57,7 +57,7 @@ export const publishOn = (env) => String(env?.CONTENT_PUBLISH ?? "off").trim().t
 export const publishChannels = (env) => (publishOn(env) ? String(env?.PUBLISH_CHANNELS ?? "").split(",").map((c) => c.trim()).filter((c) => CHANNELS.includes(c)) : []);
 export const publishesTo = (env, channel) => publishChannels(env).includes(channel);
 export const channelsOf = (env) => String(env?.CONTENT_CHANNELS ?? CHANNELS.join(",")).split(",").map((c) => c.trim()).filter((c) => CHANNELS.includes(c));
-const delayOf = (env) => { const n = Number(env?.PUBLIC_DELAY_HOURS ?? 24); return Number.isFinite(n) && n >= 1 ? n : 24; };
+export const delayOf = (env) => { const v = env?.PUBLIC_DELAY_HOURS, n = v == null || String(v).trim() === "" ? NaN : Number(v); return Number.isFinite(n) && n >= 0 ? n : 24; };
 /** The Worker secrets of each channel's account (kept by the native deploy; organism.json `deploy.secrets_kept`). */
 export const SECRETS = Object.freeze({
   threads: { access_token: "THREADS_ACCESS_TOKEN", user_id: "THREADS_USER_ID" },
@@ -545,7 +545,7 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
   // The holo war room (the home page): the rooms' latest public scenes, cached at the edge for a minute, so visitors
   // never reach the AI Worker more than once a minute per data centre. No per-visitor AI call.
   if (route === "GET /api/public/warroom-scene") return warroomScene(env, request, cache);
-  // The simulated track record (the Performance page and the home's average box): aggregates in R, cached 10 minutes.
+  // The simulated track record (the Performance page and the header's average strip): aggregates in R, cached a minute.
   if (route === "GET /api/public/track-record") return trackRecord(env, request, cache);
   if (route === "GET /api/public/archive") {
     // Each post with its card's path (owner 2026-11-23, the Archive as a digest: the card on click), only when it is our

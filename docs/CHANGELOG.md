@@ -1,7 +1,16 @@
 # Changelog
 
-## 2026-11-25 (the Performance line at a delay of 0; pending the owner)
-- feat(performance): the line above the table at a delay of 0, or without a record. Proposed to the owner, not yet answered.
+## 2026-11-25 (posts without a delay)
+- feat(guardian): a decision may be posted as a recap without the 24-hour hold. Owner, 25 Nov, through the orchestrator: "Posts juga realtime".
+  - `PUBLIC_DELAY_HOURS` is "0" in `wrangler.jsonc`. "24" restores the old hold; unset, empty or invalid is 24.
+  - `delayOf` accepts 0 (it was at least 1). The guardian's `too_recent` accepts 0 too: then only a future or unreadable decision time fails.
+  - Every other check is unchanged: price level, signal words (entry, SL, TP, BUY, SELL as a signal), instruction, account data, promised return, internal names, secrets, attribution.
+  - The daily recap still covers the trading day that ended 24 hours before its run.
+  - The comment on the track record's route in `handle()` now says it is cached a minute.
+- Test RT1.
+
+## 2026-11-25 (the Performance line at a delay of 0)
+- feat(performance): the line above the table at a delay of 0, or without a record. Owner, 25 Nov, through the orchestrator: "Setuju semua" (this sentence and the three in the entry below).
   - Before: "Simulated. Updated daily, a day behind." (at 0 it would have read "Simulated. Updated daily, 0 hours behind.") After: "Simulated. Updated as each trade closes."
   - A delay still set keeps the old words. Only `basisOf` in `site/home/track.js` changes. Test TK-D.
 

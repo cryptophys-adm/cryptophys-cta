@@ -19,7 +19,8 @@
 //   internal        never Nexus or Omega (the private dashboards);
 //   secret          nothing that looks like a key, token or private key;
 //   attribution     a draft with a chart image names TradingView;
-//   too_recent      every decision it covers is older than the public delay.
+//   too_recent      every decision it covers is older than the public delay (0 allowed since 2026-11-25, owner
+//                   "Posts juga realtime": then only a future or unreadable time fails; unset or invalid: 24).
 /** A number that reads like a gold price (3 to 5 digits, or 1–2 digits, a comma and 3 digits). */
 export const PRICE_LIKE = /\$?\b(?:\d{1,2},\d{3}|\d{3,5})(?:\.\d+)?\b/;
 
@@ -64,8 +65,10 @@ export function checkContentDraft({ text = "", chart = false, decisionTimes = []
   if (found("internal")) fail("internal", found("internal"));
   if (found("secret")) fail("secret", "a key- or token-like string");
   if (chart && !/tradingview/i.test(t)) fail("attribution", "a chart image needs TradingView's attribution");
-  const cutoff = now - Math.max(1, Number(delayHours) || 24) * 3_600_000;
+  const hours = delayHours === null || delayHours === undefined || String(delayHours).trim() === "" ? NaN : Number(delayHours);
+  const delay = Number.isFinite(hours) && hours >= 0 ? hours : 24;
+  const cutoff = now - delay * 3_600_000;
   const recent = (Array.isArray(decisionTimes) ? decisionTimes : []).filter((x) => { const ms = Date.parse(x); return !Number.isFinite(ms) || ms > cutoff; });
-  if (recent.length) fail("too_recent", `${recent.length} decision(s) newer than the ${delayHours}-hour delay`);
+  if (recent.length) fail("too_recent", `${recent.length} decision(s) newer than the ${delay}-hour delay`);
   return { version: CONTENT_GUARDIAN_VERSION, pass: failures.length === 0, failures };
 }

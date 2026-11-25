@@ -61,7 +61,7 @@ function cells(c, s) {
 /**
  * Pure: the line above the table, from the record's own `delay_hours`. A delay of 0 (the AI Worker counts each plan
  * once it closes, owner 2026-11-25: "harus realtime"), no record or no field: "Simulated. Updated as each trade
- * closes." (proposed to the owner, pending). A delay still set keeps the words the page always showed.
+ * closes." (owner 2026-11-25, through the orchestrator: "Setuju semua"). A delay still set keeps the words the page always showed.
  */
 export const LIVE_BASIS = 'Simulated. Updated as each trade closes.';
 export function basisOf(body) {
