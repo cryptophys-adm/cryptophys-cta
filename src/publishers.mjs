@@ -247,7 +247,7 @@ export const TIKTOK_SINGLE_CHUNK_MAX = 64 * 1024 * 1024;
 async function jsonOf(res) { try { return await res.json(); } catch { return null; } }
 const titleOf = (text, max) => {
   const first = String(text ?? "").split("\n").find((l) => l.trim()) ?? "XAUUSD analysis";
-  const t = first.replace(/^Education\s*·\s*/i, "").trim();
+  const t = first.replace(/^Education\s*[·-]\s*/i, "").trim();
   return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`;
 };
 
