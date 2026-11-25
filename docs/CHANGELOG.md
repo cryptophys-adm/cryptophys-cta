@@ -6,6 +6,9 @@
   - That is about ten times CTA's estimated use (≤50k input and ≤75k output a day). It stops a runaway loop early and leaves the rest for Cerebrum.
   - Tests AG6 and AG18 follow.
 
+## 2026-11-25 (the card is served while its post goes out)
+- fix(media): a card is public while its draft is `publishing` too, as well as `approved` and `published`. The claim from #93 marks a draft `publishing` before the publish call, but Threads fetches the card's `image_url` during that call. The route answered 404, so Threads failed with "400 An unknown error occurred" (15:15 and 16:10 UTC). Telegram uploads the bytes itself and was not affected. The media test now checks a claimed draft.
+
 ## 2026-11-25 (Beam free-only guards; publish failures logged; a longer Threads wait)
 - feat(router): Beam is used on the free plan only, with CTA's own limits. Owner, 25 Nov: "tetap siapkan callback jika beam tidak bisa dijangkau atau menjadi berbayar atau lebih dari batasan".
   - `MODEL_FREE_ONLY` is on by default. A 402, a billing or credit error, or an answer that reports a cost turns the model off in the studio, with the reason. It also logs `cta_model_off`.
