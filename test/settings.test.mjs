@@ -42,7 +42,7 @@ test("validation: kinds, the daily maximum, schedule slots in WIB, hashtags; any
     schedule: [{ days: ["sat"], time: "08:05" }, { days: ["mon", "fri"], time: "19:30" }], hashtags: "", auto_approve: ["key_levels", "pattern", "daily_recap", "warroom"] }, "Threads takes no hashtag line: one topic tag through the API; it approves the owner's four kinds automatically (owner 2026-11-25)");
   assert.equal(normalizeSettings("telegram", { hashtags: "  #XAUUSD   #gold_edu " }).settings.hashtags, "#XAUUSD #gold_edu", "the other channels keep theirs");
   const bad = [
-    ["unknown", {}], ["x", null], ["x", []], ["x", { enabled: "yes" }], ["x", { kinds: ["meme"] }], ["x", { max_per_day: 0 }], ["x", { max_per_day: 25 }],
+    ["unknown", {}], ["x", null], ["x", []], ["x", { enabled: "yes" }], ["x", { kinds: ["meme"] }], ["x", { max_per_day: 0 }], ["x", { max_per_day: 33 }],
     ["x", { max_per_day: 2.5 }], ["x", { schedule: [{ days: ["mon"], time: "24:00" }] }], ["x", { schedule: [{ days: [], time: "10:00" }] }],
     ["x", { schedule: [{ days: ["someday"], time: "10:00" }] }], ["x", { schedule: Array.from({ length: 13 }, () => ({ days: ["mon"], time: "10:00" })) }],
     ["x", { hashtags: "gold" }], ["x", { hashtags: "#a #b #c #d #e #f #g #h #i" }], ["x", { hashtags: "#gold<script>" }], ["x", { hashtags: "#NexusRoom" }], ["x", { hashtags: "#omega" }]

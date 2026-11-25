@@ -7,6 +7,7 @@
   - `dueChartMaps` posts each chart once per new close, never for a close older than 70 minutes, and never twice; `chartMapText` writes the post.
   - Candidates come first: two zones a side for one chart, one when charts are merged.
   - Without KM1 the daily map of 06:09 UTC stays.
+  - The owner chose "All of H1, 4H and D1". The daily draft cap's upper bound rises from 24 to 32, so Threads can hold up to 24 maps, 4 confirmed patterns and the recap (29). The owner sets the number in Channels.
   - The queue's line in the studio says when drafts are made.
   - Test AG12.
 

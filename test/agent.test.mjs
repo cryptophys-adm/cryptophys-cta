@@ -391,4 +391,7 @@ test("AG12 key-level maps per chart (owner 2026-11-25): each chart's map once pe
   assert.equal(chartOf({ kind: "key_levels", overlay: { chart: "D1" } }), "D1");
   assert.equal(chartOf({ kind: "key_levels", overlay: {} }), "H4", "the daily map of 06:09: H4 as before");
   assert.ok(drafts[0].overlay.zones.length >= 2, "the zones drawn over the chart");
+  // room for a map at every close (owner: "All of H1, 4H and D1"): 24 maps + 4 patterns + the recap = 29, under the cap of 32
+  assert.equal(normalizeSettings("threads", { max_per_day: 29 }).ok, true);
+  assert.equal(normalizeSettings("threads", { max_per_day: 33 }).ok, false);
 });
