@@ -280,6 +280,12 @@ export function draftIdsWithPrefix(sql, prefix) {
   const p = String(prefix ?? "");
   return rows(sql, "SELECT id FROM drafts WHERE id >= ? AND id < ?", p, p + "\uffff").map((r) => r.id);
 }
+/** The drafts whose id starts with `prefix` made since `sinceIso`, as { id, created_at } (a pattern posted once). */
+export function draftsWithPrefixSince(sql, prefix, sinceIso) {
+  ensureDesk(sql);
+  const p = String(prefix ?? "");
+  return rows(sql, "SELECT id, created_at FROM drafts WHERE id >= ? AND id < ? AND created_at >= ?", p, p + "\uffff", String(sinceIso)).map((r) => ({ id: r.id, created_at: r.created_at }));
+}
 export function kindCountsSince(sql, kind, sinceIso) {
   ensureDesk(sql);
   return Object.fromEntries(rows(sql, "SELECT channel, COUNT(*) AS n FROM drafts WHERE kind = ? AND created_at >= ? GROUP BY channel", kind, sinceIso).map((r) => [r.channel, Number(r.n)]));

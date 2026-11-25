@@ -170,6 +170,36 @@ export function postablePatterns(analysis) {
 }
 export const patternKey = (p) => `${p.chart}:${p.pattern}:${p.status}:${Math.round(p.upper)}:${Math.round(p.lower)}`;
 
+/**
+ * A confirmed pattern is posted once (owner 2026-11-25: "chart pattern kalau sudah dipost jangan dipost ulang, dia
+ * ditrigger oleh xauusd ketika ada confirmed jadi tidak mengikuti tiap jam"). xauusd moves a fitted line's end every
+ * bar, so the id's rounded upper and lower change while it is the same pattern (H1 rounding top 3690:3571 at 15:15 and
+ * 3690:3575 at 17:09). Same pattern = the same chart, catalogue name, status and channel, with an overlapping band,
+ * drafted within PATTERN_REPEAT_BARS bars of its chart (the longest xauusd follows a breakout).
+ */
+export const PATTERN_REPEAT_BARS = 120;
+const CHART_HOURS = Object.freeze({ H1: 1, H4: 4, D1: 24 });
+export const patternLookbackMs = (chart) => PATTERN_REPEAT_BARS * (CHART_HOURS[chart] ?? 24) * 3_600_000;
+/** The longest lookback of any chart: how far back the scheduled run reads its pattern drafts. */
+export const PATTERN_LOOKBACK_MS = Math.max(...Object.keys(CHART_HOURS).map(patternLookbackMs));
+/** Pure: a pattern draft id read back (pattern:<chart>:<pattern>:<status>:<upper>:<lower>:<channel>), or null. */
+export function patternOfId(id) {
+  const m = /^pattern:(H1|H4|D1):([a-z0-9_]+):(forming|confirmed):(-?\d+):(-?\d+):([a-z0-9_]+)$/.exec(String(id ?? ""));
+  return m ? { chart: m[1], pattern: m[2], status: m[3], upper: Number(m[4]), lower: Number(m[5]), channel: m[6] } : null;
+}
+/** Pure: whether `p` was already drafted for `channel`: `history` holds { id, created_at } of earlier pattern drafts. */
+export function patternDrafted(p, channel, history, now = Date.now()) {
+  const up = Math.round(Number(p?.upper)), low = Math.round(Number(p?.lower));
+  const since = now - patternLookbackMs(p?.chart);
+  return (history ?? []).some((h) => {
+    const o = patternOfId(h?.id);
+    if (!o || o.channel !== channel || o.chart !== p.chart || o.pattern !== p.pattern || o.status !== p.status) return false;
+    const at = Date.parse(h?.created_at);
+    if (Number.isFinite(at) && at < since) return false;
+    return Math.max(Math.min(o.lower, o.upper), Math.min(low, up)) <= Math.min(Math.max(o.lower, o.upper), Math.max(low, up));
+  });
+}
+
 function draft({ id, kind, channel, text, now, overlay = null }) {
   const guardian = checkContentDraft({ text, chart: false, decisionTimes: [], allowLevels: true, now });
   return { id, kind, channel, text, image_url: null, window: null, decision_times: [], guardian, overlay, status: !guardian.pass ? "blocked" : initialStatus(channel) };
@@ -210,9 +240,10 @@ function linesOf(p) {
 
 /**
  * Pure: the drafts of one run. `postedToday` is how many pattern drafts each channel already has today;
- * `known` the pattern keys already drafted (so a pattern is posted once per status).
+ * `known` the pattern keys already drafted, `history` the recent pattern drafts ({ id, created_at }), so a confirmed
+ * pattern is posted once while xauusd keeps it, even as its lines move (patternDrafted).
  */
-export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS, levelsRun = false, postedToday = {}, known = new Set(), knownLevels = new Set() } = {}) {
+export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS, levelsRun = false, postedToday = {}, known = new Set(), knownLevels = new Set(), history = [] } = {}) {
   const day = new Date(now).toISOString().slice(0, 10);
   const out = [];
   const perChart = Boolean(analysis?.zones_by_chart && analysis?.closed);
@@ -231,7 +262,7 @@ export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS
     for (const p of draftedPatterns(analysis)) {
       if (room <= 0) break;
       const id = `pattern:${patternKey(p)}:${channel}`;
-      if (known.has(id)) continue;
+      if (known.has(id) || patternDrafted(p, channel, history, now)) continue;
       const text = patternText(p, analysis, { channel });
       if (!text) continue;
       out.push(draft({ id, kind: "pattern", channel, text, now, overlay: overlayOf(analysis, { pattern: p }) }));
