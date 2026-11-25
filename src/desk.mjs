@@ -458,7 +458,31 @@ export function listMedia(sql, { limit = 24, offset = 0 } = {}) {
 export function nextApproved(sql, channel, { now = Date.now() } = {}) {
   ensureDesk(sql);
   expireStale(sql, { now });
+  supersedeMaps(sql, channel, { now });
   return rows(sql, "SELECT * FROM drafts WHERE status = 'approved' AND channel = ? ORDER BY COALESCE(decided_at, created_at) ASC, id LIMIT 1", channel).map(shape)[0] ?? null;
+}
+// A per-chart key-level map's id: "levels:<charts>:<close>:<channel>" (src/analysis-drafts.mjs chartMapId).
+const CHART_MAP_ID = /^levels:((?:D1|H4|H1)(?:\+(?:D1|H4|H1))*):(\d{8}T\d{4,6}Z):/;
+/**
+ * Newest wins (orchestrator review, 2026-11-25): of the approved per-chart maps of a channel, only the newest close of
+ * each chart key ("H1", "H4+H1", ...) may go out; each older one is marked expired with error "superseded:<newer id>"
+ * and an event "superseded", and is never published. Other kinds keep their order. Returns the ids superseded.
+ */
+export function supersedeMaps(sql, channel, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  const newest = new Map(), out = [];
+  const maps = rows(sql, "SELECT id FROM drafts WHERE status = 'approved' AND channel = ? AND kind = 'key_levels' AND id LIKE 'levels:%'", String(channel))
+    .map((r) => ({ id: r.id, m: CHART_MAP_ID.exec(r.id) })).filter((x) => x.m)
+    .sort((a, b) => (a.m[2] < b.m[2] ? 1 : a.m[2] > b.m[2] ? -1 : 0));
+  for (const { id, m } of maps) {
+    const key = m[1];
+    if (!newest.has(key)) { newest.set(key, id); continue; }
+    const by = `superseded:${newest.get(key)}`;
+    sql.exec("UPDATE drafts SET status = 'expired', error = ? WHERE id = ? AND status = 'approved'", by, id);
+    event(sql, { at: iso(now), id, action: "superseded", actor: "content-engine", detail: by });
+    out.push(id);
+  }
+  return out;
 }
 /** How many approved drafts each channel holds (waiting for publishing or for a slot). */
 export function approvedCounts(sql) {
