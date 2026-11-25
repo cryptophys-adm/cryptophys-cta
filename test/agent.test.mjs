@@ -8,6 +8,7 @@ import { SLOP } from "../src/agent/slop.mjs";
 import { cleanInvisible, humanScore, jsRegex, HUMAN_CHECKS } from "../src/agent/humanizer.mjs";
 import { lintThreads, threadsText, threadsLength, validTopicTag, THREADS_TOPIC_TAG, THREADS_LIMIT } from "../src/agent/threads-lint.mjs";
 import { agentChecks, AGENT_SKILLS } from "../src/agent/checks.mjs";
+import { auditThreads, planThreads, bestHours, wibWeekStart, MIN_FINDING } from "../src/agent/audit.mjs";
 import { publishThreads } from "../src/publishers.mjs";
 import { HASHTAGS } from "../src/channels.mjs";
 import { keyLevelsText } from "../src/analysis-drafts.mjs";
@@ -91,7 +92,7 @@ test("AG4 the Agent page: Threads drafts only, read only, each with its Threads 
   assert.equal(a.checks[0].text, threadsText(POST));
   assert.deepEqual(a.summary, { checked: 2, ready: 1, review: 0, fix: 1, human_pass: a.checks.filter((c) => c.human.verdict === "PASS").length });
   assert.equal(a.topic_tag, "XAUUSD");
-  assert.deepEqual(AGENT_SKILLS.map((s) => [s.id, s.live]), [["linter", true], ["humanizer", true], ["audit", false], ["plan", false], ["replies", false]]);
+  assert.deepEqual(AGENT_SKILLS.map((s) => [s.id, s.live]), [["linter", true], ["humanizer", true], ["audit", true], ["plan", true], ["replies", false]]);
   const html = read("public/studio/index.html"), js = read("public/studio/studio.js"), app = read("src/app.mjs");
   assert.match(html, /<a href="#agent" data-view="agent">/);
   assert.match(html, /id="view-agent"/);
@@ -99,4 +100,36 @@ test("AG4 the Agent page: Threads drafts only, read only, each with its Threads 
   assert.match(js, /call\("\/api\/studio\/agent"\)/);
   assert.match(app, /route === "GET \/api\/studio\/agent"/, "a GET: it changes nothing");
   assert.doesNotMatch(js, /innerHTML/, "text goes in as text");
+});
+
+test("AG5 Audit and Plan: the last full WIB week against our own median, findings only from enough posts, slots at measured hours", () => {
+  const NOW = Date.parse("2026-11-25T05:00:00Z"); // Wednesday 12:00 WIB
+  assert.equal(new Date(wibWeekStart(NOW)).toISOString(), "2026-11-22T17:00:00.000Z", "Monday 23 Nov 00:00 WIB");
+  const post = (id, kind, at, views, extra = {}) => ({ id, kind, channel: "threads", text: `Education · ${id}\nmore`, published_at: at, metrics: { views, comments: 1, reposts: 0, likes: 2, ...extra } });
+  const posts = [
+    // the audited week: Monday 16 to Sunday 22 November (WIB)
+    post("w1", "warroom", "2026-11-18T12:30:00Z", 4000, { comments: 9 }), post("w2", "warroom", "2026-11-19T12:30:00Z", 3000), post("w3", "warroom", "2026-11-20T12:30:00Z", 5000),
+    post("k1", "key_levels", "2026-11-18T01:15:00Z", 1000), post("k2", "key_levels", "2026-11-19T01:15:00Z", 900), post("k3", "key_levels", "2026-11-20T01:15:00Z", 1100),
+    post("r1", "daily_recap", "2026-11-18T22:30:00Z", 300),
+    // the weeks before it
+    ...Array.from({ length: 6 }, (_, i) => post(`o${i}`, "pattern", `2026-11-0${i + 2}T01:15:00Z`, 1000)),
+    // this week, not audited yet; and another channel
+    post("now", "warroom", "2026-11-24T12:30:00Z", 99999), { ...post("tg", "warroom", "2026-11-18T12:30:00Z", 50000), channel: "telegram" }
+  ];
+  const a = auditThreads(posts, { now: NOW });
+  assert.deepEqual([a.week.from, a.week.to], ["2026-11-15T17:00:00.000Z", "2026-11-22T17:00:00.000Z"]);
+  assert.equal(a.median_views, 1000, "the median of the 28 days before the week ended, Threads only");
+  assert.deepEqual(a.posts.map((p) => p.id), ["w3", "w1", "w2", "k3", "k1", "k2", "r1"], "by multiple; this week's and Telegram's left out");
+  assert.equal(a.posts[0].multiple, 5);
+  assert.deepEqual(a.kinds.map((k) => [k.kind, k.posts, k.median_multiple]), [["warroom", 3, 4], ["key_levels", 3, 1], ["daily_recap", 1, 0.3]]);
+  assert.equal(MIN_FINDING, 3);
+  assert.deepEqual(a.findings, ["War Room: 4× the median over 3 posts, 11 replies and 0 reposts.", "Key-level map: 1× the median over 3 posts.", "Daily recap: 1 post, too few to call.", "7 posts this week, 15 replies in all."]);
+  assert.deepEqual(auditThreads([], { now: NOW }).findings, ["No measured Threads post yet: the audit starts once the daily metrics have read some."]);
+  assert.deepEqual(bestHours(posts, { now: NOW }).map((h) => [h.time, h.posts]), [["19:00", 4], ["08:00", 9]], "WIB hours with 2 or more posts in the last 28 days, by median views");
+  const p = planThreads(a, posts, { now: NOW, schedule: [{ days: ["mon"], time: "08:00" }] });
+  assert.deepEqual(p.mix.map((m) => [m.kind, m.advice]), [["warroom", "post more"], ["key_levels", "keep"], ["daily_recap", "keep"]]);
+  assert.deepEqual(p.slots.map((s) => [s.time, s.days.length]), [["19:00", 7]], "08:00 is already a slot");
+  assert.match(planThreads(auditThreads([], { now: NOW }), [], { now: NOW }).note, /No hour has 2 measured posts/);
+  const js = read("public/studio/studio.js");
+  assert.match(js, /call\("\/api\/studio\/settings", "POST", \{ channel: "threads", settings: \{ \.\.\.cur, schedule \} \}\)/, "a slot is added through the settings route (approver, same origin)");
 });
