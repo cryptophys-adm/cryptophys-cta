@@ -23,6 +23,11 @@ export const MAX_PATTERN_DRAFTS_PER_DAY = 4;
 const TREND_ID = { up: "up", down: "down", range: "sideways" };
 const STRENGTH_ID = { strong: "strong", moderate: "moderate", medium: "medium", weak: "weak" };
 const f2 = (x) => (Number.isFinite(Number(x)) ? Number(x).toFixed(2) : "?");
+/**
+ * A zone's price range as posts show it: "low–high", or one price when both round to the same two decimals (owner
+ * 2026-11-25: "1. Yes" to showing a zero-width zone as a single price; rendering only, the data is xauusd's).
+ */
+export const zoneRange = (low, high) => (f2(low) === f2(high) ? f2(low) : `${f2(low)}–${f2(high)}`);
 /** "an H4", "a D1". */
 const an = (chart) => `${/^[HM]/.test(String(chart)) ? "an" : "a"} ${chart}`;
 
@@ -51,7 +56,7 @@ export function zoneLine(z, { channel = "threads" } = {}) {
   const names = (Array.isArray(z.metrics) ? z.metrics : []).filter((n) => typeof n === "string" && n.trim()).slice(0, METRICS_PER_ZONE[channel] ?? 2);
   const strength = STRENGTH_ID[z.strength] ?? null;
   const meta = strength && names.length ? `${strength}: ${names.join(", ")}` : strength ?? names.join(", ");
-  return `• ${f2(z.low)}–${f2(z.high)}${meta ? ` (${meta})` : ""}`;
+  return `• ${zoneRange(z.low, z.high)}${meta ? ` (${meta})` : ""}`;
 }
 
 /** Pure: the key-level map text for one channel, or null when there is no zone. */
@@ -65,7 +70,7 @@ export function keyLevelsText(analysis, { channel = "threads" } = {}) {
   const line = (z) => zoneLine(z, { channel });
   if (supply.length) lines.push("", "Supply zones (sell area):", ...supply.map(line));
   const at = zones.find((z) => z.role === "at_price");
-  if (at) lines.push("", `Price is inside the zone ${f2(at.low)}–${f2(at.high)}.`);
+  if (at) lines.push("", `Price is inside the zone ${zoneRange(at.low, at.high)}.`);
   if (demand.length) lines.push("", "Demand zones (buy area):", ...demand.map(line));
   const st = Object.entries(analysis.structure ?? {}).filter(([, s]) => s.trend).map(([c, s]) => `${c} ${TREND_ID[s.trend] ?? s.trend}${s.label ? ` (${s.label})` : ""}`);
   if (st.length) lines.push("", `Structure: ${st.join(" · ")}`);
@@ -78,13 +83,20 @@ export function keyLevelsText(analysis, { channel = "threads" } = {}) {
 // MAP_FRESH_MINUTES is not posted (no catch-up after a pause). Without zones_by_chart the daily map of 06:09 UTC stays.
 export const MAP_CHARTS = Object.freeze(["D1", "H4", "H1"]);
 export const MAP_FRESH_MINUTES = 70;
-const compactIso = (iso) => String(iso).replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+// Always the full "YYYYMMDDTHHMMSSZ" (orchestrator review of #87: one width, so ids compare as times).
+const compactIso = (iso) => { const t = Date.parse(String(iso)); return (Number.isFinite(t) ? new Date(t).toISOString() : String(iso)).replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z"); };
 /** A chart map's draft id: "levels:H4+H1:20261125T0400Z:threads". */
 export const chartMapId = (charts, closed, channel) => `levels:${charts.join("+")}:${compactIso(closed)}:${channel}`;
-/** The charts and close a chart map's id names, or null for another id. */
+/**
+ * The charts and close a chart map's id names, or null for another id: `closed` in the full six-digit form (an older
+ * "T0900Z" reads as "T090000Z") and `at`, the close as milliseconds, for comparing.
+ */
 export function chartsOfId(id) {
-  const m = /^levels:((?:D1|H4|H1)(?:\+(?:D1|H4|H1))*):(\d{8}T\d{4,6}Z):/.exec(String(id ?? ""));
-  return m ? { charts: m[1].split("+"), closed: m[2] } : null;
+  const m = /^levels:((?:D1|H4|H1)(?:\+(?:D1|H4|H1))*):(\d{8})T(\d{4}|\d{6})Z:/.exec(String(id ?? ""));
+  if (!m) return null;
+  const hms = m[3].length === 4 ? `${m[3]}00` : m[3];
+  const at = Date.UTC(+m[2].slice(0, 4), +m[2].slice(4, 6) - 1, +m[2].slice(6, 8), +hms.slice(0, 2), +hms.slice(2, 4), +hms.slice(4, 6));
+  return { charts: m[1].split("+"), closed: `${m[2]}T${hms}Z`, at };
 }
 /**
  * The chart maps due now: for each chart with a fresh close not posted yet (`known`: the levels draft ids), grouped by

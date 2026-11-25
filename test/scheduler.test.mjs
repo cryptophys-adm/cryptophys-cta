@@ -59,6 +59,11 @@ test("newest wins (orchestrator, 2026-11-25): a slot sends the newest approved m
   assert.equal(nextApproved(sql, "threads", { now: T }).id, "levels:H4+H1:20261125T080000Z:threads", "then the maps in approval order: H4+H1, then H1 09:00");
   recordPublish(sql, { id: "levels:H4+H1:20261125T080000Z:threads", remoteId: "r2" }, { now: T });
   assert.equal(nextApproved(sql, "threads", { now: T }).id, "levels:H1:20261125T090000Z:threads");
+  // compared as times, not as text (orchestrator review of #87): an older four-digit id "T0900Z" never beats "T100000Z"
+  addDrafts(sql, [map("levels:H1:20261125T0900Z:threads"), map("levels:H1:20261125T100000Z:threads")], { now: T });
+  for (const id of ["levels:H1:20261125T100000Z:threads", "levels:H1:20261125T0900Z:threads"]) decideDraft(sql, { id, decision: "approve", actor: "o" }, { now: T });
+  supersedeMaps(sql, "threads", { now: T });
+  assert.deepEqual(["levels:H1:20261125T0900Z:threads", "levels:H1:20261125T100000Z:threads"].map((id) => getDraft(sql, id).status), ["expired", "approved"]);
   // the log of each scheduler run names every auto-approve (orchestrator: answerable from telemetry)
   assert.match(readFileSync("src/index.mjs", "utf8"), /r\?\.auto\?\.length/);
   assert.match(readFileSync("src/app.mjs", "utf8"), /const row = \{ channel, id: c\.id, kind: c\.kind, decided_by: AUTO_ACTOR, status:/);
