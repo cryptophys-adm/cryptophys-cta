@@ -74,7 +74,7 @@ export const DESK_SCHEMA = [
 ];
 /** A media chunk: 1 MB of base64 per row (a Durable Object's SQLite row holds up to 2 MB). */
 export const MEDIA_CHUNK = 1_000_000;
-export const STATUSES = Object.freeze(["pending", "needs_image", "needs_video", "blocked", "approved", "rejected", "published", "failed", "expired"]);
+export const STATUSES = Object.freeze(["pending", "needs_image", "needs_video", "blocked", "approved", "publishing", "rejected", "published", "failed", "expired"]);
 
 const rows = (sql, q, ...b) => sql.exec(q, ...b).toArray();
 const clip = (v, n) => (typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, n) : "");
@@ -95,7 +95,7 @@ export function recheck(d, { delayHours = 24, now = Date.now() } = {}) {
  * Counted from when the draft was made from the analysis. A recap is not an analysis kind: it is about the past.
  */
 export const ANALYSIS_TTL_HOURS = 2;
-const EXPIRABLE = Object.freeze(["pending", "needs_image", "needs_video", "blocked", "approved", "failed"]);
+const EXPIRABLE = Object.freeze(["pending", "needs_image", "needs_video", "blocked", "approved", "publishing", "failed"]);
 export const EXPIRED_NOTE = `older than ${ANALYSIS_TTL_HOURS} hours: the price has moved since it was read; make a fresh one from Create`;
 /** Pure: whether a draft is an analysis whose levels have aged past the limit. */
 export function isStale(d, { now = Date.now(), ttlHours = ANALYSIS_TTL_HOURS } = {}) {
@@ -198,13 +198,34 @@ export function decideDraft(sql, { id, decision, actor, reason = "", delayHours 
   return { ok: true, id: d.id, status, guardian };
 }
 
+/** A claim older than this is taken as a run that died mid-publish: the draft may be claimed again. */
+export const CLAIM_STALE_MS = 10 * 60_000;
+/**
+ * The one claim on an approved draft before a platform is called (orchestrator review of #93: two runs, the analysis
+ * run's publishNow and the 5-minute scheduler, must never post one draft twice). Synchronous within the Desk's single
+ * RPC, so it is atomic: the first caller moves the draft from approved to publishing and gets { ok: true }; any other
+ * gets { ok: false, status }. A claim older than CLAIM_STALE_MS (a run that died) may be taken again.
+ */
+export function claimPublish(sql, { id }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  const d = getDraft(sql, id);
+  if (!d) return { ok: false, status: "missing" };
+  if (d.status === "publishing") {
+    const last = rows(sql, "SELECT MAX(at) AS at FROM events WHERE draft_id = ? AND action = 'publishing'", d.id)[0]?.at;
+    if (!last || now - Date.parse(last) < CLAIM_STALE_MS) return { ok: false, status: "publishing" };
+  } else if (d.status !== "approved") return { ok: false, status: d.status };
+  sql.exec("UPDATE drafts SET status = 'publishing' WHERE id = ? AND status IN ('approved', 'publishing')", d.id);
+  event(sql, { at: iso(now), id: d.id, action: "publishing", actor: "content-engine", detail: null });
+  return { ok: true };
+}
+
 /** The outcome of a publishing attempt of an approved draft. */
 export function recordPublish(sql, { id, remoteId = null, error = null, text = null }, { now = Date.now() } = {}) {
   ensureDesk(sql);
   const status = remoteId ? "published" : "failed";
   // The humanized text that went out (src/agent/humanizer.mjs publishText), so the Archive shows the post as published.
-  if (remoteId && typeof text === "string" && text.trim()) sql.exec("UPDATE drafts SET text = ? WHERE id = ? AND status = 'approved'", text, String(id));
-  sql.exec("UPDATE drafts SET status = ?, published_at = ?, remote_id = ?, error = ? WHERE id = ? AND status = 'approved'", status, remoteId ? iso(now) : null, remoteId, error ? clip(String(error), 300) : null, String(id));
+  if (remoteId && typeof text === "string" && text.trim()) sql.exec("UPDATE drafts SET text = ? WHERE id = ? AND status IN ('approved', 'publishing')", text, String(id));
+  sql.exec("UPDATE drafts SET status = ?, published_at = ?, remote_id = ?, error = ? WHERE id = ? AND status IN ('approved', 'publishing')", status, remoteId ? iso(now) : null, remoteId, error ? clip(String(error), 300) : null, String(id));
   event(sql, { at: iso(now), id: String(id), action: status, actor: "content-engine", detail: remoteId ?? clip(String(error ?? ""), 300) });
   return { status };
 }

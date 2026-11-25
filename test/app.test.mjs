@@ -10,7 +10,7 @@ import { ABOUT_LEDE } from "../src/agent/write.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
 import { AGENT_SECRETS } from "../src/agent/router.mjs";
-import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites } from "../src/desk.mjs";
+import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites, claimPublish } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
@@ -39,7 +39,7 @@ function deskStub() {
   const api = {
     add: async (d, now, actor) => addDrafts(sql, d, { now, ...(actor ? { actor } : {}) }), list: async (i) => listDrafts(sql, i ?? {}),
     get: async (id) => { const d = getDraft(sql, id); return d ? { ...d, events: draftEvents(sql, id) } : null; },
-    decide: async (i, now) => decideDraft(sql, i, { now }), published: async (i, now) => recordPublish(sql, i, { now }), requeue: async (i, now) => requeueFailed(sql, i, { now }),
+    decide: async (i, now) => decideDraft(sql, i, { now }), published: async (i, now) => recordPublish(sql, i, { now }), claimPublish: async (i, now) => claimPublish(sql, i, { now }), requeue: async (i, now) => requeueFailed(sql, i, { now }),
     counts: async () => deskCounts(sql), channelCountsByStatus: async () => channelStatusCounts(sql), token: async (c) => storedToken(sql, c), saveToken: async (c, t, now) => { storeToken(sql, c, t, { now }); return true; },
     idsWithPrefix: async (p) => draftIdsWithPrefix(sql, p), kindCounts: async (k, s) => kindCountsSince(sql, k, s), archive: async (n) => publishedPosts(sql, { limit: n }),
     needingImage: async (n, retry) => draftsNeedingImage(sql, { limit: n, retry }), attachImage: async (i, now) => attachImage(sql, i, { now }),
@@ -1002,7 +1002,7 @@ test("cta-write end to end (rule 4 amended): the switch, a written post auto-app
   assert.ok(a.text.startsWith("Education - Pattern breakout - XAUUSD H1\nRounding Top, direction down.\n\nThe breakout line is at 3570.54."), a.text);
   assert.equal(a.guardian.pass, true);
   assert.ok(b.text.startsWith("Education - Pattern breakout - XAUUSD H1\nDouble Top - direction down\n\nBreakout line 3570.54"), "an added number: the template stays (published, humanized)");
-  assert.deepEqual(draftEvents(d.sql, "pattern:b:threads").map((x) => x.action).sort(), ["approved", "drafted", "published", "write_kept"]);
+  assert.deepEqual(draftEvents(d.sql, "pattern:b:threads").map((x) => x.action).sort(), ["approved", "drafted", "published", "publishing", "write_kept"]);
   assert.match(draftEvents(d.sql, "pattern:b:threads").find((x) => x.action === "write_kept").detail, /number_added/);
   assert.match(draftEvents(d.sql, "pattern:a:threads").find((x) => x.action === "written").detail, /template: Education · Pattern breakout/, "the template is kept in the history");
   assert.equal((await runSchedule(e, { now: T0 + 10 * 60_000, fetcher })).written, undefined, "each draft is tried once");
@@ -1044,4 +1044,26 @@ test("the About gate (about_lede_ok): set by an approver only while /about carri
   assert.equal((await handle(req("/api/studio/agent/replies", { method: "POST", body: { about_lede_ok: false }, token: owner }), old.env, opts)).status, 200, "turning it off needs no check");
   const js = readFileSync("public/studio/studio.js", "utf8");
   assert.match(js, /About's sentence about the model is live/);
+});
+
+test("one claim before publishing (orchestrator review of #93): two runs publishing one draft at the same moment make exactly one platform call", async () => {
+  resetKeyCacheForTests();
+  const { env: e, d } = env({ CONTENT_PUBLISH: "on", PUBLISH_CHANNELS: "telegram", TELEGRAM_BOT_TOKEN: "123:SECRET", TELEGRAM_CHAT_ID: "@c" });
+  addDrafts(d.sql, [{ id: "t1", channel: "telegram", kind: "daily_recap", text: "Education only. Not financial advice.", status: "pending" }]);
+  decideDraft(d.sql, { id: "t1", decision: "approve", actor: "owner" });
+  let calls = 0;
+  const fetcher = async () => { calls++; await new Promise((r) => setTimeout(r, 20)); return Response.json({ ok: true, result: { message_id: 7 } }); };
+  const [a, b] = await Promise.all([publishDraft(e, getDraft(d.sql, "t1"), { fetcher }), publishDraft(e, getDraft(d.sql, "t1"), { fetcher })]);
+  assert.equal(calls, 1, "exactly one API call");
+  assert.ok([a, b].some((x) => x.status === "published") && [a, b].some((x) => x.held === "already_publishing"), JSON.stringify([a, b]));
+  assert.equal(getDraft(d.sql, "t1").status, "published");
+  assert.deepEqual(draftEvents(d.sql, "t1").filter((x) => x.action === "publishing").length, 1, "one claim");
+  // a claim left by a run that died is taken again after CLAIM_STALE_MS; a fresh one is not
+  addDrafts(d.sql, [{ id: "t2", channel: "telegram", kind: "daily_recap", text: "Education only. Not financial advice.", status: "pending" }]);
+  decideDraft(d.sql, { id: "t2", decision: "approve", actor: "owner" });
+  const T = Date.now();
+  assert.equal(claimPublish(d.sql, { id: "t2" }, { now: T }).ok, true);
+  assert.deepEqual(claimPublish(d.sql, { id: "t2" }, { now: T + 60_000 }), { ok: false, status: "publishing" });
+  assert.equal(claimPublish(d.sql, { id: "t2" }, { now: T + 11 * 60_000 }).ok, true, "a stale claim is taken again");
+  assert.deepEqual(claimPublish(d.sql, { id: "t1" }, { now: T }), { ok: false, status: "published" }, "a published draft is never claimed");
 });

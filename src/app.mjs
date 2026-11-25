@@ -180,6 +180,10 @@ export async function publishDraft(env, draft, { now = Date.now(), fetcher, slot
   if (CHANNEL_SPECS[draft.channel]?.publisher !== "built") return { status: "approved", held: "publisher_not_built" };
   const account = await accountFor(env, draft.channel, { now, fetcher });
   if (!account) return { status: "approved", held: "account_not_configured" };
+  // One claim before the platform is called (orchestrator review of #93): only the run that moves the draft from approved
+  // to publishing posts it; a second run at the same moment gets "already_publishing" and calls nothing.
+  const claim = await desk(env).claimPublish({ id: draft.id }, now);
+  if (!claim?.ok) return { status: claim?.status ?? "approved", held: "already_publishing" };
   // Every post goes out humanized (humanize.py in full; owner: "Everything, templates too"), checked by the guardian
   // again; the Archive keeps the text that went out.
   const out = publishText(draft, (d) => recheck(d, { delayHours: delayOf(env), now }));

@@ -10,8 +10,8 @@
   // UTC clock times in 12-hour form (owner 2026-11-17: "jam UTC seharusnya pakai AM/PM").
   const clock12 = (iso) => { const h = Number(iso.slice(11, 13)); return `${h % 12 || 12}:${iso.slice(14, 16)} ${h < 12 ? "AM" : "PM"}`; };
   const when = (iso) => (iso ? `${iso.slice(0, 10)} ${clock12(iso)} UTC` : "—");
-  const LABEL = { pending: "Waiting for you", needs_image: "Needs image", needs_video: "Needs video", blocked: "Held by guardian", approved: "Approved", rejected: "Rejected", published: "Published", failed: "Failed to publish", expired: "Expired (old analysis)" };
-  const TONE = { pending: "blue", needs_image: "", needs_video: "", blocked: "red", approved: "amber", rejected: "", published: "green", failed: "red", expired: "" };
+  const LABEL = { pending: "Waiting for you", needs_image: "Needs image", needs_video: "Needs video", blocked: "Held by guardian", approved: "Approved", publishing: "Publishing", rejected: "Rejected", published: "Published", failed: "Failed to publish", expired: "Expired (old analysis)" };
+  const TONE = { pending: "blue", needs_image: "", needs_video: "", blocked: "red", approved: "amber", publishing: "amber", rejected: "", published: "green", failed: "red", expired: "" };
   const KIND = { daily_recap: "Daily recap", key_levels: "Key-level map", pattern: "Chart pattern", warroom: "War Room", custom: "Custom post" };
   const FILTERS = ["pending", "needs_image", "needs_video", "blocked", "approved", "published", "rejected", "failed", "expired", ""];
   const VIEWS = ["dashboard", "queue", "create", "library", "calendar", "media", "marketing", "performance", "agent", "channels"];
