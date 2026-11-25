@@ -25,6 +25,7 @@ import { cleanInvisible, humanize } from "./humanizer.mjs";
 import { lintPost, textFor, postLength } from "./lint.mjs";
 import { rulesOf, AGENT_CHANNELS } from "./rules.mjs";
 import { hookScore, openingLine } from "./hook.mjs";
+import { MODEL_STOPS } from "./router.mjs";
 
 /**
  * The About page's sentence about the model (owner 2026-11-25: "Ok" to this exact sentence, #86). The studio accepts
@@ -186,7 +187,7 @@ export async function runWrite(channel, deps, { max = WRITE_MAX_PER_RUN } = {}) 
     const r = rulesOf(channel);
     const room = Math.max(80, (r?.limit ?? 500) - postLength([parts.head, "", "", ...parts.foot].join("\n"), { emojiBytes: r?.emoji_bytes }) - 10);
     const m = await deps.ask(writePrompt({ channel, kind: draft.kind, body: parts.body, limit: room }));
-    if (!m.ok && ["off", "no_key", "budget", "retention"].includes(m.skipped)) { out.stopped = m.skipped; break; }
+    if (!m.ok && MODEL_STOPS.includes(m.skipped)) { out.stopped = m.skipped; break; }
     if (!m.ok) { await deps.record({ id: draft.id, reason: "no_model", detail: m.error ?? null }); kept("no_model"); continue; }
     const c = checkWritten({ draft, written: m.text, channel, check: deps.check });
     if (!c.ok) { await deps.record({ id: draft.id, reason: c.failures.join(",") }); kept(c.failures[0]); continue; }

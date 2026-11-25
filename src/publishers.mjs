@@ -20,7 +20,10 @@ export const INSTAGRAM_BASE = "https://graph.instagram.com";
 export const FACEBOOK_GRAPH_BASE = "https://graph.facebook.com";
 export const isBusinessToken = (token) => /^EAA/.test(String(token ?? ""));
 export const instagramBase = (token) => (isBusinessToken(token) ? FACEBOOK_GRAPH_BASE : INSTAGRAM_BASE);
-const STATUS_POLLS = 5;
+// The container wait (orchestrator review, 2026-11-25, after a Threads post failed ~10 s after its card was fetched):
+// up to about 60 seconds, polling sooner first; the platform's error message is kept when it gives one.
+export const WAIT_STEPS_MS = Object.freeze([2_000, 3_000, 5_000, 5_000, 5_000, 10_000, 10_000, 10_000, 10_000]);
+const STATUS_POLLS = WAIT_STEPS_MS.length + 1;
 
 const form = (o) => new URLSearchParams(Object.entries(o).filter(([, v]) => v != null && v !== "").map(([k, v]) => [k, String(v)]));
 const redact = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, k === "access_token" ? "[token]" : v]));
@@ -56,15 +59,17 @@ export async function liveUserId(channel, account, fetcher) {
 }
 
 /** Waits until a container is ready (Threads: status FINISHED; Instagram: status_code FINISHED). */
-async function waitReady(fetcher, url, token, field, { sleep, polls = STATUS_POLLS }) {
+export async function waitReady(fetcher, url, token, field, { sleep, polls = STATUS_POLLS }) {
+  let last = "";
   for (let i = 0; i < polls; i++) {
-    const s = await call(fetcher, "GET", url, { fields: field, access_token: token });
+    const s = await call(fetcher, "GET", url, { fields: field === "status" ? "status,error_message" : field, access_token: token });
     const v = String(s?.[field] ?? "").toUpperCase();
+    last = v;
     if (v === "FINISHED" || v === "PUBLISHED") return v;
-    if (v === "ERROR" || v === "EXPIRED") throw new Error(`container ${v.toLowerCase()}`);
-    await sleep(i === 0 ? 2_000 : 5_000);
+    if (v === "ERROR" || v === "EXPIRED") throw new Error(`container ${v.toLowerCase()}${s?.error_message ? `: ${String(s.error_message).slice(0, 120)}` : ""}`);
+    if (i < polls - 1) await sleep(WAIT_STEPS_MS[Math.min(i, WAIT_STEPS_MS.length - 1)]);
   }
-  throw new Error("container not ready in time");
+  throw new Error(`container not ready in time (last status ${last || "none"})`);
 }
 
 /**

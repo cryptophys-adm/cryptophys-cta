@@ -1301,6 +1301,7 @@
     head.append(badge(!m.has_key ? "" : m.enabled ? "green" : "red", !m.has_key ? "No key" : m.enabled ? "On" : "Off"), " ", make("b", null, `${m.model} on ${m.host}`));
     box.appendChild(head);
     box.appendChild(make("div", "meta", `Today (WIB): ${usd(m.today.cost_usd)} of ${usd(m.cap_usd, 2)} · ${m.today.calls} call(s) · ${m.today.tokens_in + m.today.tokens_out} tokens`));
+    if (m.caps) box.appendChild(make("div", "meta", `${m.free_only ? "Free only: a payment request turns it off · " : ""}today ${m.today.tokens_in.toLocaleString("en-US")} of ${m.caps.tokens_in.toLocaleString("en-US")} input and ${m.today.tokens_out.toLocaleString("en-US")} of ${m.caps.tokens_out.toLocaleString("en-US")} output tokens · at most ${m.caps.rpm} calls a minute`));
     if (!m.has_key) box.appendChild(make("div", "meta", "The key (REFLECTION_API_KEY) is set as a Worker secret through the platform; until then the agent uses no model."));
     if (m.reason) box.appendChild(make("div", "meta warn", `Off: ${m.reason}${m.switched_by ? ` (${m.switched_by}, ${when(m.switched_at)})` : ""}`));
     for (const c of m.recent ?? []) box.appendChild(make("div", "meta", `${when(c.at)} · ${c.purpose} · ${c.status} · ${c.tokens_in + c.tokens_out} tokens · ${usd(c.cost_usd)}${c.retention ? ` · retention ${c.retention}` : ""}`));
