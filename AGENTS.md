@@ -68,7 +68,12 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
    kind of model-written text still needs the owner's word and these guards, and public pages change only with the
    owner's word (rule 3). The humanizer's rewrite at publish (`src/agent/humanizer.mjs`, owner 2026-11-25: "Everything,
    templates too") is a fixed script, not a model: the guardian checks its text again, and the approved text goes out
-   if it fails.
+   if it fails. Approved so far: the replies (rule 2's exception), the weekly audit summary (studio only), and
+   cta-write (`src/agent/write.mjs`, owner 2026-11-25: model posts "Yes, with the same guards"): it rewords only the
+   body of a fresh template post of the four auto-approve kinds, from that body's own facts (the same numbers, none
+   added or dropped, in the same order and each under the same role word and chart, with the same negations and outcome words; no advice, forecast or certainty word the template does not use), keeps the template's first
+   line and closing block, and is off until an approver turns it on (studio setting `agent_write`, the kill switch)
+   and the About page's sentence about the model carries the owner's words (`about_lede_ok`).
 5. **Kernel.** This is an external organ (tier 1, no council seat, `signals.observe` and `reports.publish` only),
    declared in `organism.json` and read by the platform Forge over `EXT_ORGANISM_CTA`. Platform-side changes (the
    origin entry, the bindings, Access paths) go through the platform's own repository and its consensus.

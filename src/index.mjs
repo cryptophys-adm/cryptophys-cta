@@ -15,7 +15,7 @@
 // Kernel: the OrganismDna and CtaHealth entrypoints serve the platform's census and drift checks.
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import puppeteer from "@cloudflare/puppeteer";
-import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates } from "./desk.mjs";
+import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites } from "./desk.mjs";
 import { editCheck } from "./compose.mjs";
 import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, collectInsights, runSchedule, agentWeekly, agentReplies, forgetOldReplies, ANALYSIS_CRON, analysisRunDue } from "./app.mjs";
 import { SCHEDULE_CRON } from "./scheduler.mjs";
@@ -75,6 +75,9 @@ export class ContentDesk extends DurableObject {
   async recentReplies(n) { return recentReplies(this.sql, { limit: n }); }
   async forgetReplies(before) { return forgetReplies(this.sql, before); }
   async autoCandidates(input) { return autoCandidates(this.sql, input); }
+  async writeCandidates(input) { return writeCandidates(this.sql, input); }
+  async recordWrite(input, now) { return recordWrite(this.sql, input, { now }); }
+  async recentWrites(n) { return recentWrites(this.sql, { limit: n }); }
   async kindMix(from, to) { return kindMixSince(this.sql, from, to); }
   async addAbTest(input, now) { addAbTest(this.sql, input, { now }); return true; }
   async abTests() { return listAbTests(this.sql); }
@@ -111,7 +114,7 @@ export default {
     // Every 5 minutes: the channels' posting slots (nothing while publishing is off; no Desk call then).
     if (event?.cron === SCHEDULE_CRON) {
       const r = await runSchedule(env, { now: event.scheduledTime || Date.now() }).catch(fail);
-      if (r?.slots?.length || r?.status === "error") console.log("cta_schedule", JSON.stringify(r));
+      if (r?.slots?.length || r?.status === "error" || r?.written) console.log("cta_schedule", JSON.stringify(r));
       // The CTA agent's Replies, every 15 minutes (src/agent/replies.mjs).
       const at = event.scheduledTime || Date.now();
       if (new Date(at).getUTCMinutes() % 15 === 0) {

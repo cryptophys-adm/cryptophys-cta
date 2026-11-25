@@ -724,3 +724,40 @@ export function autoCandidates(sql, { channel, kinds = [] } = {}) {
     FROM drafts d WHERE d.status = 'pending' AND d.channel = ? AND d.kind IN (${ks.map(() => "?").join(", ")}) ORDER BY d.created_at ASC LIMIT 50`, String(channel), ...ks)
     .map((r) => ({ id: r.id, kind: r.kind, ready_at: r.ready_at ?? r.created_at, edited: Boolean(r.edited) }));
 }
+
+/**
+ * cta-write's candidates (src/agent/write.mjs): fresh drafts of a channel, of the kinds it writes, still waiting
+ * (pending or waiting for their card), made since `sinceIso`, that no person edited and that were not tried yet.
+ */
+export function writeCandidates(sql, { channel, kinds = [], sinceIso } = {}) {
+  ensureDesk(sql);
+  const ks = (kinds || []).map(String).filter((k) => /^[a-z_]{1,30}$/.test(k));
+  if (!ks.length || !/^[a-z]{1,20}$/.test(String(channel ?? ""))) return [];
+  return rows(sql, `SELECT d.id, d.kind, d.channel, d.text, d.image_url, d.decision_times, d.created_at FROM drafts d
+    WHERE d.status IN ('pending', 'needs_image') AND d.channel = ? AND d.kind IN (${ks.map(() => "?").join(", ")}) AND d.created_at >= ?
+      AND NOT EXISTS (SELECT 1 FROM events e WHERE e.draft_id = d.id AND e.action IN ('edited', 'written', 'write_kept'))
+    ORDER BY d.created_at ASC LIMIT 10`, String(channel), ...ks, String(sinceIso ?? ""))
+    .map((r) => ({ ...r, decision_times: JSON.parse(r.decision_times || "[]") }));
+}
+/**
+ * cta-write's outcome for one draft: the written text (with the guardian's result) replacing the template, event
+ * "written" with the template kept in its detail; or the template kept, event "write_kept" with the reason.
+ */
+export function recordWrite(sql, { id, text = null, guardian = null, reason = null, detail = null, actor = "cta-write" }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  const d = getDraft(sql, id);
+  if (!d || !["pending", "needs_image"].includes(d.status)) return { ok: false, error: "not waiting" };
+  if (typeof text === "string" && text.trim()) {
+    sql.exec("UPDATE drafts SET text = ?, guardian = ? WHERE id = ? AND status IN ('pending', 'needs_image')", text, JSON.stringify(guardian ?? d.guardian ?? null), d.id);
+    event(sql, { at: iso(now), id: d.id, action: "written", actor: clip(actor, 120), detail: clip(`${detail ? `${detail}; ` : ""}template: ${d.text}`, 1200) });
+    return { ok: true, written: true };
+  }
+  event(sql, { at: iso(now), id: d.id, action: "write_kept", actor: clip(actor, 120), detail: clip(`${reason ?? "kept"}${detail ? `: ${detail}` : ""}`, 300) });
+  return { ok: true, written: false };
+}
+/** The latest cta-write outcomes, newest first (the studio's Agent page). */
+export function recentWrites(sql, { limit = 20 } = {}) {
+  ensureDesk(sql);
+  return rows(sql, "SELECT e.at, e.draft_id AS id, e.action, e.detail, d.kind, d.channel FROM events e JOIN drafts d ON d.id = e.draft_id WHERE e.action IN ('written', 'write_kept') ORDER BY e.at DESC LIMIT ?", Math.max(1, Math.min(100, Number(limit) || 20)))
+    .map((r) => ({ ...r, detail: r.action === "written" ? String(r.detail ?? "").replace(/; template: [\s\S]*$|^template: [\s\S]*$/, "") : r.detail }));
+}

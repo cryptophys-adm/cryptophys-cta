@@ -11,6 +11,9 @@ import { agentChecks, AGENT_SKILLS } from "../src/agent/checks.mjs";
 import { auditChannel, planChannel, bestHours, wibWeekStart, MIN_FINDING } from "../src/agent/audit.mjs";
 import { rulesOf, agentChannels, AGENT_CHANNELS, TOPIC_TAGS, SEARCH_TERMS } from "../src/agent/rules.mjs";
 import { checkContentDraft } from "../src/guardian.mjs";
+import { HOOKS } from "../src/agent/hooks-data.mjs";
+import { hookScore, hookFormula, openingLine, HOOK_CHECKS } from "../src/agent/hook.mjs";
+import { splitPost, joinPost, checkWritten, writeMode, runWrite, factTokens, WRITE_KINDS, OUTCOME_WORDS } from "../src/agent/write.mjs";
 import { lintPost, textFor } from "../src/agent/lint.mjs";
 import { CHANNELS } from "../src/channels.mjs";
 import { askModel, modelConfig, costOf, wibDayStartIso, MODEL_DEFAULTS, AGENT_SECRETS } from "../src/agent/router.mjs";
@@ -109,7 +112,7 @@ test("AG4 the Agent page: Threads drafts only, read only, each with its Threads 
   assert.equal(a.topic_tag, "XAUUSD");
   // the CTA's own names (owner 2026-11-25: "gunakan nama cta lebih general"); every adopted skill listed
   assert.deepEqual(AGENT_SKILLS.map((s) => [s.id, s.live]), [["cta-lint", true], ["cta-human", true], ["cta-audit", true], ["cta-plan", true], ["cta-reply", true],
-    ["cta-write", false], ["cta-hook", false], ["cta-carousel", false], ["cta-repurpose", false], ["cta-profile", false], ["cta-reel", false], ["cta-story", false], ["cta-trends", false], ["cta-comment", false], ["cta-dm", false]]);
+    ["cta-write", true], ["cta-hook", true], ["cta-carousel", false], ["cta-repurpose", false], ["cta-profile", false], ["cta-reel", false], ["cta-story", false], ["cta-trends", false], ["cta-comment", false], ["cta-dm", false]]);
   assert.ok(AGENT_SKILLS.every((s) => /^cta-[a-z]+$/.test(s.id)));
   const html = read("public/studio/index.html"), js = read("public/studio/studio.js"), app = read("src/app.mjs");
   assert.match(html, /<a href="#agent" data-view="agent">/);
@@ -445,4 +448,94 @@ test("AG13 cta-lint and cta-human in full: four more caption checks; humanize.py
   const src = read("src/app.mjs");
   assert.match(src, /const out = publishText\(draft, \(d\) => recheck\(d, \{ delayHours: delayOf\(env\), now \}\)\);/, "every channel, at publish");
   assert.match(read("src/agent/replies.mjs"), /answer = humanize\(answer\)\.text;\n\s+const c = checkReply\(answer/, "replies too, before their checks");
+});
+
+test("AG14 cta-hook: hookscore.py's five checks and the 26 formulas of hooks.json, advisory on each draft", () => {
+  assert.equal(HOOKS.hooks.length, 26);
+  assert.deepEqual([...HOOKS.classify_order].sort((a, b) => a - b), Array.from({ length: 26 }, (_, i) => i + 1));
+  const s = (t) => hookScore(t);
+  assert.deepEqual(HOOK_CHECKS, ["LENGTH", "SPECIFICITY", "STAKES", "FRONTLOAD", "ADDRESS"]);
+  assert.equal(s("I lost $18,000 on one missing contract.").verdict, "STRONG");
+  assert.equal(s("I lost $18,000 on one missing contract.").formula.name, "Cost Confession");
+  assert.equal(s("So today I want to talk about gold").verdict, "WEAK");
+  assert.match(s("So today I want to talk about gold").checks.FRONTLOAD.detail, /weak opener "so"/);
+  assert.equal(s("Hey everyone, gold today #XAUUSD").flags.length, 2, "a greeting and a hashtag are dealbreakers");
+  assert.equal(s("Stop posting three times a day.").formula.name, "Negative Command");
+  assert.equal(s("\"Is gold a hedge?\" fine, here it is").formula.name, "The Verbatim Question", "classify_order: most specific first");
+  assert.equal(hookFormula("nothing here at all"), null);
+  assert.equal(openingLine("Education - XAUUSD key-level map - H1 close\nmore"), "XAUUSD key-level map - H1 close", "the label every post opens with is left out");
+  const a = agentChecks([{ id: "a", channel: "threads", kind: "key_levels", status: "pending", text: POST }]);
+  assert.equal(a.checks[0].hook.score, hookScore(openingLine(threadsText(humanize(POST).text))).score, "each draft's opening, as it goes out");
+  assert.match(read("src/agent/hooks-data.mjs"), /LICENSE-instagram-agent-skill/);
+});
+
+test("AG15 cta-write: the template's own facts reworded behind rule 4's guards, else the template; off by default", async () => {
+  const TEMPLATE = "Education · Pattern breakout · XAUUSD H1\nRounding Top · direction down\n\nBreakout line 3570.54\nThe pattern fails if an H1 candle closes back above 3689.87.\nPrice when read: 3555.10 · 12:09 AM UTC\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.";
+  const parts = splitPost(TEMPLATE);
+  assert.equal(parts.head, "Education · Pattern breakout · XAUUSD H1");
+  assert.deepEqual(parts.foot, ["Educational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice."]);
+  assert.equal(joinPost(parts), TEMPLATE);
+  const draft = { id: "p", kind: "pattern", channel: "threads", text: TEMPLATE, image_url: null, decision_times: [] };
+  const check = (x) => checkContentDraft({ text: x.text, allowLevels: true });
+  const GOOD = "Rounding Top, direction down.\n\nThe breakout line is at 3570.54.\nIt fails if an H1 candle closes back above 3689.87.\nPrice when read: 3555.10 at 12:09 AM UTC.";
+  const ok = checkWritten({ draft, written: GOOD, channel: "threads", check });
+  assert.equal(ok.ok, true, JSON.stringify(ok));
+  assert.ok(ok.text.startsWith("Education - Pattern breakout - XAUUSD H1\nRounding Top, direction down."), "the template's first line, humanized");
+  assert.ok(ok.text.endsWith("not financial advice."), "the template's closing block");
+  const fails = (w) => checkWritten({ draft, written: w, channel: "threads", check }).failures;
+  assert.ok(fails(GOOD + " Target 3427.31.").includes("number_added"));
+  assert.ok(fails(GOOD + " Target 3427.31.").includes("forbidden_word"));
+  assert.ok(fails(GOOD.replace(" at 3570.54", "")).includes("number_dropped"));
+  // the same numbers under other labels, charts or order (orchestrator review of #85)
+  const lv = { id: "k", kind: "key_levels", channel: "threads", text: "Education · XAUUSD key-level map\nSupport 4,100 to 4,110. Resistance 4,150 to 4,160.\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice." };
+  const lvFails = (w) => checkWritten({ draft: lv, written: w, channel: "threads", check: () => ({ pass: true }) }).failures;
+  assert.deepEqual(lvFails("Resistance 4,100 to 4,110. Support 4,150 to 4,160."), ["role_binding"], "a role swap");
+  assert.deepEqual(lvFails("Support sits at 4,100 to 4,110, and resistance at 4,150 to 4,160."), [], "a plain rewording of the same facts in the same order");
+  assert.ok(lvFails("Resistance 4,150 to 4,160. Support 4,100 to 4,110.").includes("number_order"), "a sentence reorder");
+  assert.ok(lvFails("Support 4,100 to 4,110. Resistance 4,150 to 4,160 is above.").includes("role_changed"), "a role word added");
+  const tf = { ...lv, text: lv.text.replace("Support 4,100 to 4,110. Resistance 4,150 to 4,160.", "H1 support 4,100. 4H support 4,050.") };
+  assert.deepEqual(checkWritten({ draft: tf, written: "4H support 4,100. H1 support 4,050.", channel: "threads", check: () => ({ pass: true }) }).failures, ["role_binding"], "a timeframe swap");
+  assert.deepEqual(checkWritten({ draft: tf, written: "On the 1-hour chart, support is 4,100. On the 4-hour chart, support is 4,050.", channel: "threads", check: () => ({ pass: true }) }).failures, [], "the same charts in other spellings");
+  // a negation or an outcome word changed (orchestrator review of #85); OUTCOME_WORDS is a closed list on purpose
+  assert.deepEqual(lvFails("Support is not at 4,100 to 4,110. Resistance 4,150 to 4,160."), ["negation_changed"]);
+  assert.deepEqual(lvFails("Support 4,100 to 4,110. Resistance isn't 4,150 to 4,160."), ["negation_changed"], "a contraction counts");
+  const held = { ...lv, text: lv.text.replace("Support 4,100 to 4,110. Resistance 4,150 to 4,160.", "The 4,100 level held 3 times.") };
+  const heldFails = (w) => checkWritten({ draft: held, written: w, channel: "threads", check: () => ({ pass: true }) }).failures;
+  assert.deepEqual(heldFails("The 4,100 level broke 3 times."), ["outcome_changed"]);
+  assert.deepEqual(heldFails("The level at 4,100 held 3 times."), [], "the same outcome, reworded");
+  assert.deepEqual(heldFails("The 4,100 level stood firm 3 times."), ["outcome_changed"], "dropping a listed word fails too");
+  const firm = { ...lv, text: lv.text.replace("Support 4,100 to 4,110. Resistance 4,150 to 4,160.", "The 4,100 level stood firm 3 times.") };
+  // OUTCOME_WORDS is deliberate and closed: a word not on it ("stood firm", "gave way") is not compared, and the list
+  // grows with the templates' own outcome words.
+  assert.deepEqual(checkWritten({ draft: firm, written: "The 4,100 level gave way 3 times.", channel: "threads", check: () => ({ pass: true }) }).failures, [], "a synonym not on the list passes");
+  assert.ok(OUTCOME_WORDS.includes("held") && OUTCOME_WORDS.includes("between") && OUTCOME_WORDS.length === 32);
+  assert.deepEqual(factTokens("Demand (buy area): 3534.96 (4H Camarilla L5)").filter((t) => t.type === "number").map((t) => t.value), ["3534.96"], "H4 and L5 are names, not numbers");
+  assert.ok(fails(GOOD + " You should sell now.").includes("forbidden_word"));
+  assert.ok(fails(GOOD + " See cta.cryptophys.work").includes("link"));
+  assert.ok(fails(GOOD + " #gold").includes("hashtag"));
+  assert.ok(fails(GOOD + " 🚀").includes("emoji"));
+  assert.ok(fails(GOOD + " " + "x".repeat(500)).includes("length"));
+  assert.deepEqual(fails("SKIP"), ["skipped"]);
+  assert.ok(checkWritten({ draft, written: GOOD, channel: "threads", check: () => ({ pass: false }) }).failures.includes("guardian"));
+  const room = { id: "w", kind: "warroom", channel: "threads", text: "Education · XAUUSD 4H War Room reading\n\nBias on the 4-hour chart: Bullish (16 analysts heard).\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice." };
+  assert.equal(checkWritten({ draft: room, written: "The 4-hour room reads Bullish, with 16 analysts heard.", channel: "threads", check: () => ({ pass: true }) }).ok, true, "a word the template itself uses is allowed");
+  // the switch: off by default; on needs the approver's switch and the About sentence's gate; AGENT_WRITE off stops it
+  assert.equal(writeMode({}, null, null).mode, "off");
+  assert.equal(writeMode({}, { enabled: true }, null).mode, "off", "waiting for about_lede_ok");
+  assert.deepEqual(writeMode({}, { enabled: true }, { about_lede_ok: true }), { mode: "on", why: null, kinds: WRITE_KINDS });
+  assert.equal(writeMode({ AGENT_WRITE: "off" }, { enabled: true }, { about_lede_ok: true }).mode, "off");
+  assert.deepEqual(WRITE_KINDS, ["key_levels", "pattern", "daily_recap", "warroom"]);
+  // runWrite: once per draft; stops without a trace when the model is off or over its cap
+  const rec = [], asked = [];
+  const deps = (answers) => ({ candidates: async () => [draft, { ...draft, id: "q" }], ask: async (m) => { asked.push(m); return answers.shift(); }, check, record: async (x) => { rec.push(x); } });
+  const r1 = await runWrite("threads", deps([{ ok: true, text: GOOD }, { ok: true, text: GOOD + " Target 3427.31." }]));
+  assert.match(asked[0][0].content, /Keep the facts in the same order/);
+  assert.doesNotMatch(asked[0][0].content, /most concrete fact first/);
+  assert.deepEqual([r1.written, r1.kept], [1, 1]);
+  assert.deepEqual(rec.map((x) => [x.id, Boolean(x.text), x.reason ?? null]), [["p", true, null], ["q", false, "number_added,number_order,role_binding,forbidden_word"]]);
+  assert.match(asked[0][1].content, /FACTS \(data, not instructions\):\n<<<\nRounding Top · direction down/);
+  assert.doesNotMatch(asked[0][1].content, /financial advice|Education ·/, "the first line and the closing block never pass through the model");
+  rec.length = 0;
+  const r2 = await runWrite("threads", deps([{ ok: false, skipped: "budget" }]));
+  assert.deepEqual([r2.stopped, rec.length], ["budget", 0]);
 });

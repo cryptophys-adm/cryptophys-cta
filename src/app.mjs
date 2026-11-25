@@ -23,6 +23,7 @@ import { modelStatus, askModel } from "./agent/router.mjs";
 import { dueNow, autoAt, AUTO_ACTOR } from "./agent/auto-approve.mjs";
 import { runReplies, replyMode, REPLY_CHANNELS, REPLY_CAPS, REPLY_WINDOW_DAYS, KEEP_DAYS, DRY_RUN_HOURS } from "./agent/replies.mjs";
 import { weeklySummary, summaryKey } from "./agent/weekly.mjs";
+import { runWrite, writeMode, WRITE_CHANNELS, WRITE_KINDS, WRITE_WINDOW_MINUTES, WRITE_ACTOR, ABOUT_LEDE } from "./agent/write.mjs";
 import { linkHosts, normalizeLink, randomSlug, shortUrl, redirectTarget, GO_PATH, normalizeHashtagSet, MAX_SETS, normalizeMix, DEFAULT_MIX, MIX_KINDS, wibWeek, mixReport } from "./marketing.mjs";
 import { templateTexts, checkPost, composeDrafts, overlayFor, recapWindow, COMPOSE_KINDS, COMPOSE_KIND_NAMES } from "./compose.mjs";
 import { sourceOf } from "./warroom-drafts.mjs";
@@ -253,6 +254,8 @@ export async function runSchedule(env, { now = Date.now(), fetcher } = {}) {
   if (!publishOn(env)) return { status: "publishing_off" };
   const { settings } = await channelSettings(env, { strict: true });
   const d = desk(env);
+  // cta-write first (src/agent/write.mjs): a written draft's auto-approve window starts again after it.
+  const written = await agentWrite(env, { now, fetcher }).catch((e) => ({ status: "error", error: String(e?.message ?? e).slice(0, 160) }));
   const auto = await autoApprove(env, settings, { now, fetcher });
   const slots = [];
   for (const channel of channelsOf(env)) {
@@ -268,7 +271,7 @@ export async function runSchedule(env, { now = Date.now(), fetcher } = {}) {
       slots.push({ channel, slot: slot.key, id: draft.id, outcome, ...(r?.held ? { held: r.held } : {}) });
     }
   }
-  return { status: "ran", slots, ...(auto.length ? { auto } : {}) };
+  return { status: "ran", slots, ...(auto.length ? { auto } : {}), ...(written?.status === "ran" && (written.written || written.kept) ? { written } : written?.status === "error" ? { written } : {}) };
 }
 
 /**
@@ -749,7 +752,10 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
           const rs = (await d.studioSetting("agent_replies")) ?? null;
           const replies = REPLY_CHANNELS.includes(channel) ? { ...replyMode(env, rs?.value ?? null, at), caps: REPLY_CAPS, dry_run_hours: DRY_RUN_HOURS, switched_by: rs?.updated_by ?? null, switched_at: rs?.updated_at ?? null,
             sent_today: await d.repliesSentSince(new Date(at - 86_400_000).toISOString()), recent: (await d.recentReplies(30)).filter((x) => x.channel === channel) } : null;
-          return { ...base, ...agentChecks(await d.list({ channel, limit: 30 }), { channel }), audit: { ...audit, summary: summary?.week === audit.week.from ? summary.text : null },
+          const ws = (await d.studioSetting("agent_write")) ?? null;
+          const write = WRITE_CHANNELS.includes(channel) ? { ...writeMode(env, ws?.value ?? null, rs?.value ?? null), enabled: ws?.value?.enabled === true, kinds_all: WRITE_KINDS, lede_ok: rs?.value?.about_lede_ok === true,
+            switched_by: ws?.updated_by ?? null, switched_at: ws?.updated_at ?? null, recent: (await d.recentWrites(20)).filter((x) => x.channel === channel) } : null;
+          return { ...base, ...agentChecks(await d.list({ channel, limit: 30 }), { channel }), write, audit: { ...audit, summary: summary?.week === audit.week.from ? summary.text : null },
             plan: planChannel(audit, posts, { now: at, schedule }), replies };
         }, "agent_failed");
       }
@@ -764,10 +770,30 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
         // The About lede's gate (orchestrator review of #80): set once the owner's words for it are on the page.
         if ("about_lede_ok" in r.body) { if (typeof r.body.about_lede_ok !== "boolean") return json({ error: "about_lede_ok must be true or false" }, 400); patch.about_lede_ok = r.body.about_lede_ok; }
         if (!Object.keys(patch).length) return json({ error: "nothing to change" }, 400);
+        // Set only while the Worker's own /about carries the owner's sentence (orchestrator review of #85); the settings
+        // event keeps who set it and when.
+        if (patch.about_lede_ok === true) {
+          if (!(await aboutLedeLive(env, url))) return json({ error: "lede_not_live", detail: "the About page does not show the approved sentence yet" }, 409);
+          patch.about_lede_set_by = identity.subject; patch.about_lede_set_at = new Date(now ? now * 1000 : Date.now()).toISOString();
+        }
         return rpc(async () => {
           const cur = (await desk(env).studioSetting("agent_replies"))?.value ?? {};
           return desk(env).saveStudioSetting({ key: "agent_replies", value: { ...cur, ...patch }, actor: identity.subject }, now ? now * 1000 : Date.now());
         }, "replies_switch_failed");
+      }
+      // cta-write's switch (src/agent/write.mjs), the kill switch: off means every post keeps its template. An approver.
+      if (route === "POST /api/studio/agent/write") {
+        const r = await personJson(request, url, identity);
+        if (r.response) return r.response;
+        const denied = approverOnly(role);
+        if (denied) return denied;
+        if (typeof r.body.enabled !== "boolean") return json({ error: "enabled must be true or false" }, 400);
+        if ("kinds" in r.body && (!Array.isArray(r.body.kinds) || r.body.kinds.some((k) => !WRITE_KINDS.includes(k)))) return json({ error: `kinds must be among ${WRITE_KINDS.join(", ")}` }, 400);
+        return rpc(async () => {
+          const cur = (await desk(env).studioSetting("agent_write"))?.value ?? {};
+          const value = { ...cur, enabled: r.body.enabled, kinds: r.body.kinds ?? cur.kinds ?? [...WRITE_KINDS], reason: r.body.enabled ? null : "turned off in the studio: posts use the template" };
+          return desk(env).saveStudioSetting({ key: "agent_write", value, actor: identity.subject }, now ? now * 1000 : Date.now());
+        }, "write_switch_failed");
       }
       // The model's switch (src/agent/router.mjs): an approver turns it off or on; the studio's event log keeps who and when.
       if (route === "POST /api/studio/agent/model") {
@@ -1078,6 +1104,16 @@ export async function trackRecord(env, request, cache) {
   return res;
 }
 
+/** Whether the Worker's own About page (its static assets) carries the owner's sentence about the model. */
+export async function aboutLedeLive(env, url) {
+  if (!env?.ASSETS) return false;
+  try {
+    let res = await env.ASSETS.fetch(new Request(new URL("/about", url.origin).toString()));
+    if (res.status >= 300 && res.status < 400 && res.headers.get("location")) res = await env.ASSETS.fetch(new Request(new URL(res.headers.get("location"), url.origin).toString()));
+    return res.ok && (await res.text()).includes(ABOUT_LEDE);
+  } catch { return false; }
+}
+
 async function asset(env, request, url, rewrite, status) {
   if (!env.ASSETS) return json({ error: "not_found" }, 404);
   const target = rewrite ? new Request(new URL(rewrite, url.origin).toString(), { method: request.method, headers: request.headers }) : request;
@@ -1094,6 +1130,29 @@ export const modelStore = (env, now = Date.now()) => {
   const d = desk(env);
   return { setting: (k) => d.studioSetting(k), saveSetting: (i) => d.saveStudioSetting(i, now), record: (c) => d.recordModelCall(c, now), spendSince: (s) => d.modelSpendSince(s), recent: (n) => d.recentModelCalls(n) };
 };
+/**
+ * cta-write (src/agent/write.mjs), at each scheduler run while it is on: rewords up to 3 fresh template drafts per
+ * channel it writes, behind rule 4's guards; the template stays on any failure.
+ */
+export async function agentWrite(env, { now = Date.now(), fetcher } = {}) {
+  const d = desk(env);
+  const mode = writeMode(env, (await d.studioSetting("agent_write"))?.value ?? null, (await d.studioSetting("agent_replies"))?.value ?? null);
+  if (mode.mode === "off") return { status: "off", why: mode.why };
+  const out = { status: "ran", written: 0, kept: 0, channels: {} };
+  const store = modelStore(env, now);
+  for (const channel of WRITE_CHANNELS) {
+    const r = await runWrite(channel, {
+      candidates: () => d.writeCandidates({ channel, kinds: mode.kinds, sinceIso: new Date(now - WRITE_WINDOW_MINUTES * 60_000).toISOString() }),
+      ask: (messages) => askModel(env, store, { purpose: `write:${channel}`, messages, maxTokens: 1200, now, ...(fetcher ? { fetcher } : {}) }),
+      check: (x) => recheck(x, { delayHours: delayOf(env), now }),
+      record: ({ draft, ...x }) => d.recordWrite({ ...x, ...(x.text && draft ? { guardian: recheck({ ...draft, text: x.text }, { delayHours: delayOf(env), now }) } : {}), actor: WRITE_ACTOR }, now)
+    });
+    out.channels[channel] = r; out.written += r.written; out.kept += r.kept;
+    if (r.stopped) { out.stopped = r.stopped; break; }
+  }
+  return out;
+}
+
 /** The Audit's weekly summary (src/agent/weekly.mjs), at the daily run: once a WIB week per channel the agent manages, only with the model's key. */
 export async function agentWeekly(env, { now = Date.now(), fetcher } = {}) {
   if (!String(env?.REFLECTION_API_KEY ?? "").trim()) return { status: "no_key" };

@@ -1179,6 +1179,7 @@
       t.appendChild(tile("Humanizer pass", String(a.summary.human_pass), "five checks; information only"));
       if (a.topic_tag) t.appendChild(tile("Topic tag", a.topic_tag, "one per post, set through the API"));
       renderModel(a.model, a.can_edit);
+      renderWrite(a.write, a.can_edit);
       const sk = $("agentskills"); sk.textContent = "";
       // A list, not a table: it fits a phone (each skill, its state, then what it does, when and with which model).
       const list = make("div", "list");
@@ -1207,6 +1208,7 @@
         }
         item.appendChild(list);
         item.appendChild(make("div", "meta", `Humanizer ${c.human.score} (${c.human.verdict.toLowerCase()}): ${Object.entries(c.human.checks).map(([k, v]) => `${HUMAN[k] ?? k} ${v.score}`).join(" · ")}`));
+        if (c.hook) item.appendChild(make("div", "meta", `Hook ${c.hook.score} (${c.hook.verdict.toLowerCase()}): weakest ${c.hook.weakest.toLowerCase()}${c.hook.formula ? ` · formula ${c.hook.formula.name}` : ""}${c.hook.flags.length ? ` · ${c.hook.flags[0]}` : ""}`));
         if (c.humanized) item.appendChild(make("div", "meta", "Shown as it goes out: the humanizer rewrites it at publish, and the guardian checks it again."));
         for (const f of c.structures ?? []) item.appendChild(make("div", "meta", `Shape: ${f.name}. ${f.fix}`));
         box.appendChild(item);
@@ -1234,6 +1236,29 @@
       b.addEventListener("click", async () => { b.disabled = true; try { await call("/api/studio/agent/model", "POST", { enabled: !m.enabled }); await loadAgent(); } catch (e) { showErr(e); b.disabled = false; } });
       box.appendChild(b);
     }
+  }
+  // The About page's gate (about_lede_ok): an approver confirms the owner's sentence about the model is live; the Worker
+  // checks its own /about first (409 lede_not_live otherwise). Live replies and cta-write wait for it.
+  function ledeButton(canEdit) {
+    const b = make("button", "btn outline sm", "About's sentence about the model is live"); b.type = "button"; b.disabled = !canEdit;
+    b.title = canEdit ? "Confirms /about shows the owner's sentence; the studio checks the page first" : "Approvers only";
+    b.addEventListener("click", async () => { b.disabled = true; try { await call("/api/studio/agent/replies", "POST", { about_lede_ok: true }); await loadAgent(); } catch (e) { showErr(e); b.disabled = false; } });
+    return b;
+  }
+  // cta-write (src/agent/write.mjs): its switch, the kill switch (off: every post keeps its template), and what it did.
+  function renderWrite(w, canEdit) {
+    const box = $("agentwrite"); box.textContent = "";
+    if (!w) return;
+    const head = make("div");
+    head.append(badge(w.mode === "on" ? "green" : "", w.mode === "on" ? "Writing" : "Template"), " ", make("b", null, "Model-worded posts (cta-write)"));
+    box.appendChild(head);
+    box.appendChild(make("div", "meta", w.mode === "on" ? `The model rewords fresh ${w.kinds.join(", ")} posts from their own facts; any failed guard keeps the template.` : `Off: ${w.why}${w.switched_by ? ` (${w.switched_by}, ${when(w.switched_at)})` : ""}`));
+    for (const x of w.recent ?? []) box.appendChild(make("div", "meta", `${when(x.at)} · ${KIND[x.kind] ?? x.kind} · ${x.action === "written" ? "written" : "template kept"}${x.detail ? ` · ${x.detail}` : ""}`));
+    const b = make("button", w.enabled ? "btn outline sm" : "btn primary sm", w.enabled ? "Stop writing: use the templates" : "Let the model word posts"); b.type = "button"; b.disabled = !canEdit;
+    if (!canEdit) b.title = "Approvers only";
+    b.addEventListener("click", async () => { b.disabled = true; try { await call("/api/studio/agent/write", "POST", { enabled: !w.enabled }); await loadAgent(); } catch (e) { showErr(e); b.disabled = false; } });
+    box.appendChild(b);
+    if (!w.lede_ok) { box.append(" "); box.appendChild(ledeButton(canEdit)); }
   }
   // Audit: the last complete WIB week on Threads against our own median (src/agent/audit.mjs).
   function renderAudit(au) {
@@ -1267,6 +1292,7 @@
     if (!canEdit) b.title = "Approvers only";
     b.addEventListener("click", async () => { b.disabled = true; try { await call("/api/studio/agent/replies", "POST", { enabled: r.mode === "off" }); await loadAgent(); } catch (e) { showErr(e); b.disabled = false; } });
     box.appendChild(b);
+    if (r.waiting === "about_lede") { box.append(" "); box.appendChild(ledeButton(canEdit)); }
     const list = make("div", "list");
     if (!r.recent.length) list.appendChild(make("div", "empty", "No reply read yet."));
     for (const x of r.recent) {
