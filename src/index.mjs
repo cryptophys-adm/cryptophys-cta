@@ -126,7 +126,8 @@ export default {
     if (event?.cron === ANALYSIS_CRON) {
       if (!analysisRunDue(event.scheduledTime || Date.now())) return;
       const drafted = await draftAnalysis(env, { now: event.scheduledTime || Date.now() }).catch(fail);
-      if (drafted?.added?.length || drafted?.status === "error") console.log("cta_analysis_drafts", JSON.stringify(drafted));
+      // Every run is logged (orchestrator review, 2026-11-25): what it read per chart, what it added, what it left out and why.
+      console.log("cta_analysis_drafts", JSON.stringify(drafted));
       await cards(env, fail);
       return;
     }
