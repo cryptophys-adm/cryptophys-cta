@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { dailyDrafts, dailyRecapText, summarizeDay, dateId, TEXT_LIMITS } from "../src/drafts.mjs";
 import { addDrafts, listDrafts, decideDraft, recordPublish, deskCounts, getDraft, draftEvents, storeToken, storedToken } from "../src/desk.mjs";
-import { publishThreads, publishInstagram, publishingQuota, refreshToken, THREADS_BASE, INSTAGRAM_BASE, FACEBOOK_GRAPH_BASE } from "../src/publishers.mjs";
+import { publishThreads, publishInstagram, publishingQuota, refreshToken, THREADS_BASE, INSTAGRAM_BASE, FACEBOOK_GRAPH_BASE, THREADS_IMAGE_SETTLE_MS, THREADS_MISSING_RETRY_MS } from "../src/publishers.mjs";
 import { identify } from "../src/oauth.mjs";
 import { PRICE_LIKE } from "../src/guardian.mjs";
 
@@ -281,4 +281,64 @@ test("a confirmed pattern is posted once while xauusd keeps it, even as its line
   assert.equal(patternDrafted({ chart: "H1", pattern: "rounding_top", status: "confirmed", upper: 3690, lower: 3575 }, "threads", history, at1 + 119 * 3_600_000), true);
   assert.deepEqual(patternOfId("pattern:D1:flag:confirmed:4020:3980:threads"), { chart: "D1", pattern: "flag", status: "confirmed", upper: 4020, lower: 3980, channel: "threads" });
   assert.equal(patternOfId("manual:2026-11-24:b50daba1:threads"), null);
+});
+
+test("Threads: the failing step is named; an image settles 10 s; \"does not exist\" is retried on the same container; never posted twice", async () => {
+  // 26 Nov, 00:10 and 09:10 UTC: "400 The requested resource does not exist" about 4 s after Meta fetched the card.
+  const missing = () => new Response(JSON.stringify({ error: { message: "The requested resource does not exist", code: 100, error_subcode: 33 } }), { status: 400 });
+  const meta = ({ status = [], publish = [], state = "FINISHED", list = [], create = null } = {}) => {
+    const calls = [];
+    const fetcher = async (url, init) => {
+      const u = new URL(url); const body = init.body ? Object.fromEntries(new URLSearchParams(init.body)) : {};
+      calls.push({ method: init.method, path: u.pathname, fields: u.searchParams.get("fields"), body });
+      if (u.pathname.endsWith("/me")) return Response.json({ id: "9" });
+      if (init.method === "POST" && u.pathname.endsWith("/9/threads")) return create ? create() : Response.json({ id: "c1" });
+      if (init.method === "POST" && u.pathname.endsWith("/threads_publish")) { const f = publish.shift(); return f ? f() : Response.json({ id: "p1" }); }
+      if (u.pathname.endsWith("/c1") && u.searchParams.get("fields") === "status,error_message") { const f = status.shift(); return f ? f() : Response.json({ status: "FINISHED" }); }
+      if (u.pathname.endsWith("/c1")) return Response.json({ status: state });
+      if (init.method === "GET" && u.pathname.endsWith("/9/threads")) return Response.json({ data: list });
+      return new Response("{}", { status: 404 });
+    };
+    return { calls, fetcher, publishes: () => calls.filter((c) => c.path.endsWith("/threads_publish")).length };
+  };
+  const acct = { user_id: "9", access_token: "T" };
+  const card = "https://cta.cryptophys.work/media/0123456789abcdef0123456789abcdef.jpg";
+  let clock = Date.parse("2026-11-26T09:10:00Z");
+  const now = () => clock;
+  const slept = [];
+  const sleep = async (ms) => { slept.push(ms); clock += ms; };
+  // An image: published no sooner than 10 s after its create, even when the status already reads FINISHED.
+  const a = meta();
+  assert.deepEqual(await publishThreads({ account: acct, text: "x", imageUrl: card, fetcher: a.fetcher, sleep, now }), { remote_id: "p1", container_id: "c1" });
+  assert.deepEqual(slept, [THREADS_IMAGE_SETTLE_MS]);
+  assert.equal(THREADS_IMAGE_SETTLE_MS, 10_000);
+  slept.length = 0;
+  // The status poll answers "does not exist" once: polled again after 10 s on the same container.
+  const b = meta({ status: [missing] });
+  assert.equal((await publishThreads({ account: acct, text: "x", fetcher: b.fetcher, sleep, now })).remote_id, "p1");
+  assert.deepEqual([slept, b.calls.filter((c) => c.path.endsWith("/9/threads") && c.method === "POST").length], [[10_000], 1], "one container");
+  slept.length = 0;
+  // The publish answers "does not exist" once while the container reads FINISHED: published again, once.
+  const c = meta({ publish: [missing] });
+  assert.equal((await publishThreads({ account: acct, text: "x", fetcher: c.fetcher, sleep, now })).remote_id, "p1");
+  assert.deepEqual([c.publishes(), slept], [2, [10_000]]);
+  slept.length = 0;
+  // Meta took the publish but answered an error: the container reads PUBLISHED, so no second publish; the post is found.
+  const d = meta({ publish: [() => new Response("{}", { status: 500 })], state: "PUBLISHED", list: [{ id: "111", text: "y", timestamp: "2026-11-26T09:10:00+0000" }, { id: "222", text: "x", timestamp: new Date(clock).toISOString() }] });
+  assert.deepEqual(await publishThreads({ account: acct, text: "x", fetcher: d.fetcher, sleep, now }), { remote_id: "222", container_id: "c1", recovered: true });
+  assert.deepEqual([d.publishes(), slept], [1, []], "never posted twice");
+  // Another error, or a container that is not FINISHED: no retry. Three "does not exist" in a row: the publish step fails.
+  const e = meta({ publish: [() => new Response(JSON.stringify({ error: { message: "Invalid parameter", code: 100 } }), { status: 400 })] });
+  await assert.rejects(publishThreads({ account: acct, text: "x", fetcher: e.fetcher, sleep, now }), (err) => err.step === "publish" && /^threads publish: 400 Invalid parameter/.test(err.message));
+  assert.equal(e.publishes(), 1);
+  const f = meta({ publish: [missing], state: "IN_PROGRESS" });
+  await assert.rejects(publishThreads({ account: acct, text: "x", fetcher: f.fetcher, sleep, now }), /threads publish/);
+  assert.equal(f.publishes(), 1, "no retry unless the container reads FINISHED");
+  slept.length = 0;
+  const g = meta({ publish: [missing, missing, missing] });
+  await assert.rejects(publishThreads({ account: acct, text: "x", fetcher: g.fetcher, sleep, now }), (err) => err.step === "publish" && err.code === 100 && err.subcode === 33);
+  assert.deepEqual([g.publishes(), slept], [3, THREADS_MISSING_RETRY_MS]);
+  // The create step is named too.
+  const h = meta({ create: () => new Response(JSON.stringify({ error: { message: "Bad image", code: 9004 } }), { status: 400 }) });
+  await assert.rejects(publishThreads({ account: acct, text: "x", imageUrl: card, fetcher: h.fetcher, sleep, now }), (err) => err.step === "create" && /^threads create: 400 Bad image/.test(err.message));
 });

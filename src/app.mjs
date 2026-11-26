@@ -195,7 +195,7 @@ export async function publishDraft(env, draft, { now = Date.now(), fetcher, slot
   } catch (error) {
     // One telemetry line per failure (orchestrator review, 2026-11-25, after a Threads post failed with its error only
     // in the studio): the id, channel, kind and the error, at most 200 characters, never a token or a URL's query.
-    console.log("cta_publish_failed", JSON.stringify({ id: draft.id, channel: draft.channel, kind: draft.kind, error: safeError(error) }));
+    console.log("cta_publish_failed", JSON.stringify({ id: draft.id, channel: draft.channel, kind: draft.kind, error: safeError(error), step: error?.step ?? null, code: error?.code ?? null, subcode: error?.subcode ?? null }));
     return desk(env).published({ id: draft.id, error: String(error?.message ?? error) }, now);
   }
 }
