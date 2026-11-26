@@ -16,7 +16,7 @@ import { hookScore, hookFormula, openingLine, HOOK_CHECKS } from "../src/agent/h
 import { splitPost, joinPost, checkWritten, writeMode, runWrite, factTokens, WRITE_KINDS, OUTCOME_WORDS } from "../src/agent/write.mjs";
 import { lintPost, textFor } from "../src/agent/lint.mjs";
 import { CHANNELS } from "../src/channels.mjs";
-import { askModel, modelConfig, costOf, wibDayStartIso, MODEL_DEFAULTS, AGENT_SECRETS, MODEL_STOPS } from "../src/agent/router.mjs";
+import { askModel, modelConfig, costOf, wibDayStartIso, MODEL_DEFAULTS, AGENT_SECRETS, MODEL_STOPS, RATE_KEY, rateUntil } from "../src/agent/router.mjs";
 import { weeklySummary, summaryOk, summaryKey } from "../src/agent/weekly.mjs";
 import { triage, checkReply, shapeAnswer, replyMode, runReplies, roomReply, roomOf, ROOM_MAX_AGE_MIN, MARKET_REPLY, DISCLAIMER, REPLY_CHANNELS, REPLY_CAPS, DRY_RUN_HOURS } from "../src/agent/replies.mjs";
 import { autoAt, dueNow, AUTO_WINDOW_MINUTES } from "../src/agent/auto-approve.mjs";
@@ -590,7 +590,7 @@ test("AG18 free only, the token caps, the minute guard (owner 2026-11-25: \"teta
   const env = { REFLECTION_API_KEY: "rk-test" }, msgs = [{ role: "user", content: "hi" }];
   const answer = (status, body) => async () => new Response(JSON.stringify(body), { status, headers: { "reflection-data-retention": "zero" } });
   const none = () => { throw new Error("no call"); };
-  assert.deepEqual(MODEL_STOPS, ["off", "no_key", "budget", "retention", "tokens", "rpm", "paid"]);
+  assert.deepEqual(MODEL_STOPS, ["off", "no_key", "budget", "retention", "tokens", "rpm", "paid", "rate"]);
   // 402, and an answer that reports a cost: off, once, with the reason; the caller falls back
   const p402 = store();
   assert.equal((await askModel(env, p402, { purpose: "write:threads", messages: msgs, fetcher: answer(402, { error: { message: "Payment required" } }) })).skipped, "paid");
@@ -627,4 +627,42 @@ test("AG18 free only, the token caps, the minute guard (owner 2026-11-25: \"teta
   const w2 = [];
   await assert.rejects(waitReady(never, "https://graph.threads.net/v1.0/c1", "T", "status", { sleep: async (ms) => { w2.push(ms); } }), /not ready in time \(last status IN_PROGRESS\)/);
   assert.equal(w2.reduce((a, b) => a + b, 0), 60_000, "60 seconds at the most");
+});
+
+test("AG19 a 429 is a rate stop, never paid: the model stays on and waits for the reset (orchestrator 2026-11-26)", async () => {
+  const store = () => {
+    const s = { settings: { agent_model: { enabled: true } }, calls: [] };
+    return { s, setting: async (k) => (s.settings[k] ? { value: s.settings[k] } : null), saveSetting: async (i) => { s.settings[i.key] = i.value; return true; },
+      record: async (c) => { s.calls.push(c); return true; }, spendSince: async () => ({ calls: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0 }), recent: async () => s.calls };
+  };
+  const env = { REFLECTION_API_KEY: "rk-test" }, msgs = [{ role: "user", content: "hi" }];
+  const answer = (status, body, headers = {}) => async () => new Response(JSON.stringify(body), { status, headers: { "reflection-data-retention": "zero", ...headers } });
+  const none = () => { throw new Error("no call"); };
+  const now = Date.parse("2026-11-26T01:20:00Z");
+  // Reflection's daily free-quota 429, with billing words in it: a rate stop until 00:00 UTC, the model stays on.
+  const daily = store();
+  const r = await askModel(env, daily, { purpose: "write:threads", messages: msgs, now, fetcher: answer(429, { error: { code: "rate_limit_exceeded", message: "Daily token limit reached. Upgrade your plan for higher limits." } }) });
+  assert.deepEqual([r.ok, r.skipped, r.until], [false, "rate", "2026-11-27T00:00:00.000Z"]);
+  assert.equal(daily.s.settings.agent_model.enabled, true, "never turned off by a 429");
+  assert.deepEqual([daily.s.calls[0].status, daily.s.calls[0].detail], ["http_429", "rate"]);
+  assert.deepEqual(daily.s.settings[RATE_KEY], { until: "2026-11-27T00:00:00.000Z", reason: "rate_limit_exceeded" });
+  assert.equal((await askModel(env, daily, { purpose: "t", messages: msgs, now: now + 3_600_000, fetcher: none })).skipped, "rate", "no call while it waits");
+  const after = await askModel(env, daily, { purpose: "t", messages: msgs, now: Date.parse("2026-11-27T00:00:01Z"), fetcher: answer(200, { choices: [{ message: { content: "ok" } }] }) });
+  assert.equal(after.ok, true, "called again after the reset");
+  // A per-minute 429: Retry-After, else 60 seconds.
+  const minute = store();
+  assert.equal((await askModel(env, minute, { purpose: "t", messages: msgs, now, fetcher: answer(429, { error: { message: "Too many requests" } }, { "retry-after": "17" }) })).until, "2026-11-26T01:20:17.000Z");
+  assert.equal((await askModel(env, store(), { purpose: "t", messages: msgs, now, fetcher: answer(429, { error: { message: "subscription limit, slow down" } }) })).until, "2026-11-26T01:21:00.000Z");
+  assert.equal(rateUntil("", "Thu, 26 Nov 2026 01:25:00 GMT", now), Date.parse("2026-11-26T01:25:00Z"));
+  assert.equal(rateUntil("per day", "17", now), Date.parse("2026-11-27T00:00:00Z"), "a daily limit waits for 00:00 UTC");
+  // A 403 with billing words is still paid; a 5xx with billing words is not.
+  const p403 = store();
+  assert.equal((await askModel(env, p403, { purpose: "t", messages: msgs, now, fetcher: answer(403, { error: { code: "insufficient_balance", message: "Upgrade to a paid plan" } }) })).skipped, "paid");
+  assert.equal(p403.s.settings.agent_model.enabled, false);
+  const p500 = store();
+  const e = await askModel(env, p500, { purpose: "t", messages: msgs, now, fetcher: answer(503, { error: { message: "billing service unavailable" } }) });
+  assert.deepEqual([e.ok, e.skipped, e.status, p500.s.settings.agent_model.enabled], [false, undefined, 503, true], "a 5xx is an error, never paid");
+  // cta-write stops quietly on a rate stop (the template stays).
+  const deps = { candidates: async () => [{ id: "p", kind: "pattern", channel: "threads", text: "Education · x\nbody 1\n\nNot financial advice." }], ask: async () => ({ ok: false, skipped: "rate" }), check: () => ({ pass: true }), record: async () => { throw new Error("no record"); } };
+  assert.equal((await runWrite("threads", deps)).stopped, "rate");
 });

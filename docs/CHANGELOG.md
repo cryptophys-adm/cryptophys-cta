@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-26 (a 429 is a rate stop, never paid)
+- fix(router): a 429 from Reflection is now always a rate stop and never counts as paid, whatever its text says. From the orchestrator, 26 Nov, the same rule as the platform and xauusd copies.
+  - Before, in free-only mode, the billing words ("upgrade", "credit", "subscription") were checked on every error. Reflection's daily free-quota 429 ("... upgrade your plan for higher limits") would have turned the model off until an approver turned it on again.
+  - The model now stays on and the router waits. It waits until 00:00 UTC when the text names a daily limit, otherwise for Retry-After, otherwise 60 seconds. The wait is kept in studio setting `agent_model_rate`. Calls skip with `rate` (in `MODEL_STOPS`), each 429 logs `cta_model_rate`, and posts keep their templates.
+  - Paid is now only:
+    - a 402;
+    - billing words on another 4xx, never on a 5xx;
+    - a cost above 0 on a 2xx answer.
+  - Test AG19 covers a 429 that says "upgrade your plan" (rate, the model stays on), a 403 with billing words (paid) and a 5xx with billing words (not paid). SSOT also notes, from the review of #97, that the pattern history counts unpublished drafts too.
+
 ## 2026-11-25 (a confirmed pattern is posted once)
 - fix(analysis): a confirmed chart pattern is posted once per channel, not again every hour while xauusd keeps it. Owner, 25 Nov: "chart pattern kalau sudah dipost jangan dipost ulang, dia ditrigger oleh xauusd ketika ada confirmed jadi tidak mengikuti tiap jam".
   - The cause: the draft id holds the pattern's rounded upper and lower bounds, and xauusd moves a fitted line's end every bar. Telegram got the H1 rounding top at 15:15 (3690:3571) and again at 17:09 (3690:3575), and the H1 descending right-angled broadening at 16:09 (3600:3483) and again at 17:09 (3602:3479).
