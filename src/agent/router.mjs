@@ -26,8 +26,26 @@ export const AGENT_SECRETS = Object.freeze(["REFLECTION_API_KEY"]);
 export const MODEL_DEFAULTS = Object.freeze({ base: "https://api.reflection.ai/openai/v1", model: "Beam-1.0-501B-A23B", daily_usd: 1, price_in: 0.4, price_out: 1.2,
   free_only: true, tokens_in_day: 1_000_000, tokens_out_day: 200_000, rpm: 20 });
 /** The skips that end a run quietly: the caller falls back (the template, or no reply) and tries again later. */
-export const MODEL_STOPS = Object.freeze(["off", "no_key", "budget", "retention", "tokens", "rpm", "paid"]);
+export const MODEL_STOPS = Object.freeze(["off", "no_key", "budget", "retention", "tokens", "rpm", "paid", "rate"]);
 const BILLING = /billing|credit|payment|insufficient[_ ]?(funds|balance)|prepaid|paid[_ ]?plan|upgrade|subscription/i;
+/** A 429's wait when it names no daily limit and gives no Retry-After. */
+export const RATE_BACKOFF_MS = 60_000;
+/** The studio setting that holds a 429's wait: { until, reason }. The model stays on. */
+export const RATE_KEY = "agent_model_rate";
+const DAILY = /\b(day|daily|per[ _-]?day|24[ _-]?h(ours?)?)\b/i;
+/**
+ * Pure: until when the router waits after a 429 (orchestrator 2026-11-26: a 429 is always a rate stop, never paid,
+ * whatever its text says). A daily limit waits until 00:00 UTC; otherwise Retry-After (seconds or an HTTP date),
+ * else RATE_BACKOFF_MS.
+ */
+export function rateUntil(said, retryAfter, now = Date.now()) {
+  if (DAILY.test(String(said ?? ""))) return Math.floor(now / DAY) * DAY + DAY;
+  const ra = String(retryAfter ?? "").trim();
+  if (/^\d+$/.test(ra)) return now + Math.min(Number(ra), 86_400) * 1000;
+  const at = Date.parse(ra);
+  if (ra && Number.isFinite(at) && at > now) return Math.min(at, now + DAY);
+  return now + RATE_BACKOFF_MS;
+}
 const WIB = 7 * 3_600_000;
 const DAY = 86_400_000;
 const pos = (v, d) => (Number.isFinite(Number(v)) && Number(v) >= 0 && String(v).trim() !== "" ? Number(v) : d);
@@ -68,6 +86,9 @@ export async function askModel(env, store, { purpose, messages, maxTokens = 2000
   if (spent.tokens_in >= cfg.tokens_in_day || spent.tokens_out >= cfg.tokens_out_day) return { ok: false, skipped: "tokens", tokens_in: spent.tokens_in, tokens_out: spent.tokens_out };
   const minute = await store.spendSince(new Date(now - 60_000).toISOString());
   if (minute.calls >= cfg.rpm) return { ok: false, skipped: "rpm", calls_last_minute: minute.calls };
+  const wait = await store.setting(RATE_KEY).catch(() => null);
+  const waitUntil = Date.parse(wait?.value?.until);
+  if (Number.isFinite(waitUntil) && now < waitUntil) return { ok: false, skipped: "rate", until: wait.value.until };
   const log = (c) => store.record({ purpose, model: cfg.model, ...c }).catch(() => false);
   // Free only: the model goes off with the reason (the studio shows it) and one log line; callers fall back.
   const turnOff = async (reason) => {
@@ -97,7 +118,18 @@ export async function askModel(env, store, { purpose, messages, maxTokens = 2000
   }
   const billed = Number(body?.usage?.cost ?? body?.usage?.total_cost ?? body?.cost ?? 0);
   const said = `${body?.error?.code ?? ""} ${body?.error?.type ?? ""} ${body?.error?.message ?? ""}`;
-  if (cfg.free_only && (res.status === 402 || BILLING.test(said) || (Number.isFinite(billed) && billed > 0))) {
+  // A 429 is a rate stop, never paid, whatever its text says (Reflection's daily free-quota 429 reads "... upgrade your
+  // plan for higher limits"): the router waits for the reset and the model stays on; posts keep their templates.
+  if (res.status === 429) {
+    const until = new Date(rateUntil(said, res.headers.get("retry-after"), now)).toISOString();
+    await log({ status: "http_429", retention, ...usage, cost_usd, detail: "rate" });
+    await store.saveSetting({ key: RATE_KEY, value: { until, reason: String(body?.error?.code ?? body?.error?.type ?? "rate_limited").slice(0, 60) }, actor: "cta-agent" }).catch(() => null);
+    console.log("cta_model_rate", JSON.stringify({ purpose, until }));
+    return { ok: false, skipped: "rate", until };
+  }
+  // Paid: a 402, a cost above 0 on a 2xx, or billing words on another 4xx (never on a 5xx).
+  const billingRefusal = res.status >= 400 && res.status < 500 && BILLING.test(said);
+  if (cfg.free_only && (res.status === 402 || billingRefusal || (res.ok && Number.isFinite(billed) && billed > 0))) {
     await log({ status: res.status === 402 ? "http_402" : billed > 0 ? "billed" : `http_${res.status}`, retention, ...usage, cost_usd, detail: "paid" });
     await turnOff(`Reflection asked for payment or reported a cost (${res.status === 402 ? "402" : billed > 0 ? `cost ${billed}` : String(body?.error?.code ?? res.status).slice(0, 40)}): the model is off until an approver turns it on; posts keep their templates`);
     return { ok: false, skipped: "paid" };
