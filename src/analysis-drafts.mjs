@@ -182,6 +182,17 @@ const CHART_HOURS = Object.freeze({ H1: 1, H4: 4, D1: 24 });
 export const patternLookbackMs = (chart) => PATTERN_REPEAT_BARS * (CHART_HOURS[chart] ?? 24) * 3_600_000;
 /** The longest lookback of any chart: how far back the scheduled run reads its pattern drafts. */
 export const PATTERN_LOOKBACK_MS = Math.max(...Object.keys(CHART_HOURS).map(patternLookbackMs));
+/**
+ * A pattern is posted when it becomes confirmed, not again while it stays so (owner 2026-11-25: "dia ditrigger oleh
+ * xauusd ketika ada confirmed jadi tidak mengikuti tiap jam"). A rising or falling wedge moves its whole band each bar,
+ * so the band check alone missed it (H1 rising wedge on Threads at 06:09, 3618:3606, and 07:09, 3622:3620, on 26 Nov):
+ * each run keeps the chart:pattern:status keys it saw (studio setting PATTERN_SEEN_KEY), and a pattern the previous
+ * run already saw is not drafted again, whatever its band.
+ */
+export const PATTERN_SEEN_KEY = "analysis_patterns_seen";
+export const patternSeenKey = (p) => `${p.chart}:${p.pattern}:${p.status}`;
+/** Pure: the keys of the confirmed patterns this run read (what the next run compares with). */
+export const seenPatternKeys = (analysis) => [...new Set(draftedPatterns(analysis).map(patternSeenKey))].sort();
 /** Pure: a pattern draft id read back (pattern:<chart>:<pattern>:<status>:<upper>:<lower>:<channel>), or null. */
 export function patternOfId(id) {
   const m = /^pattern:(H1|H4|D1):([a-z0-9_]+):(forming|confirmed):(-?\d+):(-?\d+):([a-z0-9_]+)$/.exec(String(id ?? ""));
@@ -243,7 +254,7 @@ function linesOf(p) {
  * `known` the pattern keys already drafted, `history` the recent pattern drafts ({ id, created_at }), so a confirmed
  * pattern is posted once while xauusd keeps it, even as its lines move (patternDrafted).
  */
-export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS, levelsRun = false, postedToday = {}, known = new Set(), knownLevels = new Set(), history = [] } = {}) {
+export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS, levelsRun = false, postedToday = {}, known = new Set(), knownLevels = new Set(), history = [], seenBefore = new Set() } = {}) {
   const day = new Date(now).toISOString().slice(0, 10);
   const out = [];
   const perChart = Boolean(analysis?.zones_by_chart && analysis?.closed);
@@ -262,7 +273,7 @@ export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS
     for (const p of draftedPatterns(analysis)) {
       if (room <= 0) break;
       const id = `pattern:${patternKey(p)}:${channel}`;
-      if (known.has(id) || patternDrafted(p, channel, history, now)) continue;
+      if (known.has(id) || seenBefore.has(patternSeenKey(p)) || patternDrafted(p, channel, history, now)) continue;
       const text = patternText(p, analysis, { channel });
       if (!text) continue;
       out.push(draft({ id, kind: "pattern", channel, text, now, overlay: overlayOf(analysis, { pattern: p }) }));
