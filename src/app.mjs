@@ -1,7 +1,7 @@
 // The CTA app's logic: the HTTP face, the drafting runs and publishing (no Workers-runtime import, so the tests
 // run it under Node). src/index.mjs holds the Durable Object and the RPC entrypoints.
 import { dailyDrafts } from "./drafts.mjs";
-import { analysisDrafts, PATTERN_LOOKBACK_MS } from "./analysis-drafts.mjs";
+import { analysisDrafts, PATTERN_LOOKBACK_MS, PATTERN_SEEN_KEY, seenPatternKeys } from "./analysis-drafts.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "./channels.mjs";
 import { publishTo, publishingQuota, refreshToken, tiktokAccessToken, googleAccessToken, REFRESH_AFTER_DAYS, isBusinessToken, threadsReplies, publishThreadsReply } from "./publishers.mjs";
 import { verifyAccessJwt } from "./access.mjs";
@@ -247,11 +247,15 @@ export async function draftAnalysis(env, { now = Date.now() } = {}) {
   const known = new Set(await d.idsWithPrefix("pattern:"));
   const history = await d.draftsSince("pattern:", new Date(now - PATTERN_LOOKBACK_MS).toISOString());
   const knownLevels = new Set(await d.idsWithPrefix("levels:"));
+  const seen = await d.studioSetting(PATTERN_SEEN_KEY);
+  const seenBefore = new Set(Array.isArray(seen?.value?.keys) ? seen.value.keys : []);
   const postedToday = await d.kindCounts("pattern", new Date(now).toISOString().slice(0, 10));
   const { settings } = await channelSettings(env);
   const dropped = [];
-  const drafts = await settled(env, analysisDrafts(analysis, { now, channels: draftingChannels(channelsOf(env), settings), levelsRun: new Date(now).getUTCHours() === 6, postedToday, known, knownLevels, history }), settings, now, dropped);
+  const drafts = await settled(env, analysisDrafts(analysis, { now, channels: draftingChannels(channelsOf(env), settings), levelsRun: new Date(now).getUTCHours() === 6, postedToday, known, knownLevels, history, seenBefore }), settings, now, dropped);
   const added = drafts.length ? await d.add(drafts, now) : [];
+  // Only a reading with its patterns list moves the seen set (a failed read must not make every pattern new again).
+  if (Array.isArray(analysis?.patterns)) await d.saveStudioSetting({ key: PATTERN_SEEN_KEY, value: { at: new Date(now).toISOString(), keys: seenPatternKeys(analysis) }, actor: "cta-agent" }, now);
   // What the run read, for its log every hour (orchestrator review, 2026-11-25, after the 07:09 UTC miss): each chart's
   // latest close and how many zones it has, and each draft left out with why.
   const read = analysisRead(analysis);
