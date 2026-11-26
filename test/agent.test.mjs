@@ -613,7 +613,7 @@ test("AG18 free only, the token caps, the minute guard (owner 2026-11-25: \"teta
   const { safeError } = await import("../src/app.mjs");
   assert.equal(safeError(new Error("threads 400: bad https://graph.threads.net/v1.0/1/threads?access_token=EAAB123 token=abcdefabcdefabcdefabcdefabcdefabcdef")), "threads 400: bad https://graph.threads.net/v1.0/1/threads token=…");
   assert.ok(safeError("x".repeat(500)).length <= 200);
-  assert.match(read("src/app.mjs"), /console\.log\("cta_publish_failed", JSON\.stringify\(\{ id: draft\.id, channel: draft\.channel, kind: draft\.kind, error: safeError\(error\) \}\)\);/);
+  assert.match(read("src/app.mjs"), /console\.log\("cta_publish_failed", JSON\.stringify\(\{ id: draft\.id, channel: draft\.channel, kind: draft\.kind, error: safeError\(error\), step: error\?\.step \?\? null, code: error\?\.code \?\? null, subcode: error\?\.subcode \?\? null \}\)\);/);
   // the Threads container wait: up to about 60 seconds, the platform's message kept
   const { waitReady, WAIT_STEPS_MS } = await import("../src/publishers.mjs");
   assert.equal(WAIT_STEPS_MS.reduce((a, b) => a + b, 0), 60_000);

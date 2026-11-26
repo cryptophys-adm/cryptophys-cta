@@ -36,7 +36,7 @@ async function call(fetcher, method, url, params) {
   try { body = await res.json(); } catch { body = null; }
   if (!res.ok || body?.error) {
     const e = new Error(`${res.status} ${String(body?.error?.message ?? "request failed").slice(0, 200)}`);
-    e.status = res.status; e.code = body?.error?.code ?? null;
+    e.status = res.status; e.code = body?.error?.code ?? null; e.subcode = body?.error?.error_subcode ?? null;
     throw e;
   }
   return body;
@@ -72,11 +72,19 @@ export async function waitReady(fetcher, url, token, field, { sleep, polls = STA
   throw new Error(`container not ready in time (last status ${last || "none"})`);
 }
 
+/** An IMAGE container is published no sooner than this after its create (Meta: wait before publishing an image). */
+export const THREADS_IMAGE_SETTLE_MS = 10_000;
+/** Meta's "does not exist" on a fresh container (code 100) is retried on the same step after these waits. */
+export const THREADS_MISSING_RETRY_MS = Object.freeze([10_000, 20_000]);
+const isMissing = (e) => Number(e?.code) === 100 && /does not exist/i.test(String(e?.message ?? ""));
+/** The step a Threads error came from, in its message (create, status, publish), Meta's code and subcode kept. */
+const stepped = (step, e) => { const x = new Error(`threads ${step}: ${String(e?.message ?? e)}`); x.status = e?.status ?? null; x.code = e?.code ?? null; x.subcode = e?.subcode ?? null; x.step = step; return x; };
+
 /**
  * One Threads text post. `account` is { user_id, access_token }. Returns { remote_id } (the published post's id),
  * or { dry_run: true, requests } when `dryRun`.
  */
-export async function publishThreads({ account, text: draftText, imageUrl = null, topicTag = THREADS_TOPIC_TAG, fetcher = (...a) => fetch(...a), dryRun = false, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export async function publishThreads({ account, text: draftText, imageUrl = null, topicTag = THREADS_TOPIC_TAG, fetcher = (...a) => fetch(...a), dryRun = false, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), now = () => Date.now() }) {
   const uid = String(account?.user_id ?? "");
   // One topic tag through the API and no in-text hashtag line, no invisible character (owner 2026-11-25, the CTA
   // agent's Checks; src/agent/lint.mjs): a draft made before the topic tag loses its "#XAUUSD #gold #education".
@@ -90,10 +98,42 @@ export async function publishThreads({ account, text: draftText, imageUrl = null
   if (!uid || !account?.access_token) throw new Error("threads account not configured");
   if (imageUrl && !/^https:\/\//.test(String(imageUrl))) throw new Error("threads needs a public https image URL");
   const id = await liveUserId("threads", account, fetcher);
-  const container = await call(fetcher, "POST", `${THREADS_BASE}/${id}/threads`, create.params);
-  await waitReady(fetcher, `${THREADS_BASE}/${container.id}`, account.access_token, "status", { sleep });
-  const post = await call(fetcher, "POST", `${THREADS_BASE}/${id}/threads_publish`, { ...publish.params, creation_id: container.id });
-  return { remote_id: String(post.id), container_id: String(container.id) };
+  // 26 Nov, 00:10 and 09:10 UTC: "400 The requested resource does not exist" about 4 s after Meta fetched the card. The
+  // step is named in the error; an image is given THREADS_IMAGE_SETTLE_MS; a "does not exist" on the status poll or
+  // the publish is retried on the same container, and a publish only while the container reads FINISHED: never twice.
+  let container;
+  try { container = await call(fetcher, "POST", `${THREADS_BASE}/${id}/threads`, create.params); } catch (e) { throw stepped("create", e); }
+  const created = now();
+  const statusUrl = `${THREADS_BASE}/${container.id}`;
+  const ready = async () => {
+    for (let i = 0; ; i++) {
+      try { return await waitReady(fetcher, statusUrl, account.access_token, "status", { sleep }); }
+      catch (e) { if (!isMissing(e) || i >= THREADS_MISSING_RETRY_MS.length) throw stepped("status", e); await sleep(THREADS_MISSING_RETRY_MS[i]); }
+    }
+  };
+  await ready();
+  if (imageUrl) { const left = THREADS_IMAGE_SETTLE_MS - (now() - created); if (left > 0) await sleep(left); }
+  for (let i = 0; ; i++) {
+    try {
+      const post = await call(fetcher, "POST", `${THREADS_BASE}/${id}/threads_publish`, { ...publish.params, creation_id: container.id });
+      return { remote_id: String(post.id), container_id: String(container.id) };
+    } catch (e) {
+      // Before any retry, the container's own state: published already (Meta took it), the post is found, never sent again.
+      const state = await call(fetcher, "GET", statusUrl, { fields: "status", access_token: account.access_token }).then((s) => String(s?.status ?? "").toUpperCase(), () => "");
+      if (state === "PUBLISHED") return { remote_id: await threadsPostOf(fetcher, id, account.access_token, text, created), container_id: String(container.id), recovered: true };
+      if (!isMissing(e) || state !== "FINISHED" || i >= THREADS_MISSING_RETRY_MS.length) throw stepped("publish", e);
+      await sleep(THREADS_MISSING_RETRY_MS[i]);
+    }
+  }
+}
+
+/** The id of our newest Threads post with this text made since `since` (a publish Meta took but did not answer), or null. */
+async function threadsPostOf(fetcher, uid, token, text, since) {
+  try {
+    const b = await call(fetcher, "GET", `${THREADS_BASE}/${uid}/threads`, { fields: "id,text,timestamp", limit: 10, access_token: token });
+    const hit = (b?.data ?? []).find((p) => String(p?.text ?? "") === text && Date.parse(p?.timestamp ?? "") >= since - 60_000);
+    return hit && /^\d+$/.test(String(hit.id)) ? String(hit.id) : null;
+  } catch { return null; }
 }
 
 /**
