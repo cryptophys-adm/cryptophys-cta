@@ -229,15 +229,21 @@ async function settled(env, drafts, settings, now, dropped = null) {
   return applySettings(drafts, settings, { today, recheck: (d) => recheck(d, { delayHours: delayOf(env), now }), dropped });
 }
 
-/** The daily recap drafts (decisions older than 24 hours), queued once. */
+/**
+ * The daily recap drafts, queued once: the 24 hours that end the projection's own delay before now (the last 24 hours
+ * at delay 0; owner 2026-11-26: "1.a"). Up to RECAPS_LIMIT rows (xauusd RC1; before it the RPC gave 50, which
+ * `dailyDrafts` notices and drafts nothing: `cut` in the log).
+ */
+export const RECAPS_LIMIT = 200;
 export async function draftDay(env, { now = Date.now() } = {}) {
-  const projection = await env.PROJECTION.recaps({ days: 3 });
+  const projection = await env.PROJECTION.recaps({ days: 2, limit: RECAPS_LIMIT });
   const { settings } = await channelSettings(env);
-  const made = dailyDrafts(projection?.recaps ?? [], { now, channels: draftingChannels(channelsOf(env), settings), delayHours: delayOf(env) });
+  const windowDelayHours = Number.isFinite(Number(projection?.delay_hours)) ? Number(projection.delay_hours) : 24;
+  const made = dailyDrafts(projection?.recaps ?? [], { now, channels: draftingChannels(channelsOf(env), settings), delayHours: delayOf(env), windowDelayHours });
   const summary = made.summary;
   const drafts = await settled(env, made.drafts, settings, now);
   const added = drafts.length ? await desk(env).add(drafts, now) : [];
-  return { bars: summary.bars, drafts: drafts.map((d) => ({ id: d.id, status: d.status })), added };
+  return { bars: summary.bars, window_delay_hours: windowDelayHours, ...(summary.cut ? { cut: true, rows: (projection?.recaps ?? []).length } : {}), drafts: drafts.map((d) => ({ id: d.id, status: d.status })), added };
 }
 
 /** The real-time analysis drafts (key-level map at 06 UTC, pattern posts every hour), queued once. */
@@ -474,8 +480,9 @@ async function composeContext(env, kind, { now, analysis = false, ref = null }) 
     return { warroom, decisionTimes: [] };
   }
   if (kind === "daily_recap") {
-    const p = await env.PROJECTION.recaps({ days: 3 });
-    return { recaps: p?.recaps ?? [], decisionTimes: recapWindow(p?.recaps ?? [], now).summary?.decision_times ?? [] };
+    const p = await env.PROJECTION.recaps({ days: 2, limit: RECAPS_LIMIT });
+    const recapDelayHours = Number.isFinite(Number(p?.delay_hours)) ? Number(p.delay_hours) : 24;
+    return { recaps: p?.recaps ?? [], recapDelayHours, decisionTimes: recapWindow(p?.recaps ?? [], now, recapDelayHours).summary?.decision_times ?? [] };
   }
   if (analysis && (kind === "key_levels" || kind === "pattern")) return { analysis: await env.PROJECTION.analysis(), decisionTimes: [] };
   return { decisionTimes: [] };
@@ -924,7 +931,7 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
           const at = now ? now * 1000 : Date.now();
           const ctx = await composeContext(env, kind, { now: at, analysis: true, ref: url.searchParams.get("ref") });
           const { settings } = await channelSettings(env);
-          return { ...templateTexts(kind, { channels, settings, analysis: ctx.analysis, recaps: ctx.recaps, warroom: ctx.warroom, ref: url.searchParams.get("ref"), now: at }), kinds: COMPOSE_KINDS, kind_names: COMPOSE_KIND_NAMES };
+          return { ...templateTexts(kind, { channels, settings, analysis: ctx.analysis, recaps: ctx.recaps, recapDelayHours: ctx.recapDelayHours, warroom: ctx.warroom, ref: url.searchParams.get("ref"), now: at }), kinds: COMPOSE_KINDS, kind_names: COMPOSE_KIND_NAMES };
         }, "template_failed");
       }
       if (route === "POST /api/studio/check") {

@@ -1156,3 +1156,19 @@ test("the public Archive: a pattern posted again before #97 and #100 shows once,
   assert.equal(getDraft(d.sql, "pattern:H1:wedge_rising:confirmed:3622:3620:threads").status, "published");
   assert.deepEqual(onePatternPost([{ id: "manual:x:threads", published_at: "2026-11-26T00:00:00Z" }]).length, 1);
 });
+
+test("the daily recap asks for 2 days and up to 200 rows and drafts the projection's last 24 hours (owner 2026-11-26: \"1.a\")", async () => {
+  const now = Date.parse("2026-11-26T22:17:00Z");
+  const asked = [];
+  const rows = Array.from({ length: 96 }, (_, i) => ({ bar_close: new Date(now - 60_000 - i * 15 * 60_000).toISOString(), stance: "WAIT", bias: "NEUTRAL", session: "london" }));
+  const base = env({ CONTENT_CHANNELS: "threads" });
+  const e = { ...base.env, PROJECTION: { ...base.env.PROJECTION, recaps: async (input) => { asked.push(input); return { delay_hours: 0, recaps: rows }; } } };
+  const { draftDay } = await import("../src/app.mjs");
+  const r = await draftDay(e, { now });
+  assert.deepEqual(asked, [{ days: 2, limit: 200 }]);
+  assert.deepEqual([r.bars, r.window_delay_hours, r.added], [96, 0, ["daily:2026-11-26:threads"]]);
+  // Before xauusd RC1 the RPC still gives 50 rows: nothing is drafted, and the log says the reply was cut.
+  const old = { ...base.env, PROJECTION: { ...base.env.PROJECTION, recaps: async () => ({ delay_hours: 0, recaps: rows.slice(0, 50) }) } };
+  const c = await draftDay(old, { now });
+  assert.deepEqual([c.cut, c.rows, c.added], [true, 50, []]);
+});
