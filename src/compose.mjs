@@ -8,7 +8,7 @@ import { checkContentDraft } from "./guardian.mjs";
 import { CHANNELS, CHANNEL_SPECS, TEXT_LIMITS } from "./channels.mjs";
 import { KINDS } from "./settings.mjs";
 import { swapHashtags } from "./settings.mjs";
-import { CHART_CREDIT, SHORT_DISCLAIMER, dailyRecapText, summarizeDay } from "./drafts.mjs";
+import { CHART_CREDIT, SHORT_DISCLAIMER, dailyRecapText, summarizeDay, recapSpan } from "./drafts.mjs";
 import { ANALYSIS_DISCLAIMER, keyLevelsText, patternText, postablePatterns, patternKey, overlayOf, hasImage } from "./analysis-drafts.mjs";
 import { LEVEL_KINDS } from "./desk.mjs";
 import { initialStatus } from "./channels.mjs";
@@ -23,10 +23,9 @@ export function customTemplate(channel, hashtags) {
   return ["Education · XAUUSD", "", "", "", ...(hasImage(channel) ? [CHART_CREDIT] : []), channel === "x" ? SHORT_DISCLAIMER : ANALYSIS_DISCLAIMER, ...[hashtags].filter(Boolean)].join("\n");
 }
 
-/** The recap window the engine uses (decisions between 48 and 24 hours old) and its summary. */
-export function recapWindow(recaps, now) {
-  const to = new Date(now - 24 * 3_600_000).toISOString();
-  const from = new Date(now - 48 * 3_600_000).toISOString();
+/** The recap window the engine uses (the 24 hours that end the projection's delay before now; drafts.mjs recapSpan) and its summary. */
+export function recapWindow(recaps, now, delayHours = 24) {
+  const { from, to } = recapSpan(now, delayHours);
   return { from, to, summary: summarizeDay(recaps ?? [], { from, to }) };
 }
 
@@ -34,7 +33,7 @@ export function recapWindow(recaps, now) {
  * Pure: a template's text per channel. `analysis` (key levels, patterns) and `recaps` come from the projection.
  * Returns { kind, ref, options, texts: { channel: text | null }, note }.
  */
-export function templateTexts(kind, { channels, settings, analysis = null, recaps = null, warroom = null, ref = null, now = Date.now() }) {
+export function templateTexts(kind, { channels, settings, analysis = null, recaps = null, recapDelayHours = 24, warroom = null, ref = null, now = Date.now() }) {
   const tags = (c) => settings?.[c]?.hashtags;
   const out = { kind, ref: null, options: [], texts: {}, note: null };
   if (kind === "custom") { for (const c of channels) out.texts[c] = customTemplate(c, tags(c)); return out; }
@@ -56,9 +55,9 @@ export function templateTexts(kind, { channels, settings, analysis = null, recap
     if (!warroom || warroom.error) out.note = `No reading from this source right now${warroom?.error ? ` (${warroom.error})` : ""}.`;
     else if (warroom.at) out.at = warroom.at;
   } else if (kind === "daily_recap") {
-    const w = recapWindow(recaps, now);
+    const w = recapWindow(recaps, now, recapDelayHours);
     for (const c of channels) out.texts[c] = dailyRecapText(w.summary, { channel: c, dayIso: w.to });
-    if (!w.summary?.bars) out.note = "No recap: the projection has no decisions in the recap window (48 to 24 hours ago).";
+    if (!w.summary?.bars) out.note = `No recap: the projection has no decisions in the recap window (${Number(recapDelayHours) > 0 ? `${Number(recapDelayHours) + 24} to ${Number(recapDelayHours)} hours ago` : "the last 24 hours"}).`;
   } else return { ...out, error: "unknown kind" };
   for (const c of channels) if (out.texts[c]) out.texts[c] = swapHashtags(out.texts[c], c, tags(c));
   if (analysis?.at && kind !== "daily_recap" && kind !== "warroom") out.at = analysis.at;

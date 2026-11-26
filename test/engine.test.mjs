@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { dailyDrafts, dailyRecapText, summarizeDay, dateId, TEXT_LIMITS } from "../src/drafts.mjs";
+import { dailyDrafts, dailyRecapText, summarizeDay, dateId, TEXT_LIMITS, recapSpan, recapsCut, RECAPS_OLD_CAP } from "../src/drafts.mjs";
 import { addDrafts, listDrafts, decideDraft, recordPublish, deskCounts, getDraft, draftEvents, storeToken, storedToken } from "../src/desk.mjs";
 import { publishThreads, publishInstagram, publishingQuota, refreshToken, THREADS_BASE, INSTAGRAM_BASE, FACEBOOK_GRAPH_BASE, THREADS_IMAGE_SETTLE_MS, THREADS_MISSING_RETRY_MS } from "../src/publishers.mjs";
 import { identify } from "../src/oauth.mjs";
@@ -341,4 +341,26 @@ test("Threads: the failing step is named; an image settles 10 s; \"does not exis
   // The create step is named too.
   const h = meta({ create: () => new Response(JSON.stringify({ error: { message: "Bad image", code: 9004 } }), { status: 400 }) });
   await assert.rejects(publishThreads({ account: acct, text: "x", imageUrl: card, fetcher: h.fetcher, sleep, now }), (err) => err.step === "create" && /^threads create: 400 Bad image/.test(err.message));
+});
+
+test("the recap window follows the projection's delay: the last 24 hours at 0 (owner 2026-11-26: \"1.a\"); a reply cut at 50 rows drafts nothing", () => {
+  const now = Date.parse("2026-11-26T22:17:00Z");
+  assert.deepEqual(recapSpan(now, 0), { from: "2026-11-25T22:17:00.000Z", to: "2026-11-26T22:17:00.000Z" });
+  assert.deepEqual(recapSpan(now, 24), { from: "2026-11-24T22:17:00.000Z", to: "2026-11-25T22:17:00.000Z" });
+  for (const d of [0, 24, 6]) { const w = recapSpan(now, d); assert.equal(Date.parse(w.to) - Date.parse(w.from), 24 * 3_600_000, "exactly 24 hours"); }
+  assert.deepEqual(recapSpan(now, "x"), recapSpan(now, 24), "an unreadable delay keeps 24");
+  const bars = (endMs, n) => Array.from({ length: n }, (_, i) => ({ bar_close: new Date(endMs - i * 15 * 60_000).toISOString(), stance: i % 3 ? "WAIT" : "BUY", bias: "NEUTRAL", session: "london" }));
+  // Delay 0: the 96 bars of the last 24 hours.
+  const live = dailyDrafts(bars(now - 60_000, 96), { now, channels: ["threads"], delayHours: 0, windowDelayHours: 0 });
+  assert.equal(live.summary.bars, 96);
+  assert.equal(live.drafts.length, 1);
+  assert.equal(live.drafts[0].id, "daily:2026-11-26:threads");
+  assert.equal(live.drafts[0].guardian.pass, true, JSON.stringify(live.drafts[0].guardian));
+  // Delay 24: the bars 48 to 24 hours ago, as before.
+  const held = dailyDrafts(bars(now - 24 * 3_600_000 - 60_000, 96), { now, channels: ["threads"], windowDelayHours: 24 });
+  assert.equal(held.summary.bars, 96);
+  // The old 50-row cap (before xauusd RC1): 50 bars that stop 12.5 hours short of the window's start draft nothing.
+  const cut = dailyDrafts(bars(now - 60_000, RECAPS_OLD_CAP), { now, channels: ["threads"], windowDelayHours: 0 });
+  assert.deepEqual([cut.drafts.length, cut.summary.cut, cut.summary.bars], [0, true, 0]);
+  assert.equal(recapsCut(bars(now - 60_000, 40), recapSpan(now, 0).from), false, "a short day is not a cut reply");
 });

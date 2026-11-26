@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-26 (the daily recap: the last 24 hours)
+- fix(recap): the daily recap now covers the 24 hours that end at the projection's own `delay_hours` before its run. At delay 0 that is the last 24 hours. Owner, 26 Nov: "1.a".
+  - Why: since RT1 (delay 0), the recaps RPC's newest 50 rows were all from the last ~12.5 hours. CTA's fixed 48-to-24-hours window therefore found none, and `cta_recap_drafts` logged bars 0 on 25 and 26 Nov (28 on 24 Nov).
+  - CTA asks `recaps({ days: 2, limit: 200 })`, which needs xauusd RC1 to take effect. Until then, a reply cut at 50 rows short of the window drafts nothing and logs `cut`; CTA never posts a recap of part of the day.
+  - Create's recap template uses the same window.
+  - No public wording changes: the recap text names the date, not "yesterday".
+  - New tests in `test/engine.test.mjs` and `test/app.test.mjs`.
+
 ## 2026-11-26 (Threads: the step named, an image settles, safe retries)
 - fix(threads): two Threads posts failed on 26 Nov (00:10 and 09:10 UTC) with "400 The requested resource does not exist", about 4 s after Meta had fetched the card. The fix was reviewed by the orchestrator.
   - The error now names its step (`threads create|status|publish: …`). `cta_publish_failed` also logs `step`, `code` and `subcode`.

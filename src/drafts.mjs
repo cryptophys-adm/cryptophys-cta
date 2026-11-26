@@ -98,9 +98,29 @@ export function dailyRecapText(summary, { channel = "threads", dayIso }) {
  * Pure: the drafts of one day for the configured channels, each checked by the guardian. Instagram needs an
  * image (it has no text-only post): its draft waits with status "needs_image" until the card image exists.
  */
-export function dailyDrafts(recaps, { now = Date.now(), channels = CHANNELS, delayHours = 24 } = {}) {
-  const to = new Date(now - 24 * 3_600_000).toISOString();
-  const from = new Date(now - 48 * 3_600_000).toISOString();
+/** The rows the recaps RPC gave before xauusd RC1 (LIMIT 50): a reply this long that stops short of the window is cut. */
+export const RECAPS_OLD_CAP = 50;
+/** The recap's window: the 24 hours that end `windowDelayHours` before `now` (the projection's own `delay_hours`). */
+export function recapSpan(now, windowDelayHours = 24) {
+  const d = Number.isFinite(Number(windowDelayHours)) && Number(windowDelayHours) >= 0 ? Number(windowDelayHours) : 24;
+  const to = now - d * 3_600_000;
+  return { from: new Date(to - 24 * 3_600_000).toISOString(), to: new Date(to).toISOString() };
+}
+/** Pure: whether the recaps given stop short of the window's start because the RPC cut them (the old 50-row cap). */
+export function recapsCut(recaps, from) {
+  const rows = (recaps || []).filter((r) => Number.isFinite(Date.parse(r?.bar_close ?? "")));
+  if (rows.length < RECAPS_OLD_CAP) return false;
+  const oldest = Math.min(...rows.map((r) => Date.parse(r.bar_close)));
+  return oldest > Date.parse(from) + 15 * 60_000;
+}
+/**
+ * The window follows the projection's `delay_hours` (owner 2026-11-26: "1.a", the last 24 hours once the delay is 0):
+ * `windowDelayHours` 0 is the 24 hours to now, 24 the 24 hours before that. A reply cut short of the window (the old
+ * 50-row cap) drafts nothing and says so (`cut`), never a recap of part of the day.
+ */
+export function dailyDrafts(recaps, { now = Date.now(), channels = CHANNELS, delayHours = 24, windowDelayHours = 24 } = {}) {
+  const { from, to } = recapSpan(now, windowDelayHours);
+  if (recapsCut(recaps, from)) return { summary: { ...summarizeDay([], { from, to }), cut: true }, drafts: [] };
   const summary = summarizeDay(recaps, { from, to });
   const out = [];
   for (const channel of channels.filter((c) => CHANNELS.includes(c))) {
