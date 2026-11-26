@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-26 (public wording: the recap covers the last 24 hours)
+- content(about, room): three public sentences now say the recap covers the last 24 hours, instead of "24 hours later" or "yesterday". They follow the realtime recap (#104). Owner, 26 Nov: "setuju halaman about", then the wording "Last 24 hours".
+  - About, step 2: "Decisions are shown only as a recap of the last 24 hours." (was "…as a recap, 24 hours later.")
+  - About, the Daily recap card: "What the system decided over the last 24 hours and how it played out, published as a recap, never as a live signal." (was "…decided yesterday…")
+  - Home's war room, Sealed vault: "Past readings are published only as a recap of the last 24 hours." (was "…as a recap, 24 hours later.")
+  - `public/room/room.js` was rebuilt, and with it `home.js`'s version and `build.json`. `test/fixtures/legal-words.json` follows.
+
 ## 2026-11-26 (the daily recap: the last 24 hours)
 - fix(recap): the daily recap now covers the 24 hours that end at the projection's own `delay_hours` before its run. At delay 0 that is the last 24 hours. Owner, 26 Nov: "1.a".
   - Why: since RT1 (delay 0), the recaps RPC's newest 50 rows were all from the last ~12.5 hours. CTA's fixed 48-to-24-hours window therefore found none, and `cta_recap_drafts` logged bars 0 on 25 and 26 Nov (28 on 24 Nov).

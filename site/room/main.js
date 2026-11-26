@@ -150,7 +150,7 @@ function buildVault() {
   const door = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 0.5, 48), new THREE.MeshStandardMaterial({ color: 0x06080c, metalness: 1, roughness: 0.3 })); door.rotation.x = Math.PI / 2; g.add(door);
   [2.6, 1.9, 1.1].forEach((r) => { const t = new THREE.Mesh(new THREE.TorusGeometry(r, 0.04, 8, 96), new THREE.MeshBasicMaterial({ color: WARM })); t.position.z = 0.27; g.add(t); });
   state.vaultBars = new THREE.Group(); state.vaultBars.position.z = 0.28; g.add(state.vaultBars); for (let i = 0; i < 6; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.5, 0.04), new THREE.MeshBasicMaterial({ color: WARM })); b.position.set(Math.sin(i * 1.047) * 1.5, Math.cos(i * 1.047) * 1.5, 0); b.rotation.z = -i * 1.047; state.vaultBars.add(b); }
-  const hit = new THREE.Mesh(new THREE.CylinderGeometry(2.7, 2.7, 0.8, 16), new THREE.MeshBasicMaterial()); hit.rotation.x = Math.PI / 2; hit.visible = false; g.add(hit); addThing(hit, g, 'Sealed vault', 'Never shown', 'What stays private stays behind this door. Past readings are published only as a recap, 24 hours later.', 3.0);
+  const hit = new THREE.Mesh(new THREE.CylinderGeometry(2.7, 2.7, 0.8, 16), new THREE.MeshBasicMaterial()); hit.rotation.x = Math.PI / 2; hit.visible = false; g.add(hit); addThing(hit, g, 'Sealed vault', 'Never shown', 'What stays private stays behind this door. Past readings are published only as a recap of the last 24 hours.', 3.0);
 }
 
 
