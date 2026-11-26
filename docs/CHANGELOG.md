@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-26 (the Archive: a reposted pattern shows once)
+- fix(archive): pattern posts with the same chart, catalogue name and status, published within 120 bars of their chart (5 days on H1), show once in the Archive, as the earliest publish. Owner, 26 Nov: "Ya jangan ada duplikasi".
+  - This hides the reposts from before #97 and #100: the H1 rising wedge at 06:09 and 07:09, and the H1 descending right-angled broadening at 16:09 and 17:09.
+  - Nothing is deleted or unpublished. Only the list changes; the desk and the drafting history are untouched. Key-level maps and other posts are untouched.
+  - New Archive test.
+
 ## 2026-11-26 (the Archive: a Telegram-only post is shown once)
 - fix(archive): a Telegram post is left out only when another channel has the same post. A post that went out on Telegram only is shown once again. Owner, 26 Nov: "Ya jangan ada duplikasi".
   - `ARCHIVE_LAST_CHANNELS` (Telegram) replaces `ARCHIVE_HIDDEN_CHANNELS`. `publishedPosts` keeps one line per `postKey`, and another channel comes before Telegram. Otherwise it is the newest publish, still newest first with the 4× read. No post appears twice.

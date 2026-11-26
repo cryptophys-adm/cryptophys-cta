@@ -8,7 +8,7 @@
 // Each change is an event with who and why. An approval runs the guardian again on the stored text.
 import { checkContentDraft } from "./guardian.mjs";
 import { initialStatus, mediaStatusOf } from "./channels.mjs";
-import { chartsOfId } from "./analysis-drafts.mjs";
+import { chartsOfId, patternOfId, patternLookbackMs } from "./analysis-drafts.mjs";
 
 export const DESK_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS drafts (
@@ -315,7 +315,33 @@ export function publishedPosts(sql, { limit = 30 } = {}) {
     const k = postKey(p), had = pick.get(k);
     if (!had || (last(had) && !last(p))) pick.set(k, p);
   }
-  return [...pick.values()].sort((a, b) => String(b.published_at).localeCompare(String(a.published_at)) || String(a.channel).localeCompare(String(b.channel))).slice(0, n);
+  return onePatternPost([...pick.values()]).sort((a, b) => String(b.published_at).localeCompare(String(a.published_at)) || String(a.channel).localeCompare(String(b.channel))).slice(0, n);
+}
+/**
+ * Pure, the Archive only (never the desk or the drafting history): pattern posts of the same chart, catalogue name and
+ * status published within 120 bars of their chart (`patternLookbackMs`) show once, as the earliest publish; the posts
+ * that went out again before a pattern was posted once (#97, #100) stay published, out of the list (owner 2026-11-26:
+ * "Ya jangan ada duplikasi"). Every other post passes as it is.
+ */
+export function onePatternPost(posts) {
+  const groups = new Map(), out = [];
+  for (const p of posts) {
+    const o = patternOfId(p.id);
+    if (!o) { out.push(p); continue; }
+    const k = `${o.chart}:${o.pattern}:${o.status}`;
+    if (!groups.has(k)) groups.set(k, { chart: o.chart, posts: [] });
+    groups.get(k).posts.push(p);
+  }
+  for (const g of groups.values()) {
+    let shown = -Infinity;
+    for (const p of g.posts.sort((a, b) => String(a.published_at).localeCompare(String(b.published_at)))) {
+      const at = Date.parse(p.published_at);
+      if (Number.isFinite(at) && at - shown < patternLookbackMs(g.chart)) continue;
+      out.push(p);
+      if (Number.isFinite(at)) shown = at;
+    }
+  }
+  return out;
 }
 
 /** A card is tried this many times; then its draft waits for a person (the studio's "render now" still retries). */

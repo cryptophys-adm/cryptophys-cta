@@ -11,7 +11,7 @@ import { ABOUT_LEDE } from "../src/agent/write.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
 import { AGENT_SECRETS } from "../src/agent/router.mjs";
-import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites, claimPublish, failStuckPublishing, STUCK_NOTE, draftsWithPrefixSince, ARCHIVE_LAST_CHANNELS, postKey } from "../src/desk.mjs";
+import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites, claimPublish, failStuckPublishing, STUCK_NOTE, draftsWithPrefixSince, ARCHIVE_LAST_CHANNELS, postKey, onePatternPost } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
@@ -1126,4 +1126,33 @@ test("a pattern is posted when it becomes confirmed, not again while it stays so
   assert.deepEqual(studioSetting(base.d.sql, PATTERN_SEEN_KEY).value.keys, []);
   reading = { ...reading, patterns: [wedge(3700, 3690)] };
   assert.deepEqual(ids(await draftAnalysis(e, { now: Date.parse("2026-11-26T10:09:30Z") })), ["pattern:H1:wedge_rising:confirmed:3700:3690:threads"], "confirmed again after it was gone, at a band that does not overlap: a new post");
+});
+
+test("the public Archive: a pattern posted again before #97 and #100 shows once, as its earliest publish (owner 2026-11-26)", async () => {
+  const { env: e, d } = env({});
+  const t = "Education only. Not financial advice.";
+  const posts = [
+    ["pattern:H1:wedge_rising:confirmed:3618:3606:threads", "2026-11-26T06:09:50Z"],
+    ["pattern:H1:wedge_rising:confirmed:3622:3620:threads", "2026-11-26T07:09:55Z"],
+    ["pattern:H1:broadening_right_angled_descending:confirmed:3600:3483:telegram", "2026-11-25T16:09:54Z"],
+    ["pattern:H1:broadening_right_angled_descending:confirmed:3602:3479:telegram", "2026-11-25T17:09:54Z"],
+    ["pattern:H1:rounding_top:confirmed:3690:3571:threads", "2026-11-19T01:41:01Z"],
+    ["pattern:H1:rounding_top:confirmed:3690:3575:telegram", "2026-11-25T17:09:54Z"],
+    ["levels:H1:20261126T070000Z:threads", "2026-11-26T07:09:55Z"],
+    ["levels:H1:20261126T060000Z:threads", "2026-11-26T06:09:50Z"]
+  ];
+  addDrafts(d.sql, posts.map(([id]) => ({ id, kind: id.startsWith("levels") ? "key_levels" : "pattern", channel: id.split(":").at(-1), text: t, status: "approved" })));
+  for (const [id, at] of posts) recordPublish(d.sql, { id, remoteId: "r" }, { now: Date.parse(at) });
+  const listed = (await (await handle(req("/api/public/archive"), e, opts)).json()).posts.map((p) => p.id);
+  assert.deepEqual(listed, [
+    "levels:H1:20261126T070000Z:threads",
+    "levels:H1:20261126T060000Z:threads",
+    "pattern:H1:wedge_rising:confirmed:3618:3606:threads",
+    "pattern:H1:rounding_top:confirmed:3690:3575:telegram",
+    "pattern:H1:broadening_right_angled_descending:confirmed:3600:3483:telegram",
+    "pattern:H1:rounding_top:confirmed:3690:3571:threads"
+  ], "the wedge once (06:09), the broadening once (16:09); the rounding top again after 120 H1 bars (5 days); maps untouched");
+  // Archive only: the desk keeps every publish.
+  assert.equal(getDraft(d.sql, "pattern:H1:wedge_rising:confirmed:3622:3620:threads").status, "published");
+  assert.deepEqual(onePatternPost([{ id: "manual:x:threads", published_at: "2026-11-26T00:00:00Z" }]).length, 1);
 });
