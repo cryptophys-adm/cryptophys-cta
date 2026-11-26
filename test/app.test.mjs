@@ -10,7 +10,7 @@ import { ABOUT_LEDE } from "../src/agent/write.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
 import { AGENT_SECRETS } from "../src/agent/router.mjs";
-import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites, claimPublish, failStuckPublishing, STUCK_NOTE, draftsWithPrefixSince, ARCHIVE_HIDDEN_CHANNELS, postKey } from "../src/desk.mjs";
+import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites, claimPublish, failStuckPublishing, STUCK_NOTE, draftsWithPrefixSince, ARCHIVE_LAST_CHANNELS, postKey } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
@@ -162,10 +162,7 @@ test("publishing on: an approved Telegram draft goes out with the channel's secr
   assert.equal(getDraft(d.sql, "t1").remote_id, "77");
   assert.equal(getDraft(d.sql, "t1").text, "Education only. Also, a solid day. Not financial advice.", "the archive keeps the text that went out");
   assert.deepEqual(await publishDraft(e, getDraft(d.sql, "y1"), { fetcher }), { status: "approved", held: "account_not_configured" }, "YouTube is built; without its OAuth app it waits");
-  assert.deepEqual(await (await handle(req("/api/public/archive"), e, opts)).json().then((a) => a.posts.map((p) => p.id)), [], "published, but the public Archive lists no Telegram post (owner 2026-11-26: no duplicate channel)");
-  addDrafts(d.sql, [{ id: "th1", channel: "threads", kind: "daily_recap", text: "Education only. Not financial advice.", status: "approved" }]);
-  recordPublish(d.sql, { id: "th1", remoteId: "th" });
-  assert.deepEqual(await (await handle(req("/api/public/archive"), e, opts)).json().then((a) => a.posts.map((p) => p.id)), ["th1"], "the archive shows what was published");
+  assert.deepEqual(await (await handle(req("/api/public/archive"), e, opts)).json().then((a) => a.posts.map((p) => p.id)), ["t1"], "the archive shows what was published (a Telegram-only post, once)");
   // the digest (owner 2026-11-23): each post carries its card's path, or null; never the stored URL
   const one = (await (await handle(req("/api/public/archive"), e, opts)).json()).posts[0];
   assert.equal(one.image, null, "a post without a card");
@@ -1081,21 +1078,28 @@ test("one claim before publishing (orchestrator review of #93): two runs publish
 });
 
 
-test("the public Archive: no Telegram post, and one line per post across channels (owner 2026-11-26)", async () => {
+test("the public Archive: one line per post across channels, Telegram only when no other channel has it (owner 2026-11-26)", async () => {
   const { env: e, d } = env({});
   const t = "Education only. Not financial advice.";
-  addDrafts(d.sql, [
-    { id: "levels:H1:20261125T170000Z:threads", kind: "key_levels", channel: "threads", text: t, status: "approved" },
-    { id: "levels:H1:20261125T170000Z:telegram", kind: "key_levels", channel: "telegram", text: t, status: "approved" },
-    { id: "pattern:H1:rounding_top:confirmed:3690:3575:telegram", kind: "pattern", channel: "telegram", text: t, status: "approved" },
-    { id: "daily:2026-11-24:threads", kind: "daily_recap", channel: "threads", text: t, status: "approved" },
-    { id: "daily:2026-11-24:instagram", kind: "daily_recap", channel: "instagram", text: t, status: "approved" }
-  ]);
+  const posts = [
+    ["levels:H1:20261125T170000Z:threads", 0], ["levels:H1:20261125T170000Z:telegram", 0],
+    ["pattern:H1:rounding_top:confirmed:3690:3575:telegram", 0],
+    ["daily:2026-11-24:threads", -60_000], ["daily:2026-11-24:instagram", -30_000],
+    ["levels:H1:20261125T160000Z:telegram", -3_600_000], ["levels:H1:20261125T160000Z:threads", -3_590_000]
+  ];
+  const kind = (id) => (id.startsWith("levels") ? "key_levels" : id.startsWith("pattern") ? "pattern" : "daily_recap");
+  addDrafts(d.sql, posts.map(([id]) => ({ id, kind: kind(id), channel: id.split(":").at(-1), text: t, status: "approved" })));
   const at = Date.parse("2026-11-25T17:09:54Z");
-  for (const [id, dt] of [["levels:H1:20261125T170000Z:threads", 0], ["levels:H1:20261125T170000Z:telegram", 0], ["pattern:H1:rounding_top:confirmed:3690:3575:telegram", 0], ["daily:2026-11-24:threads", -60_000], ["daily:2026-11-24:instagram", -30_000]]) recordPublish(d.sql, { id, remoteId: "r" }, { now: at + dt });
-  const posts = (await (await handle(req("/api/public/archive"), e, opts)).json()).posts;
-  assert.deepEqual(posts.map((p) => [p.id, p.channel]), [["levels:H1:20261125T170000Z:threads", "threads"], ["daily:2026-11-24:instagram", "instagram"]], "Telegram is never listed; a post on two channels shows once, its newest publish");
-  assert.deepEqual(ARCHIVE_HIDDEN_CHANNELS, ["telegram"]);
+  for (const [id, dt] of posts) recordPublish(d.sql, { id, remoteId: "r" }, { now: at + dt });
+  const listed = (await (await handle(req("/api/public/archive"), e, opts)).json()).posts.map((p) => [p.id, p.channel]);
+  assert.deepEqual(listed, [
+    ["pattern:H1:rounding_top:confirmed:3690:3575:telegram", "telegram"],
+    ["levels:H1:20261125T170000Z:threads", "threads"],
+    ["daily:2026-11-24:instagram", "instagram"],
+    ["levels:H1:20261125T160000Z:threads", "threads"]
+  ], "Threads + Telegram: the Threads line only; Telegram only: once; Threads + Instagram: once, the newest; newest first (a tie by channel name)");
+  assert.equal(new Set(listed.map(([id, ch]) => postKey({ id, channel: ch }))).size, listed.length, "no post twice");
+  assert.deepEqual(ARCHIVE_LAST_CHANNELS, ["telegram"]);
   assert.equal(postKey({ id: "manual:2026-11-24:b50daba1:threads", channel: "threads" }), "manual:2026-11-24:b50daba1");
   assert.equal(postKey({ id: "odd", channel: "threads" }), "odd");
 });

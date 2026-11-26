@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-26 (the Archive: a Telegram-only post is shown once)
+- fix(archive): a Telegram post is left out only when another channel has the same post. A post that went out on Telegram only is shown once again. Owner, 26 Nov: "Ya jangan ada duplikasi".
+  - `ARCHIVE_LAST_CHANNELS` (Telegram) replaces `ARCHIVE_HIDDEN_CHANNELS`. `publishedPosts` keeps one line per `postKey`, and another channel comes before Telegram. Otherwise it is the newest publish, still newest first with the 4× read. No post appears twice.
+  - The 25 Nov patterns that went out only on Telegram are back in the Archive.
+  - The Archive test now covers Telegram only, Threads + Telegram, Threads + Instagram, and the order. The Telegram publish test lists its Telegram-only post again.
+
 ## 2026-11-26 (the Archive: no Telegram, one line per post)
 - fix(archive): the public Archive no longer lists Telegram posts, and a post published on more than one channel shows once. Owner, 26 Nov: "jangan tampilkan archive cta dari telegram supaya tidak duplikat. archive ini tidak boleh duplikat channel".
   - `publishedPosts` leaves out `ARCHIVE_HIDDEN_CHANNELS` (Telegram).
