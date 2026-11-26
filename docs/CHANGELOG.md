@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-26 (the Archive: no Telegram, one line per post)
+- fix(archive): the public Archive no longer lists Telegram posts, and a post published on more than one channel shows once. Owner, 26 Nov: "jangan tampilkan archive cta dari telegram supaya tidak duplikat. archive ini tidak boleh duplikat channel".
+  - `publishedPosts` leaves out `ARCHIVE_HIDDEN_CHANNELS` (Telegram).
+  - A post on several channels is kept once, from its newest publish (`postKey`, the id without its channel).
+  - Posts still go out on Telegram; only the public list changes. Pattern posts that went out only on Telegram are no longer in the Archive.
+  - New test for the Archive. The Telegram publish test now expects the Telegram post to be left out of the Archive and checks the card path on a Threads post.
+
 ## 2026-11-26 (a 429 is a rate stop, never paid)
 - fix(router): a 429 from Reflection is now always a rate stop and never counts as paid, whatever its text says. From the orchestrator, 26 Nov, the same rule as the platform and xauusd copies.
   - Before, in free-only mode, the billing words ("upgrade", "credit", "subscription") were checked on every error. Reflection's daily free-quota 429 ("... upgrade your plan for higher limits") would have turned the model off until an approver turned it on again.
