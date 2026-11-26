@@ -6,6 +6,14 @@
   - The 25 Nov patterns that went out only on Telegram are back in the Archive.
   - The Archive test now covers Telegram only, Threads + Telegram, Threads + Instagram, and the order. The Telegram publish test lists its Telegram-only post again.
 
+## 2026-11-26 (a pattern is posted on its transition to confirmed)
+- fix(analysis): a pattern is drafted only when it becomes confirmed, not again while it stays so, whatever its band. This follows up #97 and the owner's 25 Nov words: "dia ditrigger oleh xauusd ketika ada confirmed jadi tidak mengikuti tiap jam".
+  - The H1 rising wedge went out on Threads at 06:09 (3618:3606) and again at 07:09 (3622:3620) on 26 Nov. A wedge moves its whole band, so the two bands did not overlap and #97's band check let the second post through.
+  - Each run now keeps the chart:pattern:status keys of the confirmed patterns it read, in studio setting `analysis_patterns_seen`. The next run skips any pattern the previous run already saw.
+  - A reading without its patterns list leaves that set as it was.
+  - The band and history check stays as a backstop.
+  - New end-to-end test for `draftAnalysis`.
+
 ## 2026-11-26 (the Archive: no Telegram, one line per post)
 - fix(archive): the public Archive no longer lists Telegram posts, and a post published on more than one channel shows once. Owner, 26 Nov: "jangan tampilkan archive cta dari telegram supaya tidak duplikat. archive ini tidak boleh duplikat channel".
   - `publishedPosts` leaves out `ARCHIVE_HIDDEN_CHANNELS` (Telegram).

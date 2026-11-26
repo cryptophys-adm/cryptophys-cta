@@ -5,7 +5,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule, cardPathOf, agentReplies, aboutLedeLive, agentWrite, PUBLIC_MEDIA } from "../src/app.mjs";
+import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule, cardPathOf, agentReplies, aboutLedeLive, agentWrite, PUBLIC_MEDIA, draftAnalysis } from "../src/app.mjs";
+import { PATTERN_SEEN_KEY } from "../src/analysis-drafts.mjs";
 import { ABOUT_LEDE } from "../src/agent/write.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
@@ -1102,4 +1103,27 @@ test("the public Archive: one line per post across channels, Telegram only when 
   assert.deepEqual(ARCHIVE_LAST_CHANNELS, ["telegram"]);
   assert.equal(postKey({ id: "manual:2026-11-24:b50daba1:threads", channel: "threads" }), "manual:2026-11-24:b50daba1");
   assert.equal(postKey({ id: "odd", channel: "threads" }), "odd");
+});
+
+test("a pattern is posted when it becomes confirmed, not again while it stays so, even as its band moves (owner 2026-11-25)", async () => {
+  // 26 Nov: the H1 rising wedge was posted on Threads at 06:09 (3618:3606) and at 07:09 (3622:3620); the bands do not overlap.
+  const wedge = (upper, lower) => ({ chart: "H1", pattern: "wedge_rising", name: "Rising Wedge", status: "confirmed", direction: "down", upper, lower, projection: 3580 });
+  let reading = { at: "2026-11-26T06:09:00.000Z", price: 3600, zones: [], patterns: [wedge(3618, 3606)], structure: {} };
+  const base = env({ CONTENT_CHANNELS: "threads" });
+  const e = { ...base.env, PROJECTION: { ...base.env.PROJECTION, analysis: async () => reading } };
+  const ids = (r) => r.drafts.map((x) => x.id).filter((x) => x.startsWith("pattern:"));
+  const r1 = await draftAnalysis(e, { now: Date.parse("2026-11-26T06:09:30Z") });
+  assert.deepEqual(ids(r1), ["pattern:H1:wedge_rising:confirmed:3618:3606:threads"], "posted when it is first seen confirmed");
+  assert.deepEqual(studioSetting(base.d.sql, PATTERN_SEEN_KEY).value.keys, ["H1:wedge_rising:confirmed"]);
+  reading = { ...reading, at: "2026-11-26T07:09:00.000Z", patterns: [wedge(3622, 3620)] };
+  assert.deepEqual(ids(await draftAnalysis(e, { now: Date.parse("2026-11-26T07:09:30Z") })), [], "the moved band is the same pattern: not again");
+  // A failed read (no patterns list) does not reset what was seen; a run without it does, and its return is new.
+  reading = { ...reading, patterns: undefined };
+  await draftAnalysis(e, { now: Date.parse("2026-11-26T08:09:30Z") });
+  assert.deepEqual(studioSetting(base.d.sql, PATTERN_SEEN_KEY).value.keys, ["H1:wedge_rising:confirmed"]);
+  reading = { ...reading, patterns: [] };
+  await draftAnalysis(e, { now: Date.parse("2026-11-26T09:09:30Z") });
+  assert.deepEqual(studioSetting(base.d.sql, PATTERN_SEEN_KEY).value.keys, []);
+  reading = { ...reading, patterns: [wedge(3700, 3690)] };
+  assert.deepEqual(ids(await draftAnalysis(e, { now: Date.parse("2026-11-26T10:09:30Z") })), ["pattern:H1:wedge_rising:confirmed:3700:3690:threads"], "confirmed again after it was gone, at a band that does not overlap: a new post");
 });
