@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-26 (the Archive: a Telegram-only post is shown once)
+- fix(archive): a Telegram post is left out only when another channel has the same post. A post that went out on Telegram only is shown once again. Owner, 26 Nov: "Ya jangan ada duplikasi".
+  - `ARCHIVE_LAST_CHANNELS` (Telegram) replaces `ARCHIVE_HIDDEN_CHANNELS`. `publishedPosts` keeps one line per `postKey`, and another channel comes before Telegram. Otherwise it is the newest publish, still newest first with the 4× read. No post appears twice.
+  - The 25 Nov patterns that went out only on Telegram are back in the Archive.
+  - The Archive test now covers Telegram only, Threads + Telegram, Threads + Instagram, and the order. The Telegram publish test lists its Telegram-only post again.
+
 ## 2026-11-26 (a pattern is posted on its transition to confirmed)
 - fix(analysis): a pattern is drafted only when it becomes confirmed, not again while it stays so, whatever its band. This follows up #97 and the owner's 25 Nov words: "dia ditrigger oleh xauusd ketika ada confirmed jadi tidak mengikuti tiap jam".
   - The H1 rising wedge went out on Threads at 06:09 (3618:3606) and again at 07:09 (3622:3620) on 26 Nov. A wedge moves its whole band, so the two bands did not overlap and #97's band check let the second post through.
