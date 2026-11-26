@@ -292,10 +292,31 @@ export function kindCountsSince(sql, kind, sinceIso) {
 }
 
 /** The public archive: published posts only, newest first (their text passed the guardian twice). */
+/**
+ * The channels the public Archive leaves out (owner 2026-11-26: "jangan tampilkan archive cta dari telegram supaya tidak
+ * duplikat. archive ini tidak boleh duplikat channel"): Telegram carries the same posts as Threads.
+ */
+export const ARCHIVE_HIDDEN_CHANNELS = Object.freeze(["telegram"]);
+/** Pure: a post's id without its channel (`levels:H1:20261125T170000Z:threads` → `levels:H1:20261125T170000Z`). */
+export const postKey = (p) => (String(p?.id ?? "").endsWith(`:${p?.channel}`) ? String(p.id).slice(0, -(String(p.channel).length + 1)) : String(p?.id ?? ""));
+/**
+ * The published posts for the public Archive, newest first: never a hidden channel, and one line per post: a post
+ * published on more than one channel is shown once (its newest publish).
+ */
 export function publishedPosts(sql, { limit = 30 } = {}) {
   ensureDesk(sql);
   const n = Math.min(100, Math.max(1, Number(limit) || 30));
-  return rows(sql, "SELECT id, kind, channel, text, published_at, remote_id, image_url FROM drafts WHERE status = 'published' ORDER BY published_at DESC LIMIT ?", n);
+  const hidden = ARCHIVE_HIDDEN_CHANNELS.map(() => "?").join(", ");
+  const all = rows(sql, `SELECT id, kind, channel, text, published_at, remote_id, image_url FROM drafts WHERE status = 'published' AND channel NOT IN (${hidden}) ORDER BY published_at DESC, channel ASC LIMIT ?`, ...ARCHIVE_HIDDEN_CHANNELS, n * 4);
+  const seen = new Set(), out = [];
+  for (const p of all) {
+    const k = postKey(p);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(p);
+    if (out.length >= n) break;
+  }
+  return out;
 }
 
 /** A card is tried this many times; then its draft waits for a person (the studio's "render now" still retries). */
