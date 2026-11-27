@@ -150,7 +150,7 @@ test("the quota is read from Meta, never assumed; a token is refreshed through i
 
 // Real-time analysis (owner 2026-11-14: "fokus pada hasil analytics dan key level ... kecuali info buy/sell zone";
 // "Real-time, hanya analisa").
-import { analysisDrafts, keyLevelsText, patternText, postablePatterns, MAX_PATTERN_DRAFTS_PER_DAY, PATTERN_LOOKBACK_MS, patternDrafted, patternOfId, saneProjection, PROJECTION_MAX_SHARE, overlayOf, sameBand, bandDrafted, PATTERN_BAND_SHARE } from "../src/analysis-drafts.mjs";
+import { analysisDrafts, keyLevelsText, patternText, postablePatterns, MAX_PATTERN_DRAFTS_PER_DAY, PATTERN_LOOKBACK_MS, patternDrafted, patternOfId, saneProjection, PROJECTION_MAX_SHARE, overlayOf, sameBand, bandDrafted, PATTERN_BAND_SHARE, patternLookbackMs, UNCAPPED_PATTERN_CHARTS } from "../src/analysis-drafts.mjs";
 import { draftIdsWithPrefix, kindCountsSince, draftsWithPrefixSince } from "../src/desk.mjs";
 
 
@@ -412,4 +412,29 @@ test("one pattern post per chart and breakout band: two catalogue names on the s
   assert.deepEqual(analysisDrafts(analysis([both[0]]), { now: later, channels: ["threads"], history }).filter((d) => d.kind === "pattern"), []);
   // past the chart's lookback the band is free again
   assert.equal(bandDrafted(both[0], "threads", history, at + PATTERN_LOOKBACK_MS + 1), false);
+});
+
+test("M15 confirmed patterns are posted at the hourly run with no daily cap (owner 2026-11-27); H1, H4, D1 keep theirs", () => {
+  // "tambah content per 1h jika ada pattern 15m confirmed juga diposting"; cap: "Tanpa batas khusus".
+  const at = Date.parse("2026-11-27T09:09:30Z");
+  const pat = (chart, pattern, upper, lower, extra = {}) => ({ chart, pattern, name: pattern, chapter: null, status: "confirmed", direction: "up", upper, lower, projection: upper + (upper - lower), ...extra });
+  const analysis = { at: new Date(at).toISOString(), price: 3662.35, zones: [], patterns: [pat("M15", "flag", 3660.5, 3655.2), pat("M15", "pennant", 3670, 3664), pat("H1", "rectangle", 3640, 3620), pat("M15", "wedge_falling", 3655, 3640, { status: "forming" })] };
+  assert.deepEqual(UNCAPPED_PATTERN_CHARTS, ["M15"]);
+  const ids = (opts = {}) => analysisDrafts(analysis, { now: at, channels: ["threads"], ...opts }).filter((d) => d.kind === "pattern").map((d) => d.id);
+  assert.deepEqual(ids(), ["pattern:M15:flag:confirmed:3661:3655:threads", "pattern:M15:pennant:confirmed:3670:3664:threads", "pattern:H1:rectangle:confirmed:3640:3620:threads"], "a forming M15 is not drafted");
+  // the day's cap of the other charts is spent: M15 still posts, H1 does not
+  assert.deepEqual(ids({ postedToday: { threads: MAX_PATTERN_DRAFTS_PER_DAY } }), ["pattern:M15:flag:confirmed:3661:3655:threads", "pattern:M15:pennant:confirmed:3670:3664:threads"]);
+  const text = analysisDrafts(analysis, { now: at, channels: ["threads"] }).find((d) => d.id.startsWith("pattern:M15:flag")).text;
+  assert.match(text, /XAUUSD M15/);
+  assert.match(text, /fails if an M15 candle closes back below 3655\.20/);
+  // read back, and posted once: 120 M15 bars (30 hours) of history
+  assert.deepEqual(patternOfId("pattern:M15:flag:confirmed:3661:3655:threads"), { chart: "M15", pattern: "flag", status: "confirmed", upper: 3661, lower: 3655, channel: "threads" });
+  assert.equal(patternLookbackMs("M15"), 30 * 3_600_000);
+  const history = [{ id: "pattern:M15:flag:confirmed:3661:3655:threads", created_at: new Date(at - 3_600_000).toISOString() }];
+  assert.ok(!ids({ history }).some((x) => x.startsWith("pattern:M15:flag")), "not posted again while xauusd keeps it");
+  // the desk's daily count leaves M15 out, so it never takes the other charts' room
+  const sql = sqlite();
+  addDrafts(sql, analysisDrafts(analysis, { now: at, channels: ["threads"] }).filter((d) => d.kind === "pattern"), { now: at });
+  assert.deepEqual(kindCountsSince(sql, "pattern", "2026-11-27", "pattern:M15:"), { threads: 1 });
+  assert.deepEqual(kindCountsSince(sql, "pattern", "2026-11-27"), { threads: 3 });
 });

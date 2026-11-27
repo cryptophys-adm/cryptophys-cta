@@ -265,7 +265,8 @@ export async function draftAnalysis(env, { now = Date.now() } = {}) {
   const knownLevels = new Set(await d.idsWithPrefix("levels:"));
   const seen = await d.studioSetting(PATTERN_SEEN_KEY);
   const seenBefore = new Set(Array.isArray(seen?.value?.keys) ? seen.value.keys : []);
-  const postedToday = await d.kindCounts("pattern", new Date(now).toISOString().slice(0, 10));
+  // M15 patterns have no daily cap and do not count toward the others' (owner 2026-11-27: "Tanpa batas khusus").
+  const postedToday = await d.kindCounts("pattern", new Date(now).toISOString().slice(0, 10), "pattern:M15:");
   const { settings } = await channelSettings(env);
   const dropped = [];
   const drafts = await settled(env, analysisDrafts(analysis, { now, channels: draftingChannels(channelsOf(env), settings), levelsRun: new Date(now).getUTCHours() === 6, postedToday, known, knownLevels, history, seenBefore }), settings, now, dropped);

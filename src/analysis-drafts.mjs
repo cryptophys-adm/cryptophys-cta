@@ -5,7 +5,9 @@
 //   - the key-level map per chart at each H1, H4 and D1 close, merged when they close together (chartMapText below, from
 //     xauusd KM1's zones_by_chart; owner 2026-11-25); before KM1, once a weekday at 06:09 UTC (13:09 WIB, before London): the demand zones ("buy area")
 //     and supply zones ("sell area") as information, the price when read, the structure per chart;
-//   - a pattern post when an H1, H4 or D1 pattern is confirmed (its breakout); the scheduled run drafts confirmed ones only
+//   - a pattern post when an M15, H1, H4 or D1 pattern is confirmed (its breakout; M15 since 2026-11-27, owner "tambah
+//     content per 1h jika ada pattern 15m confirmed juga diposting", read at the hourly run, no daily cap); the scheduled
+//     run drafts confirmed ones only
 //     (owner 2026-11-25: "Only confirmed"), while Create still offers an H4 or D1 pattern forming to a person:
 //     its name (no catalogue reference: owner 2026-11-15), its lines, what undoes it, the measured projection as analysis.
 // Never the system's decision, an entry, a stop, a take profit or BUY/SELL as a signal: the content guardian's
@@ -169,10 +171,12 @@ export function patternText(p, analysis, { channel = "threads" } = {}) {
 
 /** The patterns the scheduled run drafts: confirmed only (owner 2026-11-25: "Only confirmed"). */
 export const draftedPatterns = (analysis) => postablePatterns(analysis).filter((p) => p.status === "confirmed");
-/** Which patterns may be posted (Create's choice too): confirmed on H1, H4, D1; forming on H4 and D1. */
+/** Which patterns may be posted (Create's choice too): confirmed on M15, H1, H4, D1; forming on H4 and D1. */
 export function postablePatterns(analysis) {
-  return (analysis?.patterns ?? []).filter((p) => (p.status === "confirmed" && ["H1", "H4", "D1"].includes(p.chart)) || (p.status === "forming" && ["H4", "D1"].includes(p.chart)));
+  return (analysis?.patterns ?? []).filter((p) => (p.status === "confirmed" && ["M15", "H1", "H4", "D1"].includes(p.chart)) || (p.status === "forming" && ["H4", "D1"].includes(p.chart)));
 }
+/** The charts whose confirmed patterns have no daily cap (owner 2026-11-27: "Tanpa batas khusus"): each new one is posted. */
+export const UNCAPPED_PATTERN_CHARTS = Object.freeze(["M15"]);
 export const patternKey = (p) => `${p.chart}:${p.pattern}:${p.status}:${Math.round(p.upper)}:${Math.round(p.lower)}`;
 
 /**
@@ -183,7 +187,7 @@ export const patternKey = (p) => `${p.chart}:${p.pattern}:${p.status}:${Math.rou
  * drafted within PATTERN_REPEAT_BARS bars of its chart (the longest xauusd follows a breakout).
  */
 export const PATTERN_REPEAT_BARS = 120;
-const CHART_HOURS = Object.freeze({ H1: 1, H4: 4, D1: 24 });
+const CHART_HOURS = Object.freeze({ M15: 0.25, H1: 1, H4: 4, D1: 24 });
 export const patternLookbackMs = (chart) => PATTERN_REPEAT_BARS * (CHART_HOURS[chart] ?? 24) * 3_600_000;
 /** The longest lookback of any chart: how far back the scheduled run reads its pattern drafts. */
 export const PATTERN_LOOKBACK_MS = Math.max(...Object.keys(CHART_HOURS).map(patternLookbackMs));
@@ -200,7 +204,7 @@ export const patternSeenKey = (p) => `${p.chart}:${p.pattern}:${p.status}`;
 export const seenPatternKeys = (analysis) => [...new Set(draftedPatterns(analysis).map(patternSeenKey))].sort();
 /** Pure: a pattern draft id read back (pattern:<chart>:<pattern>:<status>:<upper>:<lower>:<channel>), or null. */
 export function patternOfId(id) {
-  const m = /^pattern:(H1|H4|D1):([a-z0-9_]+):(forming|confirmed):(-?\d+):(-?\d+):([a-z0-9_]+)$/.exec(String(id ?? ""));
+  const m = /^pattern:(M15|H1|H4|D1):([a-z0-9_]+):(forming|confirmed):(-?\d+):(-?\d+):([a-z0-9_]+)$/.exec(String(id ?? ""));
   return m ? { chart: m[1], pattern: m[2], status: m[3], upper: Number(m[4]), lower: Number(m[5]), channel: m[6] } : null;
 }
 /** Pure: whether `p` was already drafted for `channel`: `history` holds { id, created_at } of earlier pattern drafts. */
@@ -307,7 +311,8 @@ export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS
     let room = MAX_PATTERN_DRAFTS_PER_DAY - (Number(postedToday[channel]) || 0);
     const bands = [];
     for (const p of byCatalogue(draftedPatterns(analysis))) {
-      if (room <= 0) break;
+      const capped = !UNCAPPED_PATTERN_CHARTS.includes(p.chart);
+      if (capped && room <= 0) continue;
       const id = `pattern:${patternKey(p)}:${channel}`;
       // one post per chart and band: a pattern earlier in the catalogue on the same lines takes it, this run or before
       if (bands.some((b) => sameBand(b, p))) continue;
@@ -316,7 +321,7 @@ export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS
       const text = patternText(p, analysis, { channel });
       if (!text) continue;
       out.push(draft({ id, kind: "pattern", channel, text, now, overlay: overlayOf(analysis, { pattern: p }) }));
-      room -= 1;
+      if (capped) room -= 1;
     }
   }
   return out;

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-27 (M15 confirmed patterns are posted, with no daily cap)
+- feat(pattern): the hourly run also posts a confirmed M15 pattern. Owner, 27 Nov: "tambah content per 1h jika ada pattern 15m confirmed juga diposting"; for the cap, "Tanpa batas khusus".
+  - `postablePatterns` takes M15 confirmed (forming stays H4 and D1 only). `patternOfId` reads M15 ids. The M15 lookback is 120 bars, 30 hours.
+  - M15 has no daily cap and does not count toward the four a day of H1, H4 and D1 (`UNCAPPED_PATTERN_CHARTS`; `kindCountsSince` leaves out `pattern:M15:`). Each M15 pattern is still posted once (`analysis_patterns_seen`, `patternDrafted`, `bandDrafted`).
+  - About, in the owner's approved words: step 1 "recognises chart patterns on M15, H1, H4 and D1", and the Chart pattern line "A pattern confirmed on M15, H1, H4 or D1, or forming on H4 or D1, with its lines and the projection measured from its height." `test/fixtures/legal-words.json` is updated to match.
+  - Needs xauusd: its public analysis (`ANALYSIS_CHARTS` in src/public-analysis.mjs) leaves out the 15-minute patterns today. Until it includes `"15": "M15"`, no M15 pattern reaches CTA.
+
 ## 2026-11-27 (one pattern post per chart and breakout band)
 - fix(pattern): two catalogue names on the same lines are posted once. On 27 Nov at 08:10Z, H4 measured_move_up and diamond_bottom, both on 3607.25 / 3552.14, went out on Threads in the same minute. The owner's standing rule (26 Nov) is "Ya jangan ada duplikasi".
   - `sameBand`: same chart and status, and the upper lines and the lower lines are each within `PATTERN_BAND_SHARE` (0.1) of the pattern's height, at least 1 for the id's rounding.

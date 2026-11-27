@@ -9,7 +9,7 @@
 Bindings:
 - `PROJECTION` → `xauusd-ai-trading-assistant` entrypoint `PublicProjection` (read-only RPC): `recaps({days})`
   (decisions past the AI Worker's public delay, no level, plan or account) and `analysis()` (the Key Level Agent's zones as demand
-  and supply, H1/H4/D1 chart patterns with their lines and projection, the structure; never a decision or plan),
+  and supply, M15/H1/H4/D1 chart patterns with their lines and projection, the structure; never a decision or plan),
   `warroomScene()` (the rooms' public scenes) and `trackRecord()` (xauusd-ai-trading-assistant #499: the simulated
   track record in R, aggregates per exit scenario).
 - `CONTENT_DESK` → Durable Object `ContentDesk` (SQLite): the drafts, their events, the refreshed tokens, the
@@ -135,7 +135,7 @@ Cloudflare reads a cron's weekday field as 1 = Sunday to 7 = Saturday, so the tr
 | Cron | What |
 |---|---|
 | `*/5 * * * *` | the per-channel scheduler: each channel's due posting slot publishes its oldest approved draft (only while `CONTENT_PUBLISH` is "on", and only for the channels in `PUBLISH_CHANNELS`; no Desk call otherwise) |
-| `9 * * * SUN-FRI` | only while gold trades (`analysisRunDue`, the AI Worker's market hours: Sunday's hours before the reopen and Friday's after the close are skipped, so the week's first hour, Sunday 23:09 UTC in winter, is drafted): pattern posts (confirmed on H1/H4/D1, forming on H4/D1; once each; at most four a day per channel); at 06:09 the key-level map |
+| `9 * * * SUN-FRI` | only while gold trades (`analysisRunDue`, the AI Worker's market hours: Sunday's hours before the reopen and Friday's after the close are skipped, so the week's first hour, Sunday 23:09 UTC in winter, is drafted): pattern posts (confirmed on M15/H1/H4/D1, forming on H4/D1; once each; at most four a day per channel on H1/H4/D1, M15 with no daily cap and not counted in the four: owner 2026-11-27 "tambah content per 1h jika ada pattern 15m confirmed juga diposting", "Tanpa batas khusus"; M15 needs the AI Worker's public analysis to include the 15-minute patterns, `ANALYSIS_CHARTS` "15"); at 06:09 the key-level map |
 | `17 22 * * TUE-SAT` | the recap of the trading day that ended 24 hours earlier; token refresh (only while publishing is on: Threads and Instagram long-lived tokens, TikTok's rotating refresh token); then the metrics of the last 14 days' posts (`src/insights.mjs`; only while publishing is on) |
 
 **Expiry (owner 2026-11-17: "kadaluwarsa otomatis").** An analysis draft (`key_levels`, `pattern`) expires `ANALYSIS_TTL_HOURS` (2) after it was made: each scheduler run (every 5 minutes, publishing on or off), an approval, a send again, a slot's next draft and the publisher itself mark it `expired` (with an event), and a copy of it is refused. The studio shows it as "Expired (old analysis)" with "Make a fresh one" (Create, the same kind, the latest analysis). The cause: a 06:10 UTC map went out at 15:50 with "Price is inside the zone ...". A recap is about the past and does not expire.

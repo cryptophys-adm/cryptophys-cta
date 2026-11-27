@@ -37,7 +37,7 @@ export class ContentDesk extends DurableObject {
   async saveToken(channel, token, now) { storeToken(this.sql, channel, token, { now }); return true; }
   async idsWithPrefix(prefix) { return draftIdsWithPrefix(this.sql, prefix); }
   async draftsSince(prefix, sinceIso) { return draftsWithPrefixSince(this.sql, prefix, sinceIso); }
-  async kindCounts(kind, sinceIso) { return kindCountsSince(this.sql, kind, sinceIso); }
+  async kindCounts(kind, sinceIso, excludePrefix = null) { return kindCountsSince(this.sql, kind, sinceIso, excludePrefix); }
   async archive(limit) { return publishedPosts(this.sql, { limit }); }
   async needingImage(limit, retry) { return draftsNeedingImage(this.sql, { limit, retry }); }
   async attachImage(input, now) { return attachImage(this.sql, input, { now }); }

@@ -286,9 +286,11 @@ export function draftsWithPrefixSince(sql, prefix, sinceIso) {
   const p = String(prefix ?? "");
   return rows(sql, "SELECT id, created_at FROM drafts WHERE id >= ? AND id < ? AND created_at >= ?", p, p + "\uffff", String(sinceIso)).map((r) => ({ id: r.id, created_at: r.created_at }));
 }
-export function kindCountsSince(sql, kind, sinceIso) {
+/** Drafts of `kind` per channel since `sinceIso`; ids starting with `excludePrefix` are not counted (M15 patterns, owner 2026-11-27). */
+export function kindCountsSince(sql, kind, sinceIso, excludePrefix = null) {
   ensureDesk(sql);
-  return Object.fromEntries(rows(sql, "SELECT channel, COUNT(*) AS n FROM drafts WHERE kind = ? AND created_at >= ? GROUP BY channel", kind, sinceIso).map((r) => [r.channel, Number(r.n)]));
+  const ex = excludePrefix ? String(excludePrefix) : null;
+  return Object.fromEntries(rows(sql, `SELECT channel, COUNT(*) AS n FROM drafts WHERE kind = ? AND created_at >= ?${ex ? " AND NOT (id >= ? AND id < ?)" : ""} GROUP BY channel`, kind, sinceIso, ...(ex ? [ex, ex + "\uffff"] : [])).map((r) => [r.channel, Number(r.n)]));
 }
 
 /** The public archive: published posts only, newest first (their text passed the guardian twice). */
