@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { RECAP_CRON, ANALYSIS_CRON } from "../src/app.mjs";
+import { RECAP_CRON, ANALYSIS_CRON, PATTERN_CRON } from "../src/app.mjs";
 import { SCHEDULE_CRON } from "../src/scheduler.mjs";
 
 const NAMES = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -32,7 +32,7 @@ test("CR1: the analysis runs Sunday to Friday and the recap Tuesday to Saturday 
 
 test("CR2: a weekday field is written with names, never numbers, and wrangler.jsonc carries the same triggers", () => {
   const cfg = JSON.parse(readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8").replace(/^\s*\/\/.*$/gm, ""));
-  assert.deepEqual([...cfg.triggers.crons].sort(), [RECAP_CRON, ANALYSIS_CRON, SCHEDULE_CRON].sort());
+  assert.deepEqual([...cfg.triggers.crons].sort(), [RECAP_CRON, ANALYSIS_CRON, SCHEDULE_CRON, PATTERN_CRON].sort());
   for (const c of cfg.triggers.crons) assert.doesNotMatch(c.trim().split(/\s+/)[4], /\d/, `"${c}": use MON, TUE ... in the weekday field`);
 });
 
@@ -46,4 +46,17 @@ test("CR3: the hourly analysis run drafts only while gold trades (Friday's hours
   assert.equal(analysisRunDue(Date.parse("2026-11-23T00:09:00Z")), true, "Monday 00:09 UTC, open since Sunday 23:00");
   const src = readFileSync(new URL("../src/index.mjs", import.meta.url), "utf8");
   assert.match(src, /event\?\.cron === ANALYSIS_CRON\) \{\s*if \(!analysisRunDue\(/, "the scheduled handler asks before drafting");
+});
+
+test("CR4: the pattern pass has its own cron at minute 3, 8, … 58, one minute after xauusd's 5-minute step (2-59/5) writes the patterns", () => {
+  assert.equal(PATTERN_CRON, "3-59/5 * * * *");
+  const [min] = PATTERN_CRON.split(/\s+/);
+  const [range, step] = min.split("/"), [from, to] = range.split("-").map(Number);
+  const minutes = []; for (let m = from; m <= to; m += Number(step)) minutes.push(m);
+  assert.deepEqual(minutes, [3, 8, 13, 18, 23, 28, 33, 38, 43, 48, 53, 58]);
+  assert.ok(minutes.every((m) => (m - 2) % 5 === 1), "always one minute after xauusd's writer");
+  const src = readFileSync(new URL("../src/index.mjs", import.meta.url), "utf8");
+  assert.match(src, /event\?\.cron === PATTERN_CRON\) \{[\s\S]{0,200}fastPassOn\(env\)[\s\S]{0,40}analysisRunDue\(at\)/);
+  const schedule = src.slice(src.indexOf("event?.cron === SCHEDULE_CRON"), src.indexOf("event?.cron === PATTERN_CRON"));
+  assert.doesNotMatch(schedule, /draftAnalysis/, "the */5 scheduler no longer runs the pattern pass");
 });
