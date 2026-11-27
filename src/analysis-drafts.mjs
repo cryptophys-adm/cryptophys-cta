@@ -200,8 +200,32 @@ export const PATTERN_LOOKBACK_MS = Math.max(...Object.keys(CHART_HOURS).map(patt
  */
 export const PATTERN_SEEN_KEY = "analysis_patterns_seen";
 export const patternSeenKey = (p) => `${p.chart}:${p.pattern}:${p.status}`;
-/** Pure: the keys of the confirmed patterns this run read (what the next run compares with). */
-export const seenPatternKeys = (analysis) => [...new Set(draftedPatterns(analysis).map(patternSeenKey))].sort();
+/** Pure: the keys of the confirmed patterns this run read on `charts` (all when null): what the next run compares with. */
+export const seenPatternKeys = (analysis, charts = null) => [...new Set(draftedPatterns(analysis).filter((p) => !charts || charts.includes(p.chart)).map(patternSeenKey))].sort();
+/**
+ * M15 is read every 5 minutes (owner 2026-11-27: "jika bisa ditrigger langsung ketika pattern 15m confirmed tanpa
+ * menunggu jadwal 1H"), by its own pass with its own seen set (PATTERN_SEEN_KEY_M15); the hourly run reads H1, H4, D1.
+ */
+export const PATTERN_SEEN_KEY_M15 = "analysis_patterns_seen_m15";
+export const HOURLY_PATTERN_CHARTS = Object.freeze(["H1", "H4", "D1"]);
+export const FAST_PATTERN_CHARTS = Object.freeze(["M15"]);
+/**
+ * No duplicate content (owner 2026-11-27: "pastikan tidak duplikasi content"): an M15 pattern of the same catalogue name
+ * and status is not posted again on a channel within PATTERN_COOLDOWN_MS of its last draft, whatever its band (an M15
+ * pattern that drops out of one reading and comes back, or slides its lines, is the same post).
+ */
+export const PATTERN_COOLDOWN_MS = Object.freeze({ M15: 4 * 3_600_000 });
+/** Pure: whether `p` (a chart with a cooldown) was drafted for `channel`, under its name and status, within the cooldown. */
+export function patternCooling(p, channel, history, now = Date.now()) {
+  const ms = PATTERN_COOLDOWN_MS[p?.chart];
+  if (!ms) return false;
+  return (history ?? []).some((h) => {
+    const o = patternOfId(h?.id);
+    if (!o || o.channel !== channel || o.chart !== p.chart || o.pattern !== p.pattern || o.status !== p.status) return false;
+    const at = Date.parse(h?.created_at);
+    return !Number.isFinite(at) || at >= now - ms;
+  });
+}
 /** Pure: a pattern draft id read back (pattern:<chart>:<pattern>:<status>:<upper>:<lower>:<channel>), or null. */
 export function patternOfId(id) {
   const m = /^pattern:(M15|H1|H4|D1):([a-z0-9_]+):(forming|confirmed):(-?\d+):(-?\d+):([a-z0-9_]+)$/.exec(String(id ?? ""));
@@ -293,31 +317,31 @@ function linesOf(p) {
  * `known` the pattern keys already drafted, `history` the recent pattern drafts ({ id, created_at }), so a confirmed
  * pattern is posted once while xauusd keeps it, even as its lines move (patternDrafted).
  */
-export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS, levelsRun = false, postedToday = {}, known = new Set(), knownLevels = new Set(), history = [], seenBefore = new Set() } = {}) {
+export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS, levelsRun = false, postedToday = {}, known = new Set(), knownLevels = new Set(), history = [], seenBefore = new Set(), patternCharts = null, maps: withMaps = true } = {}) {
   const day = new Date(now).toISOString().slice(0, 10);
   const out = [];
   const perChart = Boolean(analysis?.zones_by_chart && analysis?.closed);
-  const maps = perChart ? dueChartMaps(analysis, { now, known: knownLevels }) : [];
+  const maps = perChart && withMaps ? dueChartMaps(analysis, { now, known: knownLevels }) : [];
   for (const channel of channels.filter((c) => CHANNELS.includes(c))) {
     for (const m of maps) {
       const text = chartMapText(analysis, m, { channel });
       const zones = m.charts.flatMap((c) => analysis.zones_by_chart[c] ?? []);
       if (text) out.push(draft({ id: chartMapId(m.charts, m.closed, channel), kind: "key_levels", channel, text, now, overlay: { ...overlayOf({ ...analysis, zones }, { maxZones: 3 }), chart: m.charts[0] } }));
     }
-    if (levelsRun && !perChart) {
+    if (levelsRun && withMaps && !perChart) {
       const text = keyLevelsText(analysis, { channel });
       if (text) out.push(draft({ id: `levels:${day}:${channel}`, kind: "key_levels", channel, text, now, overlay: overlayOf(analysis, { maxZones: 3 }) }));
     }
     let room = MAX_PATTERN_DRAFTS_PER_DAY - (Number(postedToday[channel]) || 0);
     const bands = [];
-    for (const p of byCatalogue(draftedPatterns(analysis))) {
+    for (const p of byCatalogue(draftedPatterns(analysis).filter((x) => !patternCharts || patternCharts.includes(x.chart)))) {
       const capped = !UNCAPPED_PATTERN_CHARTS.includes(p.chart);
       if (capped && room <= 0) continue;
       const id = `pattern:${patternKey(p)}:${channel}`;
       // one post per chart and band: a pattern earlier in the catalogue on the same lines takes it, this run or before
       if (bands.some((b) => sameBand(b, p))) continue;
       bands.push(p);
-      if (known.has(id) || seenBefore.has(patternSeenKey(p)) || patternDrafted(p, channel, history, now) || bandDrafted(p, channel, history, now)) continue;
+      if (known.has(id) || seenBefore.has(patternSeenKey(p)) || patternDrafted(p, channel, history, now) || bandDrafted(p, channel, history, now) || patternCooling(p, channel, history, now)) continue;
       const text = patternText(p, analysis, { channel });
       if (!text) continue;
       out.push(draft({ id, kind: "pattern", channel, text, now, overlay: overlayOf(analysis, { pattern: p }) }));

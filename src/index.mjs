@@ -117,8 +117,16 @@ export default {
     if (event?.cron === SCHEDULE_CRON) {
       const r = await runSchedule(env, { now: event.scheduledTime || Date.now() }).catch(fail);
       if (r?.slots?.length || r?.auto?.length || r?.status === "error" || r?.written) console.log("cta_schedule", JSON.stringify(r));
-      // The CTA agent's Replies, every 15 minutes (src/agent/replies.mjs).
       const at = event.scheduledTime || Date.now();
+      // M15 patterns, every 5 minutes while gold trades (owner 2026-11-27: "jika bisa ditrigger langsung ketika pattern
+      // 15m confirmed tanpa menunggu jadwal 1H"): a new one is drafted, its card made and, under the auto-approve rule,
+      // published in this run.
+      if (analysisRunDue(at)) {
+        const m15 = await draftAnalysis(env, { now: at, fast: true }).catch(fail);
+        if (m15?.added?.length || m15?.dropped?.length || m15?.status === "error") console.log("cta_m15_drafts", JSON.stringify(m15));
+        if (m15?.added?.length) { await cards(env, fail); await publishNow(env, fail); }
+      }
+      // The CTA agent's Replies, every 15 minutes (src/agent/replies.mjs).
       if (new Date(at).getUTCMinutes() % 15 === 0) {
         const replies = await agentReplies(env, { now: at }).catch(fail);
         if (replies?.status !== "off") console.log("cta_agent_replies", JSON.stringify(replies));

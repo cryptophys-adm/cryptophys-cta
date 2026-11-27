@@ -1217,3 +1217,37 @@ test("the card of a post the Archive leaves out (the 07:09 gap) is not served", 
   assert.equal((await handle(req(`/media/${ids.g}.jpg`), e, opts)).status, 404);
   assert.equal((await handle(req(`/media/${ids.h}.jpg`), e, opts)).status, 200);
 });
+
+test("M15 patterns: the 5-minute pass drafts them at once, the hourly run never; no duplicate as the lines move or the pattern drops out and returns", async () => {
+  // Owner 2026-11-27: "jika bisa ditrigger langsung ketika pattern 15m confirmed tanpa menunggu jadwal 1H" and
+  // "pastikan tidak duplikasi content".
+  const base = env();
+  let reading;
+  const e = { ...base.env, PROJECTION: { ...base.env.PROJECTION, analysis: async () => reading } };
+  const m15 = (upper, lower, extra = {}) => ({ chart: "M15", pattern: "flag", name: "Flag", chapter: 23, status: "confirmed", direction: "up", upper, lower, projection: upper + 2 * (upper - lower), ...extra });
+  const h1 = { chart: "H1", pattern: "rectangle", name: "Rectangle", chapter: 40, status: "confirmed", direction: "up", upper: 3640, lower: 3620, projection: 3660 };
+  const read = (patterns, at) => ({ at: new Date(at).toISOString(), price: 3662.35, zones: [], patterns, structure: {} });
+  const ids = (r) => (r.drafts ?? []).filter((x) => x.id.startsWith("pattern:")).map((x) => x.id);
+  const t0 = Date.parse("2026-11-27T09:20:00Z");
+  reading = read([m15(3660.5, 3655.2), h1], t0);
+  const fast = await draftAnalysis(e, { now: t0, fast: true });
+  assert.deepEqual(ids(fast).filter((x) => x.endsWith(":threads")), ["pattern:M15:flag:confirmed:3661:3655:threads"], "the 5-minute pass: M15 only");
+  assert.equal(fast.charts.join(), "M15");
+  const hourly = await draftAnalysis(e, { now: t0 + 49 * 60_000 });
+  assert.ok(!ids(hourly).some((x) => x.startsWith("pattern:M15:")), "the hourly run leaves M15 to the fast pass");
+  assert.ok(ids(hourly).some((x) => x.startsWith("pattern:H1:rectangle")), "and keeps H1, H4, D1");
+  // 5 minutes later the lines slid (a new rounded id): not again
+  reading = read([m15(3668.2, 3663.9), h1], t0 + 5 * 60_000);
+  assert.deepEqual(ids(await draftAnalysis(e, { now: t0 + 5 * 60_000, fast: true })), []);
+  // it drops out of one reading, then comes back on new lines within 4 hours: not again (the cooldown)
+  reading = read([h1], t0 + 10 * 60_000);
+  await draftAnalysis(e, { now: t0 + 10 * 60_000, fast: true });
+  reading = read([m15(3690.4, 3686.1), h1], t0 + 15 * 60_000);
+  assert.deepEqual(ids(await draftAnalysis(e, { now: t0 + 15 * 60_000, fast: true })), [], "same name and status within 4 hours");
+  // after the cooldown, and gone in between: a new post
+  const later = t0 + 4 * 3_600_000 + 60_000;
+  reading = read([], later - 5 * 60_000);
+  await draftAnalysis(e, { now: later - 5 * 60_000, fast: true });
+  reading = read([m15(3720.4, 3716.1)], later);
+  assert.deepEqual(ids(await draftAnalysis(e, { now: later, fast: true })).filter((x) => x.endsWith(":threads")), ["pattern:M15:flag:confirmed:3720:3716:threads"]);
+});

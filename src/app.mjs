@@ -2,7 +2,7 @@
 // run it under Node). src/index.mjs holds the Durable Object and the RPC entrypoints.
 import { levelFailures } from "./guardian.mjs";
 import { dailyDrafts } from "./drafts.mjs";
-import { analysisDrafts, PATTERN_LOOKBACK_MS, PATTERN_SEEN_KEY, seenPatternKeys } from "./analysis-drafts.mjs";
+import { analysisDrafts, PATTERN_LOOKBACK_MS, PATTERN_SEEN_KEY, PATTERN_SEEN_KEY_M15, HOURLY_PATTERN_CHARTS, FAST_PATTERN_CHARTS, patternLookbackMs, seenPatternKeys } from "./analysis-drafts.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "./channels.mjs";
 import { publishTo, publishingQuota, refreshToken, tiktokAccessToken, googleAccessToken, REFRESH_AFTER_DAYS, isBusinessToken, threadsReplies, publishThreadsReply } from "./publishers.mjs";
 import { verifyAccessJwt } from "./access.mjs";
@@ -256,23 +256,32 @@ export async function draftDay(env, { now = Date.now() } = {}) {
   return { bars: summary.bars, window_delay_hours: windowDelayHours, ...(summary.cut ? { cut: true, rows: (projection?.recaps ?? []).length } : {}), drafts: drafts.map((d) => ({ id: d.id, status: d.status })), added };
 }
 
-/** The real-time analysis drafts (key-level map at 06 UTC, pattern posts every hour), queued once. */
-export async function draftAnalysis(env, { now = Date.now() } = {}) {
+/**
+ * The real-time analysis drafts, queued once. The hourly run (`fast` false): the key-level maps and the H1, H4 and D1
+ * pattern posts. The fast pass (`fast` true, every 5 minutes; owner 2026-11-27: "jika bisa ditrigger langsung ketika
+ * pattern 15m confirmed tanpa menunggu jadwal 1H"): the M15 pattern posts only, with their own seen set, so an M15
+ * breakout goes out within about 5 minutes of xauusd's reading (it reads at every 5-minute close).
+ */
+export async function draftAnalysis(env, { now = Date.now(), fast = false } = {}) {
   const analysis = await env.PROJECTION.analysis();
   const d = desk(env);
-  const known = new Set(await d.idsWithPrefix("pattern:"));
-  const history = await d.draftsSince("pattern:", new Date(now - PATTERN_LOOKBACK_MS).toISOString());
-  const knownLevels = new Set(await d.idsWithPrefix("levels:"));
-  const seen = await d.studioSetting(PATTERN_SEEN_KEY);
+  const charts = fast ? FAST_PATTERN_CHARTS : HOURLY_PATTERN_CHARTS;
+  const seenKey = fast ? PATTERN_SEEN_KEY_M15 : PATTERN_SEEN_KEY;
+  const prefix = fast ? "pattern:M15:" : "pattern:";
+  const known = new Set(await d.idsWithPrefix(prefix));
+  const history = await d.draftsSince(prefix, new Date(now - (fast ? patternLookbackMs("M15") : PATTERN_LOOKBACK_MS)).toISOString());
+  const knownLevels = fast ? new Set() : new Set(await d.idsWithPrefix("levels:"));
+  const seen = await d.studioSetting(seenKey);
   const seenBefore = new Set(Array.isArray(seen?.value?.keys) ? seen.value.keys : []);
   // M15 patterns have no daily cap and do not count toward the others' (owner 2026-11-27: "Tanpa batas khusus").
-  const postedToday = await d.kindCounts("pattern", new Date(now).toISOString().slice(0, 10), "pattern:M15:");
+  const postedToday = fast ? {} : await d.kindCounts("pattern", new Date(now).toISOString().slice(0, 10), "pattern:M15:");
   const { settings } = await channelSettings(env);
   const dropped = [];
-  const drafts = await settled(env, analysisDrafts(analysis, { now, channels: draftingChannels(channelsOf(env), settings), levelsRun: new Date(now).getUTCHours() === 6, postedToday, known, knownLevels, history, seenBefore }), settings, now, dropped);
+  const drafts = await settled(env, analysisDrafts(analysis, { now, channels: draftingChannels(channelsOf(env), settings), levelsRun: !fast && new Date(now).getUTCHours() === 6, postedToday, known, knownLevels, history, seenBefore, patternCharts: charts, maps: !fast }), settings, now, dropped);
   const added = drafts.length ? await d.add(drafts, now) : [];
   // Only a reading with its patterns list moves the seen set (a failed read must not make every pattern new again).
-  if (Array.isArray(analysis?.patterns)) await d.saveStudioSetting({ key: PATTERN_SEEN_KEY, value: { at: new Date(now).toISOString(), keys: seenPatternKeys(analysis) }, actor: "cta-agent" }, now);
+  if (Array.isArray(analysis?.patterns)) await d.saveStudioSetting({ key: seenKey, value: { at: new Date(now).toISOString(), keys: seenPatternKeys(analysis, charts) }, actor: "cta-agent" }, now);
+  if (fast) return { charts, patterns: (analysis?.patterns ?? []).filter((p) => charts.includes(p.chart)).length, drafts: drafts.map((x) => ({ id: x.id, status: x.status })), added, ...(dropped.length ? { dropped } : {}) };
   // What the run read, for its log every hour (orchestrator review, 2026-11-25, after the 07:09 UTC miss): each chart's
   // latest close and how many zones it has, and each draft left out with why.
   const read = analysisRead(analysis);
