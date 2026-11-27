@@ -12,7 +12,7 @@ function sqlite() {
   return { exec(q, ...b) { const s = db.prepare(q); const out = /^\s*SELECT|\bRETURNING\b/i.test(q) ? s.all(...b) : (s.run(...b), []); return { toArray: () => out.map((r) => ({ ...r })) }; } };
 }
 const T = "Education · XAUUSD\n\nGold held its range through London.\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD";
-const IG = T.replace("\n\nEducational", "\n\nChart by TradingView.\nEducational");
+const IG = T.replace("\n\nEducational", "\n\nChart by Cryptophys.\nEducational");
 const at = (iso) => Date.parse(iso);
 const check = (d) => editCheck(d, { now: at("2026-11-17T09:00:00Z") });
 

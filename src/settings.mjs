@@ -168,14 +168,14 @@ export function applySettings(drafts, settings, { today = {}, recheck = null, dr
 /**
  * Pure: a draft in the format a person chose for it (the channel's setting, or the Create page's choice). Only a
  * text channel switched to a media format changes: the draft waits for its card (needs_image) or video, and its text
- * names TradingView (the chart's attribution, the guardian's rule) before the disclaimer. A held draft, a format the
+ * carries the chart's credit (CHART_CREDIT, the guardian's rule) before the disclaimer. A held draft, a format the
  * channel cannot post, a text over the channel's limit, or a guardian refusal leave the draft as it was.
  */
 export function withFormat(d, format, { recheck = null } = {}) {
   const media = format === "image" ? "needs_image" : format === "video" ? "needs_video" : null;
   if (!media || !d || d.status === "blocked" || initialStatus(d.channel) !== "pending" || !FORMATS[d.channel]?.includes(format)) return d;
   let text = d.text;
-  if (!/tradingview/i.test(text)) {
+  if (!/chart by cryptophys/i.test(text)) {
     const lines = text.split("\n");
     lines.splice(Math.max(1, lines.length - 2), 0, CHART_CREDIT);
     text = lines.join("\n");

@@ -105,7 +105,7 @@ test("the format a person chose drives the draft (owner 2026-11-17: Telegram wit
   const d = { id: "t1", channel: "telegram", kind: "key_levels", text, status: "pending", guardian: { pass: true } };
   const img = withFormat(d, "image", { recheck: () => ({ pass: true }) });
   assert.equal(img.status, "needs_image", "waits for its card");
-  assert.match(img.text, /Chart by TradingView\.\nEducational analysis/, "TradingView's credit before the disclaimer");
+  assert.match(img.text, /Chart by Cryptophys\.\nEducational analysis/, "the chart's credit before the disclaimer");
   assert.equal(withFormat(d, "text"), d, "text stays as it is");
   assert.equal(withFormat({ ...d, status: "blocked" }, "image").status, "blocked", "a held draft is not touched");
   assert.equal(withFormat({ ...d, channel: "x" }, "video").status, "pending", "X cannot post a video yet");

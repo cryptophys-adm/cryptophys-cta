@@ -19,7 +19,7 @@ test("templates: blank, key levels, pattern and recap per channel, with the chan
   const blank = templateTexts("custom", { channels: ["threads", "instagram", "x"], settings });
   assert.ok(blank.texts.threads.endsWith("not financial advice."), "Threads: no hashtag line, one topic tag through the API instead (owner 2026-11-25)");
   assert.doesNotMatch(blank.texts.threads, /#/);
-  assert.match(blank.texts.instagram, /Chart by TradingView\./, "the card's credit where the post is the chart");
+  assert.match(blank.texts.instagram, /Chart by Cryptophys\./, "the card's credit where the post is the chart");
   assert.match(blank.texts.x, /Education only\. Not financial advice\./);
   const lv = templateTexts("key_levels", { channels: ["threads", "telegram"], settings, analysis: ANALYSIS });
   assert.match(lv.texts.telegram, /4098\.20–4102\.60/);
@@ -42,7 +42,7 @@ test("the guardian per channel: the blank post needs words; advice, internal nam
   assert.ok(bad(ok.replace("Gold held", "Nexus says gold held")).includes("internal"));
   assert.ok(bad(ok.replace("its range", "4080.50")).includes("price_level"), "a custom post carries no price level");
   assert.deepEqual(bad(ok.replace("its range", "4080.50"), "key_levels"), [], "the analysis kinds do");
-  assert.ok(bad(ok, "custom", "instagram").includes("attribution"), "the card carries TradingView's chart");
+  assert.ok(bad(ok, "custom", "instagram").includes("attribution"), "the card carries the chart's credit");
   assert.ok(bad(ok.replace("Gold held", "x".repeat(TEXT_LIMITS.threads))).includes("length"));
   assert.ok(bad(ok, "meme").includes("kind"));
   assert.equal(checkPost({ channel: "threads", kind: "custom", text: ok.replace(/\n/g, "\r\n"), now: NOW }).length, ok.length, "line ends are normalised");
@@ -58,7 +58,7 @@ test("composing: every channel must pass or nothing is saved; drafts wait for ap
   assert.equal(refused.ok, false);
   assert.equal(refused.results.threads.guardian.pass, true);
   assert.deepEqual(refused.results.instagram.guardian.failures.map((f) => f.check), ["attribution"]);
-  const insta = ok.replace("\n\nEducational", "\n\nChart by TradingView.\nEducational");
+  const insta = ok.replace("\n\nEducational", "\n\nChart by Cryptophys.\nEducational");
   const made = composeDrafts({ kind: "key_levels", posts: [{ channel: "threads", text: ok }, { channel: "instagram", text: insta }], now: NOW, id: "ab12cd34", overlay: () => overlayFor("key_levels", ANALYSIS) });
   assert.ok(made.ok, JSON.stringify(made));
   assert.deepEqual(made.drafts.map((d) => [d.id, d.status]), [["manual:2026-11-17:ab12cd34:threads", "pending"], ["manual:2026-11-17:ab12cd34:instagram", "needs_image"]]);
