@@ -71,8 +71,10 @@ export async function kernelSwitch(env, store, now = Date.now()) {
     const s = r?.outcome === "succeeded" ? r.result : null;
     if (!s || s.schema !== "model_router.status.v1" || s.system !== "cta") next = { on: false, reason: String(r?.reason ?? (s ? "not_cta_status" : r?.outcome ?? "no_answer")).slice(0, 120) };
     else {
-      const on = s.state?.state === "on" && s.state?.mode === "free_only" && !s.global?.paid_off;
-      next = { on, state: s.state?.state ?? null, mode: s.state?.mode ?? null, paid_off: Boolean(s.global?.paid_off), reason: on ? null : s.global?.paid_off ? "paid_stop" : "command_off" };
+      // global.paid_off is D1's 0 or 1 (platform engineer, 2026-11-27): on only with a global row that reads exactly 0.
+      const clear = s.global != null && s.global.paid_off === 0;
+      const on = s.state?.state === "on" && s.state?.mode === "free_only" && clear;
+      next = { on, state: s.state?.state ?? null, mode: s.state?.mode ?? null, paid_off: s.global?.paid_off === 1, reason: on ? null : s.global?.paid_off === 1 ? "paid_stop" : s.global == null ? "no_global_row" : "command_off" };
     }
   } catch { next = { on: false, reason: "read_failed" }; }
   next = { at: new Date(now).toISOString(), ...next };

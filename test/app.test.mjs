@@ -977,7 +977,7 @@ test("auto-approve end to end (owner 2026-11-25): a Threads pattern draft goes o
 
 test("cta-write end to end (rule 4 amended): the switch, a written post auto-approved and published in the run that wrote it, a failed guard keeps the template, the kill switch", async () => {
   resetKeyCacheForTests();
-  const AGENTS = { syscall: async (agent, capability) => (capability === "model_router.status" ? { outcome: "succeeded", result: { schema: "model_router.status.v1", system: "cta", state: { state: "on", mode: "free_only" }, global: null } } : { outcome: "succeeded", result: {} }) };
+  const AGENTS = { syscall: async (agent, capability) => (capability === "model_router.status" ? { outcome: "succeeded", result: { schema: "model_router.status.v1", system: "cta", state: { state: "on", mode: "free_only" }, global: { paid_off: 0 } } } : { outcome: "succeeded", result: {} }) };
   const { env: e, d } = env({ CONTENT_PUBLISH: "on", PUBLISH_CHANNELS: "threads", THREADS_ACCESS_TOKEN: "T", THREADS_USER_ID: "77", REFLECTION_API_KEY: "rk-test", AGENTS });
   const T0 = Date.parse("2026-11-25T06:00:00Z");
   const TEMPLATE = "Education · Pattern breakout · XAUUSD H1\nRounding Top · direction down\n\nBreakout line 3570.54\nThe pattern fails if an H1 candle closes back above 3689.87.\nPrice when read: 3555.10 · 12:09 AM UTC\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.";

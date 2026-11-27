@@ -4,7 +4,7 @@
 - feat(router): CTA's Beam is now switched on Command (Cerebrum → Command, the CTA row), as ADR-0007's design for CTA describes. Owner, 27 Nov: "usulan saya". Platform piece 1 is CTA_CEILING with `cta-model-router` (proposal cns_2f9751ac…).
   - `organism.json` declares the agent `cta-model-router` with exactly `model_router.status` and `model_router.report_paid`, tier 1, no seat.
   - `wrangler.jsonc` and the deploy block get the Service Binding `AGENTS` to `cryptophys-ai-kernel` / `AgentRpc`, with `props.host_worker = "cryptophys-cta"`.
-  - The router reads `model_router.status` at most once a minute. It calls Beam only when CTA's own state is on, the mode is free_only and there is no global paid stop.
+  - The router reads `model_router.status` at most once a minute, sending `{}` (never a `system`). It calls Beam only when CTA's own state is on, the mode is free_only and the global row reads `paid_off === 0`, D1's integer. No global row counts as off.
   - No binding, a refused or failed read, or another system's answer all mean off (`command_off`). A stale read is never used.
   - The studio's switch now only stops the model here.
   - On a paid sign the router calls `model_router.report_paid` with `http_402`, `billing_error` or `cost_field`, never on a 429. If that report does not reach the kernel, the studio's switch goes off too.

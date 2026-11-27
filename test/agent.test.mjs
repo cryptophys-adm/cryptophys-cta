@@ -30,7 +30,7 @@ import { keyLevelsText } from "../src/analysis-drafts.mjs";
 /** A stand-in for the kernel's AgentRpc binding: Command's CTA Beam row on (free_only), report_paid accepted. */
 const commandOn = (state = "on", mode = "free_only", paid_off = false) => {
   const calls = [];
-  return { calls, syscall: async (agent, capability, input) => { calls.push({ agent, capability, input }); return capability === "model_router.status" ? { outcome: "succeeded", result: { schema: "model_router.status.v1", system: "cta", state: { state, mode }, global: paid_off ? { paid_off: true } : null } } : { outcome: "succeeded", result: { changed: true } }; } };
+  return { calls, syscall: async (agent, capability, input) => { calls.push({ agent, capability, input }); return capability === "model_router.status" ? { outcome: "succeeded", result: { schema: "model_router.status.v1", system: "cta", state: { state, mode }, global: { paid_off: paid_off ? 1 : 0 } } } : { outcome: "succeeded", result: { changed: true } }; } };
 };
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
@@ -202,7 +202,7 @@ test("AG6 the model router: the key, the switch, the daily cap, Reflection's ref
   assert.deepEqual(await askModel({ ...env, AGENTS: kernel }, broke, { purpose: "t", messages: msgs, fetcher: () => { throw new Error("no call"); } }), { ok: false, skipped: "command_off", reason: "paid_stop" });
   // The platform could not be told: the studio's own switch goes off too.
   const lost = on();
-  const deaf = { syscall: async (a, c) => (c === "model_router.status" ? { outcome: "succeeded", result: { schema: "model_router.status.v1", system: "cta", state: { state: "on", mode: "free_only" } } } : { outcome: "denied", reason: "agent_not_registered" }) };
+  const deaf = { syscall: async (a, c) => (c === "model_router.status" ? { outcome: "succeeded", result: { schema: "model_router.status.v1", system: "cta", state: { state: "on", mode: "free_only" }, global: { paid_off: 0 } } } : { outcome: "denied", reason: "agent_not_registered" }) };
   assert.equal((await askModel({ ...env, AGENTS: deaf }, lost, { purpose: "t", messages: msgs, fetcher: answer(402, { error: { message: "Payment required" } }) })).reported, false);
   assert.equal(lost.s.settings.agent_model.enabled, false);
   const loud = on();
@@ -710,6 +710,12 @@ test("AG20 Command's CTA Beam row is the switch: read at most once a minute, fai
   assert.equal((await askModel({ ...env, AGENTS: { syscall: async () => ({ outcome: "denied", reason: "agent_not_registered" }) } }, store(), { purpose: "t", messages: msgs, now: t0, fetcher: none })).reason, "agent_not_registered");
   assert.equal((await askModel({ ...env, AGENTS: { syscall: async () => { throw new Error("down"); } } }, store(), { purpose: "t", messages: msgs, now: t0, fetcher: none })).reason, "read_failed");
   assert.equal((await askModel({ ...env, AGENTS: { syscall: async () => ({ outcome: "succeeded", result: { schema: "model_router.status.v1", system: "cerebrum", state: { state: "on", mode: "free_only" } } }) } }, store(), { purpose: "t", messages: msgs, now: t0, fetcher: none })).reason, "not_cta_status");
+  // global.paid_off is D1's 0 or 1: no global row, or a 1, is off; CTA without a row (state null) is off.
+  const answer = (state, global) => ({ syscall: async () => ({ outcome: "succeeded", result: { schema: "model_router.status.v1", system: "cta", state, effective: state?.state ?? "off", global } }) });
+  assert.equal((await askModel({ ...env, AGENTS: answer({ state: "on", mode: "free_only" }, null) }, store(), { purpose: "t", messages: msgs, now: t0, fetcher: none })).reason, "no_global_row");
+  assert.equal((await askModel({ ...env, AGENTS: answer({ state: "on", mode: "free_only" }, { paid_off: 1 }) }, store(), { purpose: "t", messages: msgs, now: t0, fetcher: none })).reason, "paid_stop");
+  assert.equal((await askModel({ ...env, AGENTS: answer(null, { paid_off: 0 }) }, store(), { purpose: "t", messages: msgs, now: t0, fetcher: none })).reason, "command_off");
+  assert.equal((await askModel({ ...env, AGENTS: answer({ state: "on", mode: "free_only" }, { paid_off: 0 }) }, store(), { purpose: "t", messages: msgs, now: t0, fetcher: ok })).ok, true);
   // A stale on is never used: after a minute a failed read is off.
   const flaky = store(); flaky.s.settings[KERNEL_KEY] = { at: new Date(t0 - 120_000).toISOString(), on: true };
   assert.equal((await askModel({ ...env, AGENTS: { syscall: async () => { throw new Error("down"); } } }, flaky, { purpose: "t", messages: msgs, now: t0, fetcher: none })).skipped, "command_off");
