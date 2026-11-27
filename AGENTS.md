@@ -50,10 +50,10 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
      (the guardian's `signal_words` and `instruction` rules);
    - the system's decisions as a recap without a delay (owner 2026-11-25: "harus realtime", "kamu saja yang kerjakan karena xauusd sedang overload", "Semua sekarang", "Posts juga realtime"; before, only after 24 hours): a decision may be posted as a recap at once (the guardian's `PUBLIC_DELAY_HOURS` "0"; "24" restores the hold), but its price, entry, SL and TP are never posted; the analysis (zones, patterns, structure) in real time. The owner accepted the risk (2026-11-25, about 12:37 UTC, to the orchestrator's question whether posts that close to live can read as a signal service, POJK): "Posts realtime too, risk accepted";
    - no promised return, no account data, never Nexus or Omega, never a secret;
-   - chart images are TradingView charts with TradingView's attribution visible; never a chart drawn from Yahoo
-     data, the TradingView account's bars or the broker's MT5 bars (licensing). Our zones, pattern lines and
-     measured projection are drawn as an overlay over TradingView's chart, from its own price mapping (owner
-     2026-11-15: "Overlay on TradingView"); the overlay carries only the draft's own numbers;
+   - chart images are drawn by Cryptophys from the draft's own published numbers only (zones, pattern lines, measured
+     projection, price when read), to scale and marked as a schematic; never a price series (candles or a line)
+     without a data licence. The home page's live quote stays TradingView's Single Quote widget, in its own frame,
+     with its credit (owner 2026-11-27);
    - news is never republished, only our own summary with the source named.
 4. **Model-written public text only behind the CTA's guards** (amended 2026-11-25, owner: "amandemen aturan 4 agar
    bisa mengadopsi semua"; before, "No model writes public text"). Fixed templates over the xauusd `PublicProjection`

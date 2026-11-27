@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-27 (the public pages: our cards are schematics)
+- docs(pages): the public pages describe our cards as schematics drawn by Cryptophys. Owner, 27 Nov: "setuju kartu skematik B, footer archive tetap sebut TradingView". This is PR 2 of 2; PR 1 changed the cards and videos.
+  - About, step 3: "…and the chart's credit present."
+  - About, what we never post: "Price charts drawn from data we have no licence for: our cards show only our own published numbers".
+  - Disclaimer: "Our cards are schematics drawn by Cryptophys from the numbers in the post, not price charts; the live quote on the home page is TradingView's, shown with its credit."
+  - Terms: "Our post images are schematics drawn by Cryptophys; the home page's live quote is TradingView's, shown with its credit."
+  - Footers of About, Disclaimer, Privacy, Sign in and Terms: "© Cryptophys · Education, not financial advice". The Archive's footer: "Older cards: chart by TradingView". The home page is unchanged.
+  - AGENTS rule 3: chart images are drawn by Cryptophys from the draft's own published numbers only, marked as a schematic; never a price series without a data licence. The home quote stays TradingView's widget with its credit.
+  - `test/fixtures/legal-words.json` carries the new words; a test holds that no page but the Archive credits TradingView for a chart.
+
 ## 2026-11-27 (a measured projection that is not sane is left out)
 - fix(pattern): a pattern post's "Measured projection" line, and the projection arrow on its card, are left out when the projection is not sane. On 27 Nov the H1 gap at 07:09Z went out on Threads with "Measured projection: 0.00".
   - Sane (`saneProjection`) means all of:

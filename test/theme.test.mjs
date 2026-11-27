@@ -18,7 +18,11 @@ const PATH = { "index.html": "/", "performance.html": "/performance", "archive.h
 // also the studio's 403 page).
 const LEGAL = ["disclaimer.html", "privacy.html", "terms.html"];
 const PORTED = [...LEGAL, "about.html", "signin.html"];
-const FOOT_NOTE = '<p class="foot-note"><span>Chart by TradingView</span><span>© Cryptophys · Education, not financial advice</span></p>';
+// The foot note (owner 2026-11-27, cards drawn by Cryptophys): the copyright alone; the Archive, which still shows older
+// cards with TradingView's chart, keeps their credit.
+const FOOT_NOTE = '<p class="foot-note"><span>© Cryptophys · Education, not financial advice</span></p>';
+const ARCHIVE_FOOT_NOTE = '<p class="foot-note"><span>Older cards: chart by TradingView</span><span>© Cryptophys · Education, not financial advice</span></p>';
+const footNoteOf = (f) => (f === "archive.html" ? ARCHIVE_FOOT_NOTE : FOOT_NOTE);
 const page = (f) => read(`public/${f}`);
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -83,7 +87,7 @@ test("TH3 the Footer and Legal navs carry the same links on every page ('3D cred
   // as words, under the Legal links.
   for (const f of ["archive.html", ...PORTED]) {
     const foot = block(page(f), '<footer class="foot">', "</footer>");
-    assert.ok(foot.includes(`</nav>\n  ${FOOT_NOTE}\n</footer>`), `${f}: the foot note under the Legal nav`);
+    assert.ok(foot.includes(`</nav>\n  ${footNoteOf(f)}\n</footer>`), `${f}: the foot note under the Legal nav`);
   }
   // The whole footer, markup and attributes, equals the Performance page's (review of #67): nothing between or after
   // the navs, no nested markup in a link, no extra attribute. Allowed: the foot note (Archive and the ported pages) and
@@ -91,7 +95,7 @@ test("TH3 the Footer and Legal navs carry the same links on every page ('3D cred
   const perfFoot = norm(block(perf, '<footer class="foot">', "</footer>"));
   for (const f of THEME_PAGES) {
     const foot = norm(block(page(f), '<footer class="foot">', "</footer>"))
-      .replace(`\n  ${FOOT_NOTE}`, "")
+      .replace(`\n  ${footNoteOf(f)}`, "")
       .replace(/\n {4}<a href="\/room\/CREDITS\.txt">3D credits<\/a>/, "");
     assert.equal(foot, perfFoot, `${f}: the shared footer`);
   }
@@ -147,11 +151,13 @@ test("TH6 every page that names a versioned file is one of the build's VERSIONED
 
 test("TH7 the war room and TradingView's quote are the home page's only: no #gold-live, frame, TradingView markup, home.js or /room/ elsewhere", () => {
   for (const f of THEME_PAGES.filter((p) => p !== "index.html")) {
-    // the markup only: the words "Chart by TradingView" and "Charts are TradingView's" are the pages' own text
+    // the markup only: the words naming TradingView (the home quote's credit, the Archive's older cards) are the pages' own text
     const tags = (page(f).match(/<[^>]*>/g) ?? []).join("\n");
     assert.doesNotMatch(tags, /gold-live|<iframe|tradingview|home\.js|\/room\//i, `${f}: nothing of the home page's scene or quote`);
   }
   for (const f of PORTED) assert.doesNotMatch(page(f), /<iframe|tradingview\.com|gold-live|home\.js|\/room\//, f);
+  // our cards are drawn by Cryptophys (owner 2026-11-27): no page but the Archive (its older cards) credits TradingView for a chart
+  for (const f of THEME_PAGES.filter((p) => p !== "archive.html")) assert.doesNotMatch(page(f), /Chart by TradingView|Charts are TradingView's/i, f);
 });
 
 test("TH8 About, Disclaimer, Privacy, Terms and Sign in keep every word: <main> and the title equal the PR base, word for word", () => {
@@ -269,8 +275,8 @@ test("TH12 About (PR 2): every part keeps its words, the steps are h2 under the 
     text(block(main, '<div class="a-note"', "</div>"))
   ];
   assert.equal(parts.join(" "), base.pages["about.html"], "the words inside <main>, part by part");
-  // the footer's two strings stay (owner decision 2), as words under the Legal links
-  for (const s of ["<span>Chart by TradingView</span>", "<span>© Cryptophys · Education, not financial advice</span>"]) assert.ok(block(html, '<footer class="foot">', "</footer>").includes(s), s);
+  // the footer's copyright stays (owner decision 2; the chart credit left with the TradingView chart, owner 2026-11-27)
+  for (const s of ["<span>© Cryptophys · Education, not financial advice</span>"]) assert.ok(block(html, '<footer class="foot">', "</footer>").includes(s), s);
   // heading order: one h1 first, and no heading deeper than one level below the one before it
   const levels = [...html.matchAll(/<h([1-6])\b/g)].map((m) => Number(m[1]));
   assert.deepEqual(levels, [1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 2]);
