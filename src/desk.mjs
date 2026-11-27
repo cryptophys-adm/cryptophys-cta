@@ -6,7 +6,7 @@
 // (the guardian failed), approved (waits for publishing, or publishing is off), rejected, published, failed, expired
 // (an analysis draft older than ANALYSIS_TTL_HOURS: its price levels have aged; owner 2026-11-17 "kadaluwarsa otomatis").
 // Each change is an event with who and why. An approval runs the guardian again on the stored text.
-import { checkContentDraft } from "./guardian.mjs";
+import { checkContentDraft, levelFailures } from "./guardian.mjs";
 import { initialStatus, mediaStatusOf } from "./channels.mjs";
 import { chartsOfId, patternOfId, patternLookbackMs } from "./analysis-drafts.mjs";
 
@@ -303,7 +303,8 @@ export const postKey = (p) => (String(p?.id ?? "").endsWith(`:${p?.channel}`) ? 
 /**
  * The published posts for the public Archive, newest first, one line per post (`postKey`): a post published on more
  * than one channel is shown once, from another channel before a channel of ARCHIVE_LAST_CHANNELS, else its newest
- * publish; a Telegram-only post is shown once.
+ * publish; a Telegram-only post is shown once. A post whose text fails the guardian's level checks (`levelFailures`) is
+ * left out.
  */
 export function publishedPosts(sql, { limit = 30 } = {}) {
   ensureDesk(sql);
@@ -312,6 +313,10 @@ export function publishedPosts(sql, { limit = 30 } = {}) {
   const last = (p) => ARCHIVE_LAST_CHANNELS.includes(p.channel);
   const pick = new Map();
   for (const p of all) {
+    // A post whose text prints a level the guardian now refuses (0.00, a projection that is not sane) leaves the
+    // Archive (owner 2026-11-27: "hapus posting di archived dengan nilai measurement 0.0"): it stays published in the
+    // desk, with its history, and returns if the rule changes; nothing is deleted.
+    if (levelFailures(p.text).length) continue;
     const k = postKey(p), had = pick.get(k);
     if (!had || (last(had) && !last(p))) pick.set(k, p);
   }
@@ -388,7 +393,7 @@ export function attachImage(sql, { id, mediaId, data, bytes, imageUrl, contentTy
 export function mediaOf(sql, mediaId) {
   ensureDesk(sql);
   if (!MEDIA_ID.test(String(mediaId ?? ""))) return null;
-  const m = rows(sql, "SELECT m.content_type, m.data, m.bytes, m.draft_id, d.status AS draft_status FROM media m JOIN drafts d ON d.id = m.draft_id WHERE m.id = ?", mediaId)[0] ?? null;
+  const m = rows(sql, "SELECT m.content_type, m.data, m.bytes, m.draft_id, d.status AS draft_status, d.text AS draft_text FROM media m JOIN drafts d ON d.id = m.draft_id WHERE m.id = ?", mediaId)[0] ?? null;
   if (m && !m.data) m.data = rows(sql, "SELECT data FROM media_chunks WHERE media_id = ? ORDER BY seq", mediaId).map((r) => r.data).join("");
   return m;
 }

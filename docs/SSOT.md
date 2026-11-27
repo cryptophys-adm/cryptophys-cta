@@ -201,6 +201,18 @@ own besides the template lines. A post is saved only when every channel passes; 
 any other (cards and videos are made for them by the same run). Settings' kinds and daily maximum bound the engine,
 not a person's post.
 
+Levels the guardian refuses (owner 2026-11-27: "hapus posting di archived dengan nilai measurement 0.0 dan pastikan
+guardian mengecek dan reject ini sebelum approval posting."; `levelFailures` in `src/guardian.mjs`). Two checks on every
+public text, every channel and kind: `projection_not_sane`, a "Measured projection" that `saneProjection` would leave
+out (0 or below, not a number, more than `PROJECTION_MAX_SHARE` from the price when read, or on the wrong side of the
+breakout line; the drafter and the guardian use the one function), and `zero_level`, a published level printed as 0.00
+or below (breakout line, the "fails if … closes back" level, a pattern line, a zone edge, the price when read). They
+run wherever the guardian runs: drafting, an edit, Create, a person's approval and the auto-approve rule (both
+`decideDraft`), a card attached, and once more on the approved text right before the platform is called (a draft
+approved before a rule existed, or put back after a failure, fails there with the checks as its error, and nothing is
+sent). A published post whose text fails them leaves the Archive and its card is no longer served (`/media` 404); it
+stays published in the desk with its history, and nothing is deleted. The copies on the platforms are not touched.
+
 War Room (owner 2026-11-18: "tambahkan create content war room dengan pilihan news, 15m, 1h, 4h, 1D"; confirmed:
 "Real-time analysis"; `src/warroom-drafts.mjs`). Create's "War Room" start with a Source: News (the last 24 hours),
 15m War Room, 1H, 4H or 1D room. It reads the AI Worker's `PublicProjection.warroom({ source })`: a room's bias

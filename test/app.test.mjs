@@ -1182,3 +1182,38 @@ test("the daily recap asks for 2 days and up to 200 rows and drafts the projecti
   const c = await draftDay(old, { now });
   assert.deepEqual([c.cut, c.rows, c.added], [true, 50, []]);
 });
+
+test("the guardian once more at publish: a draft approved before a rule existed (the 07:09 gap) fails, the platform is never called", async () => {
+  const { env: e, d } = env({ CONTENT_PUBLISH: "on", PUBLISH_CHANNELS: "telegram", TELEGRAM_BOT_TOKEN: "123:SECRET", TELEGRAM_CHAT_ID: "@xauusd_ai_cta" });
+  const gap = "Education - Pattern breakout - XAUUSD H1\nGap - direction up\n\nBreakout line 3631.57\nThe pattern fails if an H1 candle closes back below 3627.36.\nMeasured projection: 0.00 (analysis, not a trade objective).\nPrice when read: 3662.35 - 7:09 AM UTC\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.";
+  const now = Date.now();
+  addDrafts(d.sql, [{ id: "g1:telegram", channel: "telegram", kind: "pattern", text: "Education only. Not financial advice.", status: "pending" }], { now });
+  decideDraft(d.sql, { id: "g1:telegram", decision: "approve", actor: "owner" }, { now });
+  d.sql.exec("UPDATE drafts SET text = ? WHERE id = ?", gap, "g1:telegram"); // as approved before the rule
+  const calls = [];
+  const fetcher = async (url) => { calls.push(url); return Response.json({ ok: true, result: { message_id: 1 } }); };
+  const r = await publishDraft(e, getDraft(d.sql, "g1:telegram"), { fetcher, now });
+  assert.equal(r.status, "failed");
+  assert.deepEqual(calls, [], "no platform call");
+  assert.match(getDraft(d.sql, "g1:telegram").error, /guardian refused it at publish: .*projection_not_sane/);
+  // put back by a person: refused again
+  assert.equal(requeueFailed(d.sql, { id: "g1:telegram", actor: "owner" }, { now }), true);
+  assert.equal((await publishDraft(e, getDraft(d.sql, "g1:telegram"), { fetcher, now })).status, "failed");
+  assert.deepEqual(calls, []);
+});
+
+test("the card of a post the Archive leaves out (the 07:09 gap) is not served", async () => {
+  const { env: e, d } = env();
+  const gap = "Education - Pattern breakout - XAUUSD H1\nGap - direction up\n\nBreakout line 3631.57\nMeasured projection: 0.00 (analysis, not a trade objective).\nNot financial advice.";
+  const ok = "Education - Pattern breakout - XAUUSD H1\nGap - direction up\n\nBreakout line 3631.57\nMeasured projection: 3700.00 (analysis, not a trade objective).\nNot financial advice.";
+  const now = Date.now();
+  addDrafts(d.sql, [{ id: "g:threads", channel: "threads", kind: "pattern", text: ok, status: "needs_image" }, { id: "h:threads", channel: "threads", kind: "pattern", text: ok, status: "needs_image" }], { now });
+  const ids = { g: "a1".repeat(16), h: "b2".repeat(16) };
+  for (const [k, mid] of Object.entries(ids)) {
+    attachImage(d.sql, { id: `${k}:threads`, mediaId: mid, data: "/9j/AAAA", bytes: 6, imageUrl: `https://cta.cryptophys.work/media/${mid}.jpg` }, { now });
+    d.sql.exec("UPDATE drafts SET status = 'published', published_at = ? WHERE id = ?", new Date(now).toISOString(), `${k}:threads`);
+  }
+  d.sql.exec("UPDATE drafts SET text = ? WHERE id = ?", gap, "g:threads");
+  assert.equal((await handle(req(`/media/${ids.g}.jpg`), e, opts)).status, 404);
+  assert.equal((await handle(req(`/media/${ids.h}.jpg`), e, opts)).status, 200);
+});
