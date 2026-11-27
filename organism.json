@@ -128,7 +128,8 @@
       "ACCESS_AUD",
       "PUBLIC_ORIGIN",
       "CONTENT_INSIGHTS",
-      "AGENT_REPLIES"
+      "AGENT_REPLIES",
+      "PATTERN_FAST_PASS"
     ],
     "secrets_kept": [
       "THREADS_ACCESS_TOKEN",

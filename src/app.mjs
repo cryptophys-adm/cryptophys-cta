@@ -2,7 +2,7 @@
 // run it under Node). src/index.mjs holds the Durable Object and the RPC entrypoints.
 import { levelFailures } from "./guardian.mjs";
 import { dailyDrafts } from "./drafts.mjs";
-import { analysisDrafts, PATTERN_LOOKBACK_MS, PATTERN_SEEN_KEY, PATTERN_CHARTS, seenPatternKeys, KIND_FAMILY, PATTERN_LEDGER_KEY, PATTERN_RECAP_KEY, updateLedger, invalidationDrafts, patternRecapDrafts, patternOfId, PATTERN_RECAP_CHANNELS } from "./analysis-drafts.mjs";
+import { analysisDrafts, PATTERN_LOOKBACK_MS, PATTERN_SEEN_KEY, PATTERN_CHARTS, seenPatternKeys, KIND_FAMILY, PATTERN_LEDGER_KEY, PATTERN_RECAP_KEY, updateLedger, invalidationDrafts, patternRecapDrafts, patternOfId, PATTERN_RECAP_CHANNELS, patternsDue } from "./analysis-drafts.mjs";
 import { CHANNEL_SPECS as SPECS } from "./channels.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "./channels.mjs";
 import { publishTo, publishingQuota, refreshToken, tiktokAccessToken, googleAccessToken, REFRESH_AFTER_DAYS, isBusinessToken, threadsReplies, publishThreadsReply } from "./publishers.mjs";
@@ -298,6 +298,52 @@ async function patternPass(env, d, analysis, { now, channels, settings, dropped 
   return { drafts: [...drafts, ...ready], added: [...added, ...invalid] };
 }
 
+/** The per-chart closes the 5-minute pass last drafted from (studio setting): an unchanged reading does no draft work. */
+export const FAST_CLOSED_KEY = "pattern_fast_closed";
+/**
+ * The 5-minute pattern pass (owner 2026-11-27: "pattern confirmed 15m dicek tiap 15m dan langsung dipost ketika muncul
+ * confirmed sehingga info ketinggalan atau expired ini bisa dieliminasi"), on xauusd's cheap PublicProjection.patterns()
+ * (one KV key, written at each chart's close; xauusd #654), never the hourly analysis() unless a draft is due and the
+ * reading carries no price (see below). It stops before any draft work when every chart's close is the one it last
+ * drafted from; otherwise the same pattern pass as the hourly run (seen set, cooldown,
+ * band, once-only, projection reached, the ledger and the invalidated post).
+ */
+async function fastPatternPass(env, { now = Date.now() } = {}) {
+  const d = desk(env);
+  const last = (await d.studioSetting(FAST_CLOSED_KEY))?.value ?? null;
+  // The whole value every time (one KV read in xauusd either way): a late series can rewrite one chart's close under the
+  // same at_close_ms, which `sinceCloseMs` would answer as unchanged; the closes per chart decide (orchestrator review).
+  const res = await env.PROJECTION.patterns({});
+  if (!res || res.unchanged) return { status: "unchanged" };
+  if (!Array.isArray(res.patterns) || !res.closed || typeof res.closed !== "object") return { status: "no_patterns" };
+  // A late series can rewrite the value with the same at_close_ms: the closes per chart decide (orchestrator review).
+  if (last?.closed && JSON.stringify(last.closed) === JSON.stringify(res.closed)) return { status: "same_close" };
+  const price = Number.isFinite(Number(res.price)) && Number(res.price) > 0 ? Number(res.price) : null;
+  // price_at: ms from xauusd (a number), or an ISO string; else the reading's latest close.
+  const atRaw = res.price_at;
+  const atMs = typeof atRaw === "number" && Number.isFinite(atRaw) ? atRaw : Number.isFinite(Date.parse(atRaw ?? "")) ? Date.parse(atRaw) : Number(res.at_close_ms);
+  let reading = { at: new Date(Number.isFinite(atMs) ? atMs : now).toISOString(), price, zones: [], patterns: res.patterns };
+  let priceFrom = price != null ? "patterns" : null;
+  if (price == null) {
+    // No price in the reading (xauusd's patterns() before it carries one): the posts need it ("Price when read", a
+    // projection reached), so the one analysis() read happens only when a draft is due.
+    const seen = await d.studioSetting(PATTERN_SEEN_KEY);
+    const ledgerRow = await d.studioSetting(PATTERN_LEDGER_KEY);
+    if (patternsDue(reading, { seen: Array.isArray(seen?.value?.keys) ? seen.value.keys : [], ledger: Array.isArray(ledgerRow?.value?.items) ? ledgerRow.value.items : [], now })) {
+      const a = await env.PROJECTION.analysis();
+      if (Number.isFinite(Number(a?.price))) { reading = { ...reading, at: a.at ?? reading.at, price: Number(a.price), zones: Array.isArray(a.zones) ? a.zones : [] }; priceFrom = "analysis"; }
+      // One line per run that used it (orchestrator review of #117): it stops once xauusd's patterns() carries a price.
+      console.log("cta_fast_pass_price_fallback", JSON.stringify({ at_close_ms: res.at_close_ms ?? null, price: priceFrom === "analysis" }));
+    }
+  }
+  const { settings } = await channelSettings(env);
+  const channels = draftingChannels(channelsOf(env), settings);
+  const dropped = [];
+  const p = await patternPass(env, d, reading, { now, channels, settings, dropped });
+  await d.saveStudioSetting({ key: FAST_CLOSED_KEY, value: { at: new Date(now).toISOString(), at_close_ms: res.at_close_ms ?? null, closed: res.closed }, actor: "cta-agent" }, now);
+  return { status: "read", charts: PATTERN_CHARTS, closed: res.closed, patterns: res.patterns.length, price_from: priceFrom, drafts: p.drafts.map((x) => ({ id: x.id, status: x.status })), added: p.added, ...(dropped.length ? { dropped } : {}) };
+}
+
 /**
  * The real-time analysis drafts, queued once. The hourly run: the key-level maps, the pattern posts of every chart
  * (unless the 5-minute pass is on: then they are its), and the hourly pattern recap (owner 2026-11-27: "setiap jam perlu
@@ -306,15 +352,12 @@ async function patternPass(env, d, analysis, { now, channels, settings, dropped 
  * while `fastPassOn`.
  */
 export async function draftAnalysis(env, { now = Date.now(), fast = false } = {}) {
+  if (fast) return fastPatternPass(env, { now });
   const analysis = await env.PROJECTION.analysis();
   const d = desk(env);
   const { settings } = await channelSettings(env);
   const channels = draftingChannels(channelsOf(env), settings);
   const dropped = [];
-  if (fast) {
-    const p = await patternPass(env, d, analysis, { now, channels, settings, dropped });
-    return { charts: PATTERN_CHARTS, patterns: (analysis?.patterns ?? []).length, drafts: p.drafts.map((x) => ({ id: x.id, status: x.status })), added: p.added, ...(dropped.length ? { dropped } : {}) };
-  }
   const pat = fastPassOn(env) ? { drafts: [], added: [] } : await patternPass(env, d, analysis, { now, channels, settings, dropped });
   const knownLevels = new Set(await d.idsWithPrefix("levels:"));
   const maps = analysisDrafts(analysis, { now, channels, levelsRun: new Date(now).getUTCHours() === 6, knownLevels, patternCharts: [] });
