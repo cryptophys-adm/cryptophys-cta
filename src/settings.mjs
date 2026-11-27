@@ -14,6 +14,7 @@
 // Never a token or account id: accounts are Worker secrets set through the platform, shown only as connected or not.
 import { CHANNELS, CHANNEL_SPECS, HASHTAGS, initialStatus } from "./channels.mjs";
 import { CHART_CREDIT } from "./drafts.mjs";
+import { kindFamily, TEXT_ONLY_KINDS } from "./analysis-drafts.mjs";
 
 export const KINDS = Object.freeze(["key_levels", "pattern", "daily_recap"]);
 export const KIND_NAMES = Object.freeze({ key_levels: "Key-level map", pattern: "Chart pattern", daily_recap: "Daily recap" });
@@ -142,7 +143,8 @@ export function applySettings(drafts, settings, { today = {}, recheck = null, dr
     const s = settings[d.channel];
     const drop = (reason) => dropped?.push({ id: d.id, channel: d.channel, reason, ...(reason === "max_per_day" ? { max: s.max_per_day } : {}) });
     if (!s || !s.enabled) { drop("channel_off"); continue; }
-    if (!s.kinds.includes(d.kind)) { drop("kind_off"); continue; }
+    // The pattern family (invalidated, hourly recap) follows the channel's Chart pattern kind (owner 2026-11-27).
+    if (!s.kinds.includes(kindFamily(d.kind))) { drop("kind_off"); continue; }
     if ((count[d.channel] ?? 0) >= s.max_per_day) { drop("max_per_day"); continue; }
     let draft = d;
     // A draft the guardian held is queued as it is (the studio shows why); only a passing draft gets the hashtags.
@@ -157,8 +159,9 @@ export function applySettings(drafts, settings, { today = {}, recheck = null, dr
         if (!guardian || guardian.pass !== false) draft = { ...changed, guardian };
       }
     }
-    // The channel's format, chosen by a person before anything is drafted, scheduled or not.
-    draft = withFormat(draft, s.format, { recheck });
+    // The channel's format, chosen by a person before anything is drafted, scheduled or not; a text-only kind keeps
+    // its text (owner 2026-11-27: "recap jadi tidak perlu gambar").
+    if (!TEXT_ONLY_KINDS.includes(d.kind)) draft = withFormat(draft, s.format, { recheck });
     count[d.channel] = (count[d.channel] ?? 0) + 1;
     out.push(draft);
   }

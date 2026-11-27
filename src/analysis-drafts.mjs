@@ -203,18 +203,19 @@ export const patternSeenKey = (p) => `${p.chart}:${p.pattern}:${p.status}`;
 /** Pure: the keys of the confirmed patterns this run read on `charts` (all when null): what the next run compares with. */
 export const seenPatternKeys = (analysis, charts = null) => [...new Set(draftedPatterns(analysis).filter((p) => !charts || charts.includes(p.chart)).map(patternSeenKey))].sort();
 /**
- * M15 is read every 5 minutes (owner 2026-11-27: "jika bisa ditrigger langsung ketika pattern 15m confirmed tanpa
- * menunggu jadwal 1H"), by its own pass with its own seen set (PATTERN_SEEN_KEY_M15); the hourly run reads H1, H4, D1.
+ Every chart's confirmed patterns are read every 5 minutes (owner 2026-11-27: "jika bisa ditrigger langsung ketika
+ * pattern 15m confirmed tanpa menunggu jadwal 1H", then "berlaku juga untuk 1H/4H/1D"), by the fast pass with the one
+ * seen set (PATTERN_SEEN_KEY); the hourly run drafts no pattern post (it makes the maps and the pattern recap).
  */
-export const PATTERN_SEEN_KEY_M15 = "analysis_patterns_seen_m15";
-export const HOURLY_PATTERN_CHARTS = Object.freeze(["H1", "H4", "D1"]);
-export const FAST_PATTERN_CHARTS = Object.freeze(["M15"]);
+export const HOURLY_PATTERN_CHARTS = Object.freeze([]);
+export const FAST_PATTERN_CHARTS = Object.freeze(["M15", "H1", "H4", "D1"]);
 /**
- * No duplicate content (owner 2026-11-27: "pastikan tidak duplikasi content"): an M15 pattern of the same catalogue name
- * and status is not posted again on a channel within PATTERN_COOLDOWN_MS of its last draft, whatever its band (an M15
+ * No duplicate content (owner 2026-11-27: "pastikan tidak duplikasi content", then "berlaku juga untuk 1H/4H/1D"): a
+ * pattern of the same chart, catalogue name and status is not posted again on a channel within 16 of its chart's bars
+ * of its last draft (PATTERN_COOLDOWN_MS: 4 hours on M15, 16 on H1, 64 on H4, 16 days on D1), whatever its band (a
  * pattern that drops out of one reading and comes back, or slides its lines, is the same post).
  */
-export const PATTERN_COOLDOWN_MS = Object.freeze({ M15: 4 * 3_600_000 });
+export const PATTERN_COOLDOWN_MS = Object.freeze({ M15: 16 * 900_000, H1: 16 * 3_600_000, H4: 16 * 4 * 3_600_000, D1: 16 * 24 * 3_600_000 });
 /** Pure: whether `p` (a chart with a cooldown) was drafted for `channel`, under its name and status, within the cooldown. */
 export function patternCooling(p, channel, history, now = Date.now()) {
   const ms = PATTERN_COOLDOWN_MS[p?.chart];
@@ -349,4 +350,128 @@ export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS
     }
   }
   return out;
+}
+
+// ---- Live patterns (owner 2026-11-27): every chart read every 5 minutes, an invalidated pattern posted, an hourly recap ----
+// "berlaku juga untuk 1H/4H/1D termasuk jika ada pattern invalidated tertrigger, dan setiap jam perlu recap pattern apa
+// yang sedang aktif dengan target harganya dan pattern apa yang invalidated. karena recap jadi tidak perlu gambar."
+// The two new kinds are text only, in the owner's approved words (the templates of 2026-11-27, "Setuju template"),
+// on the text channels; they count as the Chart pattern kind for a channel's kinds and auto-approve ("Ya, auto-approve").
+
+/** The text-only kinds of the pattern family: never a card, whatever the channel's format. */
+export const PATTERN_INVALIDATED = "pattern_invalidated";
+export const PATTERN_RECAP = "pattern_recap";
+export const TEXT_ONLY_KINDS = Object.freeze([PATTERN_INVALIDATED, PATTERN_RECAP]);
+/** The kind a channel's settings (kinds, auto-approve) read for a draft's kind. */
+export const KIND_FAMILY = Object.freeze({ [PATTERN_INVALIDATED]: "pattern", [PATTERN_RECAP]: "pattern" });
+export const kindFamily = (kind) => KIND_FAMILY[kind] ?? kind;
+/** The hourly recap goes to these channels (owner 2026-11-27: "Threads + Telegram"). */
+export const PATTERN_RECAP_CHANNELS = Object.freeze(["threads", "telegram"]);
+/** The ledger of posted confirmed patterns (studio setting): what an invalidation is checked against. */
+export const PATTERN_LEDGER_KEY = "pattern_ledger";
+export const PATTERN_RECAP_KEY = "pattern_recap_last";
+const CHART_ORDER = ["D1", "H4", "H1", "M15"];
+
+/** Pure: what a confirmed pattern post said fails it: a candle closing back past the other line. */
+export function failOf(p) {
+  const up = p?.direction === "up";
+  return { side: up ? "below" : "above", level: up ? Number(p?.lower) : Number(p?.upper), line: up ? Number(p?.upper) : Number(p?.lower) };
+}
+/** Pure: a ledger entry for a confirmed pattern as it was drafted (its lines, its fail level, its sane projection). */
+export function ledgerEntry(p, analysis, now = Date.now()) {
+  const f = failOf(p);
+  return { key: `${p.chart}:${p.pattern}`, chart: p.chart, pattern: p.pattern, name: String(p.name ?? p.pattern).slice(0, 60), direction: p.direction,
+    upper: num(p.upper), lower: num(p.lower), side: f.side, level: num(f.level), projection: saneProjection(p, analysis?.price), at: new Date(now).toISOString() };
+}
+/**
+ * Pure: the ledger after this reading. A new confirmed draft adds its pattern (one entry per chart and name; a newer
+ * one replaces an older); an entry leaves after its chart's lookback. An entry is invalidated, once, when the reading
+ * shows its pattern busted, or confirmed the other way: a candle closed back past the line its post named (the
+ * post's own words: "The pattern fails if … closes back below …"). Back inside its lines is not a failure; a pattern
+ * no longer read (its projection reached, or old) is not one either.
+ */
+export function updateLedger(ledger, analysis, { drafted = [], now = Date.now() } = {}) {
+  const items = new Map((Array.isArray(ledger) ? ledger : []).filter((e) => e?.key && Date.parse(e.at) >= now - patternLookbackMs(e.chart)).map((e) => [e.key, { ...e }]));
+  for (const p of drafted) items.set(`${p.chart}:${p.pattern}`, ledgerEntry(p, analysis, now));
+  const invalidated = [];
+  for (const e of items.values()) {
+    if (e.invalidated_at) continue;
+    const p = (analysis?.patterns ?? []).find((x) => x.chart === e.chart && x.pattern === e.pattern);
+    if (!p) continue;
+    if (p.status === "busted" || (p.status === "confirmed" && p.direction && e.direction && p.direction !== e.direction)) {
+      e.invalidated_at = new Date(now).toISOString();
+      invalidated.push(e);
+    }
+  }
+  return { ledger: [...items.values()], invalidated };
+}
+
+/** Pure: the post of an invalidated pattern, text only (owner's approved template of 2026-11-27). */
+export function invalidatedText(e, analysis, { channel = "threads" } = {}) {
+  const lines = [`Education · Pattern invalidated · XAUUSD ${e.chart}`, `${e.name} · direction ${e.direction === "up" ? "up" : e.direction === "down" ? "down" : "unclear"}`, "",
+    `${an(e.chart).replace(/^a/, "A")} candle closed back ${e.side} ${f2(e.level)}: the breakout did not hold.`];
+  if (e.projection != null) lines.push(`Its measured projection ${f2(e.projection)} no longer applies.`);
+  if (analysis?.price != null) lines.push(`Price when read: ${f2(analysis.price)} · ${clock12(analysis.at)} UTC`);
+  return finish(lines, channel);
+}
+export const invalidatedId = (e, channel) => `pinvalid:${e.chart}:${e.pattern}:${Math.round(e.upper)}:${Math.round(e.lower)}:${channel}`;
+
+/** Pure: the confirmed patterns active in a reading, largest chart first, then catalogue order. */
+export function activePatterns(analysis) {
+  const list = (analysis?.patterns ?? []).filter((p) => p.status === "confirmed" && CHART_ORDER.includes(p.chart));
+  return byCatalogue(list).sort((a, b) => CHART_ORDER.indexOf(a.chart) - CHART_ORDER.indexOf(b.chart));
+}
+const activeLine = (p, price) => {
+  const proj = saneProjection(p, price);
+  return `• ${p.chart} ${p.name} · ${p.direction === "up" ? "up" : p.direction === "down" ? "down" : "unclear"} · breakout ${f2(failOf(p).line)}${proj != null ? ` · measured projection ${f2(proj)}` : ""}`;
+};
+const invalidLine = (e) => `• ${e.chart} ${e.name} · closed back ${e.side} ${f2(e.level)}`;
+/** Pure: what a recap says, for the "nothing changed" check: the active patterns' lines and the invalidated keys. */
+export const recapSignature = (active, invalidated) => JSON.stringify([active.map((p) => `${p.chart}:${p.pattern}:${p.direction}:${Math.round(p.upper)}:${Math.round(p.lower)}`), invalidated.map((e) => `${e.key}@${e.invalidated_at}`)]);
+/**
+ * Pure: the hourly pattern recap, text only (owner's approved template of 2026-11-27): the active confirmed patterns
+ * with their measured projection, and the patterns invalidated in the last hour. Too long for the channel: the
+ * active list loses its last lines (the smallest charts), then the invalidated list; never the title, the price, the
+ * closing line or the disclaimer.
+ */
+export function patternRecapText({ active, invalidated, analysis, hourIso }, { channel = "threads" } = {}) {
+  const price = analysis?.price;
+  let act = active.map((p) => activeLine(p, price)), inv = invalidated.map(invalidLine);
+  const build = () => {
+    const lines = [`Education · XAUUSD pattern recap · ${clock12(hourIso)} UTC`];
+    if (price != null) lines.push(`Price when read: ${f2(price)}`);
+    if (act.length) lines.push("", "Active (confirmed):", ...act);
+    if (inv.length) lines.push("", "Invalidated in the last hour:", ...inv);
+    lines.push("", "Patterns fail often; a measured projection is analysis, not a trade objective.");
+    const tail = ["", channel === "x" ? SHORT_DISCLAIMER : ANALYSIS_DISCLAIMER, ...[ANALYSIS_HASHTAGS[channel] ?? ""].filter(Boolean)];
+    return [...lines, ...tail].join("\n");
+  };
+  const max = TEXT_LIMITS[channel] ?? 500;
+  let text = build();
+  while (text.length > max && (act.length || inv.length)) { if (act.length) act = act.slice(0, -1); else inv = inv.slice(0, -1); text = build(); }
+  return text.length <= max && (act.length || inv.length) ? text : null;
+}
+export const patternRecapId = (hourIso, channel) => `precap:${String(hourIso).slice(0, 13).replace(/[-:]/g, "")}:${channel}`;
+
+/** Pure: the invalidation drafts for the channels where the pattern's confirmed post went out. */
+export function invalidationDrafts(invalidated, analysis, { channels = [], now = Date.now() } = {}) {
+  const out = [];
+  for (const e of invalidated) for (const channel of channels) {
+    const text = invalidatedText(e, analysis, { channel });
+    if (text) out.push(draft({ id: invalidatedId(e, channel), kind: PATTERN_INVALIDATED, channel, text, now }));
+  }
+  return out;
+}
+/** Pure: the hourly recap drafts, or none when it would say nothing or the same as the last one. */
+export function patternRecapDrafts(analysis, { invalidated = [], lastSignature = null, channels = PATTERN_RECAP_CHANNELS, now = Date.now() } = {}) {
+  const active = activePatterns(analysis);
+  const sig = recapSignature(active, invalidated);
+  if ((!active.length && !invalidated.length) || sig === lastSignature) return { drafts: [], signature: sig, skipped: !active.length && !invalidated.length ? "empty" : "unchanged" };
+  const hourIso = new Date(Math.floor(now / 3_600_000) * 3_600_000).toISOString();
+  const drafts = [];
+  for (const channel of channels.filter((c) => PATTERN_RECAP_CHANNELS.includes(c))) {
+    const text = patternRecapText({ active, invalidated, analysis, hourIso }, { channel });
+    if (text) drafts.push(draft({ id: patternRecapId(hourIso, channel), kind: PATTERN_RECAP, channel, text, now }));
+  }
+  return { drafts, signature: sig };
 }

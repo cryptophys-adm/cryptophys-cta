@@ -83,7 +83,7 @@ const iso = (ms) => new Date(ms).toISOString();
 export function ensureDesk(sql) { for (const q of DESK_SCHEMA) sql.exec(q); }
 
 /** Kinds whose text is the analysis itself, price levels included (the guardian's allowLevels). */
-export const LEVEL_KINDS = Object.freeze(["key_levels", "pattern"]);
+export const LEVEL_KINDS = Object.freeze(["key_levels", "pattern", "pattern_invalidated", "pattern_recap"]);
 /** The guardian's check of a stored draft, the same way it was drafted: levels for analysis kinds, attribution with an image. */
 export function recheck(d, { delayHours = 24, now = Date.now() } = {}) {
   return checkContentDraft({ text: d.text, chart: Boolean(d.image_url), decisionTimes: d.decision_times, delayHours, allowLevels: LEVEL_KINDS.includes(d.kind), now });
@@ -284,7 +284,7 @@ export function draftIdsWithPrefix(sql, prefix) {
 export function draftsWithPrefixSince(sql, prefix, sinceIso) {
   ensureDesk(sql);
   const p = String(prefix ?? "");
-  return rows(sql, "SELECT id, created_at FROM drafts WHERE id >= ? AND id < ? AND created_at >= ?", p, p + "\uffff", String(sinceIso)).map((r) => ({ id: r.id, created_at: r.created_at }));
+  return rows(sql, "SELECT id, created_at, status FROM drafts WHERE id >= ? AND id < ? AND created_at >= ?", p, p + "\uffff", String(sinceIso)).map((r) => ({ id: r.id, created_at: r.created_at, status: r.status }));
 }
 /** Drafts of `kind` per channel since `sinceIso`; ids starting with `excludePrefix` are not counted (M15 patterns, owner 2026-11-27). */
 export function kindCountsSince(sql, kind, sinceIso, excludePrefix = null) {
