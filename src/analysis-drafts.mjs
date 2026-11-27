@@ -480,7 +480,7 @@ export function invalidationDrafts(invalidated, analysis, { channels = [], now =
     // pattern's lines as read now, no projection (it no longer applies).
     const p = (analysis?.patterns ?? []).find((x) => x.chart === e.chart && x.pattern === e.pattern) ?? e;
     // Only its own lines (orchestrator review of #115): no zone, no projection, no other level.
-    const overlay = { ...overlayOf(analysis, { pattern: { ...p, name: e.name, chart: e.chart, status: "confirmed", direction: e.direction, projection: null } }), zones: [] };
+    const overlay = { ...overlayOf(analysis, { pattern: { ...p, name: e.name, chart: e.chart, status: "invalidated", direction: e.direction, projection: null } }), zones: [] };
     if (text) out.push(draft({ id: invalidatedId(e, channel), kind: PATTERN_INVALIDATED, channel, text, now, overlay }));
   }
   return out;

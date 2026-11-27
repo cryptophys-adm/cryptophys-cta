@@ -128,3 +128,18 @@ test("the invalidated post's card shows the pattern's own chart and the Chart pa
   assert.equal(chartOf(d), "H4");
   assert.match(cardHtml(d, BRANDS["xauusd-ai-cta"]), /Education · Chart pattern/);
 });
+
+test("the invalidated card: its own status, the image says invalidated, lines only (no projection, arrow or confirm hint), the guardian passes its words (orchestrator review of #115)", async () => {
+  const { overlayLabels, overlaySvg } = await import("../src/card.mjs");
+  const e = ledgerEntry(wedge(), read([]), at);
+  const [d] = invalidationDrafts([e], read([wedge({ status: "busted", direction: "up" })], 3631.2), { channels: ["instagram"], now: at });
+  const o = d.overlay;
+  assert.deepEqual([o.pattern.status, o.pattern.projection, o.zones], ["invalidated", null, []]);
+  const labels = overlayLabels(o);
+  assert.deepEqual(labels, ["Rising Wedge · H1 · invalidated", "Upper line 3622.40", "Lower line 3606.10"]);
+  assert.deepEqual(checkContentDraft({ text: `Education. Not financial advice. Chart by TradingView.\n${labels.join("\n")}`, chart: true, allowLevels: true }).failures, []);
+  const geo = { pane: { x: 0, y: 0, w: 1000, h: 600 }, xLast: 700, xs: [], ys: [100, 300, 200], range: { from: 3590, to: 3640 } };
+  const svg = overlaySvg(o, geo);
+  assert.match(svg, /Rising Wedge · H1 · invalidated/);
+  assert.doesNotMatch(svg, /Measured projection|Projection area|confirms|stroke-dasharray="12 8"|marker-end/);
+});
