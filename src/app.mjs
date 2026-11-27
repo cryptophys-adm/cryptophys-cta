@@ -2,7 +2,7 @@
 // run it under Node). src/index.mjs holds the Durable Object and the RPC entrypoints.
 import { levelFailures } from "./guardian.mjs";
 import { dailyDrafts } from "./drafts.mjs";
-import { analysisDrafts, PATTERN_LOOKBACK_MS, PATTERN_SEEN_KEY, PATTERN_CHARTS, seenPatternKeys, KIND_FAMILY, PATTERN_LEDGER_KEY, PATTERN_RECAP_KEY, updateLedger, invalidationDrafts, patternRecapDrafts, patternOfId, PATTERN_RECAP_CHANNELS, patternsDue } from "./analysis-drafts.mjs";
+import { analysisDrafts, PATTERN_LOOKBACK_MS, PATTERN_SEEN_KEY, PATTERN_CHARTS, seenPatternKeys, KIND_FAMILY, PATTERN_LEDGER_KEY, PATTERN_RECAP_KEY, updateLedger, invalidationDrafts, patternRecapDrafts, patternOfId, PATTERN_RECAP_CHANNELS, patternsDue, projectionReached } from "./analysis-drafts.mjs";
 import { CHANNEL_SPECS as SPECS } from "./channels.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "./channels.mjs";
 import { publishTo, publishingQuota, refreshToken, tiktokAccessToken, googleAccessToken, REFRESH_AFTER_DAYS, isBusinessToken, threadsReplies, publishThreadsReply } from "./publishers.mjs";
@@ -33,6 +33,12 @@ import { goldClosedAt } from "../site/home/market-hours.js";
 
 export const RECAP_CRON = "17 22 * * TUE-SAT";
 export const ANALYSIS_CRON = "9 * * * SUN-FRI";
+/**
+ * The pattern pass's own cron (owner 2026-11-27: "5m itu mungkin harga sudah bergerak ke target proyeksi"): one minute
+ * after xauusd's 5-minute step writes its patterns (its cron "2-59/5"), so a new M15 pattern is read about 3 minutes
+ * after its close instead of the 5 to 6 of the 5-minute scheduler's next tick.
+ */
+export const PATTERN_CRON = "3-59/5 * * * *";
 /**
  * The hourly analysis run drafts only while gold trades (the AI Worker's rule, site/home/market-hours.js). The cron runs
  * Sunday to Friday so the week's first hour after the reopen is drafted (Sunday 23:09 UTC in winter, 22:09 in US
@@ -182,6 +188,18 @@ export async function publishDraft(env, draft, { now = Date.now(), fetcher, slot
   if (CHANNEL_SPECS[draft.channel]?.publisher !== "built") return { status: "approved", held: "publisher_not_built" };
   const account = await accountFor(env, draft.channel, { now, fetcher });
   if (!account) return { status: "approved", held: "account_not_configured" };
+  // A pattern post whose measured projection the price reached by now is not published (owner 2026-11-27: "5m itu
+  // mungkin harga sudah bergerak ke target proyeksi"; Threads' slots can be hours later): the fresh price from xauusd's
+  // patterns() (one KV read), never analysis(); without a price there, no recheck.
+  if (draft.kind === "pattern" && draft.overlay?.pattern?.projection != null && typeof env.PROJECTION?.patterns === "function") {
+    const fresh = await env.PROJECTION.patterns({}).catch(() => null);
+    const price = Number(fresh?.price);
+    if (Number.isFinite(price) && price > 0 && projectionReached({ ...draft.overlay.pattern, status: "confirmed" }, price)) {
+      await desk(env).expire({ id: draft.id, reason: "projection_reached_at_publish" }, now);
+      console.log("cta_publish_skipped", JSON.stringify({ id: draft.id, channel: draft.channel, reason: "projection_reached_at_publish", price }));
+      return { status: "expired", held: "projection_reached_at_publish" };
+    }
+  }
   // One claim before the platform is called (orchestrator review of #93): only the run that moves the draft from approved
   // to publishing posts it; a second run at the same moment gets "already_publishing" and calls nothing.
   const claim = await desk(env).claimPublish({ id: draft.id }, now);

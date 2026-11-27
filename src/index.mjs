@@ -15,9 +15,9 @@
 // Kernel: the OrganismDna and CtaHealth entrypoints serve the platform's census and drift checks.
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import puppeteer from "@cloudflare/puppeteer";
-import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites, claimPublish, draftsWithPrefixSince } from "./desk.mjs";
+import { expireStale, expireDraft, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites, claimPublish, draftsWithPrefixSince } from "./desk.mjs";
 import { editCheck } from "./compose.mjs";
-import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, collectInsights, runSchedule, agentWeekly, agentReplies, forgetOldReplies, ANALYSIS_CRON, analysisRunDue, fastPassOn } from "./app.mjs";
+import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, collectInsights, runSchedule, agentWeekly, agentReplies, forgetOldReplies, ANALYSIS_CRON, PATTERN_CRON, analysisRunDue, fastPassOn } from "./app.mjs";
 import { SCHEDULE_CRON } from "./scheduler.mjs";
 import ORGANISM from "../organism.json" with { type: "json" };
 
@@ -29,6 +29,7 @@ export class ContentDesk extends DurableObject {
   async get(id) { const d = getDraft(this.sql, id); return d ? { ...d, events: draftEvents(this.sql, id) } : null; }
   async decide(input, now) { return decideDraft(this.sql, input, { now }); }
   async published(input, now) { return recordPublish(this.sql, input, { now }); }
+  async expire(input, now) { return expireDraft(this.sql, input, { now: now ?? Date.now() }); }
   async claimPublish(input, now) { return claimPublish(this.sql, input, { now }); }
   async requeue(input, now) { return requeueFailed(this.sql, input, { now }); }
   async counts() { return deskCounts(this.sql); }
@@ -118,21 +119,23 @@ export default {
       const r = await runSchedule(env, { now: event.scheduledTime || Date.now() }).catch(fail);
       if (r?.slots?.length || r?.auto?.length || r?.status === "error" || r?.written) console.log("cta_schedule", JSON.stringify(r));
       const at = event.scheduledTime || Date.now();
-      // Patterns of every chart, every 5 minutes while gold trades, only while PATTERN_FAST_PASS is "on" (held: the
-      // orchestrator's review of #113, xauusd's analysis() is not cheap; owner 2026-11-27: "jika bisa ditrigger langsung ketika
-      // pattern 15m confirmed tanpa menunggu jadwal 1H", then "berlaku juga untuk 1H/4H/1D termasuk jika ada pattern
-      // invalidated tertrigger"): a new confirmed or invalidated one is drafted, its card made when it takes one, and,
-      // under the auto-approve rule, published in this run.
-      if (fastPassOn(env) && analysisRunDue(at)) {
-        const live = await draftAnalysis(env, { now: at, fast: true }).catch(fail);
-        if (live?.added?.length || live?.dropped?.length || live?.status === "error") console.log("cta_pattern_drafts", JSON.stringify(live));
-        if (live?.added?.length) { await cards(env, fail); await publishNow(env, fail); }
-      }
       // The CTA agent's Replies, every 15 minutes (src/agent/replies.mjs).
       if (new Date(at).getUTCMinutes() % 15 === 0) {
         const replies = await agentReplies(env, { now: at }).catch(fail);
         if (replies?.status !== "off") console.log("cta_agent_replies", JSON.stringify(replies));
       }
+      return;
+    }
+    // Patterns of every chart, every 5 minutes at minute 3, 8, … while gold trades, while PATTERN_FAST_PASS is "on" (owner
+    // 2026-11-27: "pattern confirmed 15m dicek tiap 15m dan langsung dipost ketika muncul confirmed"; "5m itu mungkin harga
+    // sudah bergerak ke target proyeksi": one minute after xauusd writes them): a new confirmed or invalidated one is
+    // drafted, its card made when it takes one, and, under the auto-approve rule, published in this run.
+    if (event?.cron === PATTERN_CRON) {
+      const at = event.scheduledTime || Date.now();
+      if (!fastPassOn(env) || !analysisRunDue(at)) return;
+      const live = await draftAnalysis(env, { now: at, fast: true }).catch(fail);
+      if (live?.added?.length || live?.dropped?.length || live?.status === "error") console.log("cta_pattern_drafts", JSON.stringify(live));
+      if (live?.added?.length) { await cards(env, fail); await publishNow(env, fail); }
       return;
     }
     if (event?.cron === ANALYSIS_CRON) {

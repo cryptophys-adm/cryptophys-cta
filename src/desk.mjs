@@ -232,6 +232,18 @@ export function failStuckPublishing(sql, { now = Date.now() } = {}) {
 }
 
 /** The outcome of a publishing attempt of an approved draft. */
+/**
+ * An approved draft that must not go out after all (2026-11-27: a pattern whose measured projection the price reached
+ * by the time it would be published, "projection_reached_at_publish"): expired with the reason as its error and an
+ * event. Only an approved draft; returns whether it changed.
+ */
+export function expireDraft(sql, { id, reason, actor = "content-engine" }, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  const why = clip(String(reason ?? "expired"), 120);
+  const changed = rows(sql, "UPDATE drafts SET status = 'expired', error = ? WHERE id = ? AND status = 'approved' RETURNING id", why, String(id));
+  if (changed.length) event(sql, { at: iso(now), id: String(id), action: "expired", actor: clip(String(actor), 120), detail: why });
+  return changed.length > 0;
+}
 export function recordPublish(sql, { id, remoteId = null, error = null, text = null }, { now = Date.now() } = {}) {
   ensureDesk(sql);
   const status = remoteId ? "published" : "failed";

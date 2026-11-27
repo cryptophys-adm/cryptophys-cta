@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-27 (the pattern pass one minute after xauusd's writer; the projection checked again at publish)
+- feat(pattern): two changes after the owner's concern, 27 Nov: "5m itu mungkin harga sudah bergerak ke target proyeksi".
+  - **Its own cron, `3-59/5 * * * *`** (`PATTERN_CRON`). The pattern pass now runs one minute after xauusd's 5-minute step writes `public:patterns:v1` (its cron `2-59/5`), not on the scheduler's `*/5` tick. A new M15 pattern is read about 3 minutes after its candle closes (it was 5 to 6). Its card takes about 7 seconds and Telegram publishes at once, so close to post is about 3½ minutes. The `*/5` scheduler keeps the slots and the replies.
+  - **Recheck at publish.** Just before a `pattern` post goes out on any channel (Telegram at once, Threads at its slot), `publishDraft` reads the fresh price from xauusd's `patterns()` (one KV read, never `analysis()`). If the measured projection is reached by then, the post is not published: it is expired with error `projection_reached_at_publish` and an event (`expireDraft`), and logged `cta_publish_skipped`. Without a price in `patterns()`, nothing is rechecked.
+  - Tests: the cron fires at minute 3, 8, … 58, and the scheduler no longer runs the pass. A reached post is expired, not sent. One not reached goes out. Without a price, nothing is rechecked and no `analysis()` call is made.
+
 ## 2026-11-27 (the 5-minute pattern pass is on, on xauusd's patterns())
 - feat(pattern): the 5-minute pattern pass is switched on (`PATTERN_FAST_PASS` "on" in wrangler.jsonc and organism.json) and reads xauusd's cheap `PublicProjection.patterns()` (xauusd #654: one KV key, written at each chart's close, M15 and `busted` included). Owner, 27 Nov: "pattern confirmed 15m dicek tiap 15m dan langsung dipost ketika muncul confirmed sehingga info ketinggalan atau expired ini bisa dieliminasi".
   - Each pass reads the whole value. It does no draft work when every chart's close is the one it last drafted from (`pattern_fast_closed`). This is a per-chart compare, not `sinceCloseMs`, because a late series can rewrite one chart's close under the same `at_close_ms`.

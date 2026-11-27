@@ -11,7 +11,7 @@ import { ABOUT_LEDE } from "../src/agent/write.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
 import { AGENT_SECRETS, KERNEL_AGENT, KERNEL_CAPABILITIES } from "../src/agent/router.mjs";
-import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites, claimPublish, failStuckPublishing, STUCK_NOTE, draftsWithPrefixSince, ARCHIVE_LAST_CHANNELS, postKey, onePatternPost } from "../src/desk.mjs";
+import { expireStale, expireDraft, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites, claimPublish, failStuckPublishing, STUCK_NOTE, draftsWithPrefixSince, ARCHIVE_LAST_CHANNELS, postKey, onePatternPost } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "../src/channels.mjs";
@@ -40,7 +40,7 @@ function deskStub() {
   const api = {
     add: async (d, now, actor) => addDrafts(sql, d, { now, ...(actor ? { actor } : {}) }), list: async (i) => listDrafts(sql, i ?? {}),
     get: async (id) => { const d = getDraft(sql, id); return d ? { ...d, events: draftEvents(sql, id) } : null; },
-    decide: async (i, now) => decideDraft(sql, i, { now }), published: async (i, now) => recordPublish(sql, i, { now }), claimPublish: async (i, now) => claimPublish(sql, i, { now }), requeue: async (i, now) => requeueFailed(sql, i, { now }),
+    decide: async (i, now) => decideDraft(sql, i, { now }), published: async (i, now) => recordPublish(sql, i, { now }), expire: async (i, now) => expireDraft(sql, i, { now }), claimPublish: async (i, now) => claimPublish(sql, i, { now }), requeue: async (i, now) => requeueFailed(sql, i, { now }),
     counts: async () => deskCounts(sql), channelCountsByStatus: async () => channelStatusCounts(sql), token: async (c) => storedToken(sql, c), saveToken: async (c, t, now) => { storeToken(sql, c, t, { now }); return true; },
     idsWithPrefix: async (p) => draftIdsWithPrefix(sql, p), draftsSince: async (p, s) => draftsWithPrefixSince(sql, p, s), kindCounts: async (k, s) => kindCountsSince(sql, k, s), archive: async (n) => publishedPosts(sql, { limit: n }),
     needingImage: async (n, retry) => draftsNeedingImage(sql, { limit: n, retry }), attachImage: async (i, now) => attachImage(sql, i, { now }),
@@ -1318,7 +1318,7 @@ test("the 5-minute pattern pass is a switch (on in this deploy): off, the hourly
   const eOn = { ...on.env, PROJECTION: { ...on.env.PROJECTION, analysis: async () => reading, patterns: async () => patternsFrom(reading) } };
   assert.deepEqual(ids(await draftAnalysis(eOn, { now: Date.parse("2026-11-27T09:09:30Z") })), [], "on: the hourly run leaves the patterns to the 5-minute pass");
   const src = (f) => readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
-  assert.match(src("src/index.mjs"), /if \(fastPassOn\(env\) && analysisRunDue\(at\)\) \{/, "the 5-minute cron reads the analysis only while the switch is on");
+  assert.match(src("src/index.mjs"), /if \(!fastPassOn\(env\) \|\| !analysisRunDue\(at\)\) return;/, "the pattern cron reads xauusd only while the switch is on and gold trades");
   assert.match(src("wrangler.jsonc"), /"PATTERN_FAST_PASS": "on"/, "on since xauusd's patterns() (#654) is live");
 });
 
@@ -1367,4 +1367,32 @@ test("the 5-minute pass reads xauusd's patterns() only: never analysis() when it
   assert.equal(logs.filter((l) => l.startsWith("cta_fast_pass_price_fallback")).length, 1, "one fallback line per run that used it");
   assert.deepEqual([r6.price_from, calls.analysis], ["analysis", 1], "a draft due: one analysis() for its price");
   assert.match(getDraft(base.d.sql, "pattern:M15:pennant:confirmed:3660:3650:threads").text, /Price when read: 3640\.00/);
+});
+
+test("the pattern post is rechecked at publish: a projection the price reached by then is not published (expired, projection_reached_at_publish); one not reached goes out; no price, no recheck", async () => {
+  // Owner 2026-11-27: "5m itu mungkin harga sudah bergerak ke target proyeksi"; Threads' slots can be hours later.
+  const { env: e0, d } = env({ CONTENT_PUBLISH: "on", PUBLISH_CHANNELS: "telegram", TELEGRAM_BOT_TOKEN: "123:SECRET", TELEGRAM_CHAT_ID: "@xauusd_ai_cta" });
+  let fresh = { version: "cryptophys.public-patterns.v1", at_close_ms: 1, closed: {}, patterns: [], price: 3652 };
+  const calls = { analysis: 0 };
+  const e = { ...e0, PROJECTION: { ...e0.PROJECTION, patterns: async () => fresh, analysis: async () => { calls.analysis += 1; return {}; } } };
+  const now = Date.now();
+  const overlay = { price: 3640, zones: [], pattern: { name: "Flag", chart: "M15", status: "confirmed", direction: "up", upper: 3625.34, lower: 3596.4, projection: 3650.11 } };
+  const text = "Education · Pattern breakout · XAUUSD M15\nFlag · direction up\n\nBreakout line 3625.34\nMeasured projection: 3650.11 (analysis, not a trade objective).\nNot financial advice.";
+  addDrafts(d.sql, ["p1", "p2", "p3"].map((id) => ({ id: `pattern:M15:${id}:confirmed:3625:3596:telegram`, kind: "pattern", channel: "telegram", text, overlay, status: "pending" })), { now });
+  for (const id of ["p1", "p2", "p3"]) decideDraft(d.sql, { id: `pattern:M15:${id}:confirmed:3625:3596:telegram`, decision: "approve", actor: "owner" }, { now });
+  const sent = [];
+  const fetcher = async (url, init) => { sent.push(url); return Response.json({ ok: true, result: { message_id: sent.length } }); };
+  // reached by now (3652 >= 3650.11): not published, expired with the reason and an event
+  const r1 = await publishDraft(e, getDraft(d.sql, "pattern:M15:p1:confirmed:3625:3596:telegram"), { fetcher, now });
+  assert.deepEqual(r1, { status: "expired", held: "projection_reached_at_publish" });
+  assert.deepEqual([getDraft(d.sql, "pattern:M15:p1:confirmed:3625:3596:telegram").status, getDraft(d.sql, "pattern:M15:p1:confirmed:3625:3596:telegram").error], ["expired", "projection_reached_at_publish"]);
+  assert.ok(draftEvents(d.sql, "pattern:M15:p1:confirmed:3625:3596:telegram").some((x) => x.action === "expired" && x.detail === "projection_reached_at_publish"));
+  assert.equal(sent.length, 0);
+  // not reached: published
+  fresh = { ...fresh, price: 3645 };
+  assert.equal((await publishDraft(e, getDraft(d.sql, "pattern:M15:p2:confirmed:3625:3596:telegram"), { fetcher, now })).status, "published");
+  // no price in patterns(): no recheck, and never analysis()
+  fresh = { ...fresh, price: undefined };
+  assert.equal((await publishDraft(e, getDraft(d.sql, "pattern:M15:p3:confirmed:3625:3596:telegram"), { fetcher, now })).status, "published");
+  assert.equal(calls.analysis, 0);
 });
