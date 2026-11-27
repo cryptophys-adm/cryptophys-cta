@@ -415,10 +415,16 @@ export function invalidatedText(e, analysis, { channel = "threads" } = {}) {
 }
 export const invalidatedId = (e, channel) => `pinvalid:${e.chart}:${e.pattern}:${Math.round(e.upper)}:${Math.round(e.lower)}:${channel}`;
 
-/** Pure: the confirmed patterns active in a reading, largest chart first, then catalogue order. */
+/**
+ * Pure: the confirmed patterns active in a reading, largest chart first, then catalogue order; one per chart and band,
+ * as the posts are (`sameBand`; 27 Nov 16:09, the first recap listed H4 Diamond Bottom and H4 Measured Move Up on the
+ * same 3607.25 breakout).
+ */
 export function activePatterns(analysis) {
-  const list = (analysis?.patterns ?? []).filter((p) => p.status === "confirmed" && CHART_ORDER.includes(p.chart));
-  return byCatalogue(list).sort((a, b) => CHART_ORDER.indexOf(a.chart) - CHART_ORDER.indexOf(b.chart));
+  const list = byCatalogue((analysis?.patterns ?? []).filter((p) => p.status === "confirmed" && CHART_ORDER.includes(p.chart)));
+  const kept = [];
+  for (const p of list) if (!kept.some((k) => sameBand(k, p))) kept.push(p);
+  return kept.sort((a, b) => CHART_ORDER.indexOf(a.chart) - CHART_ORDER.indexOf(b.chart));
 }
 const activeLine = (p, price) => {
   const proj = saneProjection(p, price);

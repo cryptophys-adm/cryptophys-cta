@@ -552,6 +552,7 @@ export function nextApproved(sql, channel, { now = Date.now() } = {}) {
   ensureDesk(sql);
   expireStale(sql, { now });
   supersedeMaps(sql, channel, { now });
+  supersedeRecaps(sql, channel, { now });
   return rows(sql, "SELECT * FROM drafts WHERE status = 'approved' AND channel = ? ORDER BY COALESCE(decided_at, created_at) ASC, id LIMIT 1", channel).map(shape)[0] ?? null;
 }
 /**
@@ -559,6 +560,23 @@ export function nextApproved(sql, channel, { now = Date.now() } = {}) {
  * each chart key ("H1", "H4+H1", ...) may go out; each older one is marked expired with error "superseded:<newer id>"
  * and an event "superseded", and is never published. Other kinds keep their order. Returns the ids superseded.
  */
+/**
+ * Newest wins for the hourly pattern recap too (2026-11-27: a channel with posting slots, Threads, held the 16:09 recap
+ * for its slot): of a channel's approved recaps only the newest may go out; each older one is expired with error
+ * "superseded:<newer id>" and an event, never published. Returns the ids superseded.
+ */
+export function supersedeRecaps(sql, channel, { now = Date.now() } = {}) {
+  ensureDesk(sql);
+  const recaps = rows(sql, "SELECT id FROM drafts WHERE status = 'approved' AND channel = ? AND kind = 'pattern_recap' ORDER BY id DESC", String(channel)).map((r) => r.id);
+  const out = [];
+  for (const id of recaps.slice(1)) {
+    const by = `superseded:${recaps[0]}`;
+    sql.exec("UPDATE drafts SET status = 'expired', error = ? WHERE id = ? AND status = 'approved'", by, id);
+    event(sql, { at: iso(now), id, action: "superseded", actor: "content-engine", detail: by });
+    out.push(id);
+  }
+  return out;
+}
 export function supersedeMaps(sql, channel, { now = Date.now() } = {}) {
   ensureDesk(sql);
   const newest = new Map(), out = [];
