@@ -1359,7 +1359,11 @@ test("the 5-minute pass reads xauusd's patterns() only: never analysis() when it
   const r5 = await draftAnalysis(e, { now: Date.parse("2026-11-27T18:50:00Z"), fast: true });
   assert.deepEqual([r5.added, r5.price_from, calls.analysis], [[], null, 0], "nothing new: no analysis()");
   value = close("2026-11-27T19:00:00.000Z", { price: undefined, price_at: undefined, patterns: [wedge, { ...wedge, pattern: "pennant", name: "Pennant", upper: 3660, lower: 3650, projection: 3690 }] });
-  const r6 = await draftAnalysis(e, { now: Date.parse("2026-11-27T19:05:00Z"), fast: true });
+  const logs = [], log = console.log;
+  console.log = (...a) => { logs.push(a.join(" ")); };
+  let r6;
+  try { r6 = await draftAnalysis(e, { now: Date.parse("2026-11-27T19:05:00Z"), fast: true }); } finally { console.log = log; }
+  assert.equal(logs.filter((l) => l.startsWith("cta_fast_pass_price_fallback")).length, 1, "one fallback line per run that used it");
   assert.deepEqual([r6.price_from, calls.analysis], ["analysis", 1], "a draft due: one analysis() for its price");
   assert.match(getDraft(base.d.sql, "pattern:M15:pennant:confirmed:3660:3650:threads").text, /Price when read: 3640\.00/);
 });

@@ -330,6 +330,8 @@ async function fastPatternPass(env, { now = Date.now() } = {}) {
     if (patternsDue(reading, { seen: Array.isArray(seen?.value?.keys) ? seen.value.keys : [], ledger: Array.isArray(ledgerRow?.value?.items) ? ledgerRow.value.items : [], now })) {
       const a = await env.PROJECTION.analysis();
       if (Number.isFinite(Number(a?.price))) { reading = { ...reading, at: a.at ?? reading.at, price: Number(a.price), zones: Array.isArray(a.zones) ? a.zones : [] }; priceFrom = "analysis"; }
+      // One line per run that used it (orchestrator review of #117): it stops once xauusd's patterns() carries a price.
+      console.log("cta_fast_pass_price_fallback", JSON.stringify({ at_close_ms: res.at_close_ms ?? null, price: priceFrom === "analysis" }));
     }
   }
   const { settings } = await channelSettings(env);
