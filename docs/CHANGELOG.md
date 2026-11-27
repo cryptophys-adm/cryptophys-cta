@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-27 (#108 reverted: owner chose the TradingView widget, option 1)
+- revert(card): #108 reverted: owner chose the TradingView widget (option 1). Owner, 27 Nov, ~08:05Z: "ya pakai opsi 1 widget tradingview". Cards and videos are back to TradingView's Advanced Chart widget with our overlay, and the credit "Chart by TradingView." returns.
+  - The revert is the exact inverse of 75345e5 (card, render, guardian, settings, brands, video, studio, SSOT, tests, the schematic screenshots).
+  - The projection guard stays: #107's `saneProjection` (src/analysis-drafts.mjs) and its tests are untouched.
+  - The pages PR (#109) was closed unmerged; public pages, footers and AGENTS rule 3 are as before.
+  - Drafts made while #108 was live carry "Chart by Cryptophys."; the guardian refuses them on attribution when their card is attached.
+
 ## 2026-11-27 (a measured projection that is not sane is left out)
 - fix(pattern): a pattern post's "Measured projection" line, and the projection arrow on its card, are left out when the projection is not sane. On 27 Nov the H1 gap at 07:09Z went out on Threads with "Measured projection: 0.00".
   - Sane (`saneProjection`) means all of:
