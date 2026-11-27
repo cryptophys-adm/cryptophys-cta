@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-27 (the pattern recap: one pattern per band; newest recap wins on a slotted channel)
+- fix(pattern): the first hourly recap (16:09Z, Telegram) listed H4 Diamond Bottom and H4 Measured Move Up on the same 3607.25 breakout. The recap now lists one pattern per chart and band, the first by catalogue order (`activePatterns` with `sameBand`), as the posts already do (#112).
+- fix(pattern): Threads posts in its slots, so the 16:09 recap waited for one. Of a channel's approved recaps only the newest may go out (`supersedeRecaps`, run with `supersedeMaps` before a slot picks its post); an older one is expired with error "superseded:<newer id>" and is never published.
+
 ## 2026-11-27 (live patterns: every chart within 5 minutes, invalidated posts, the hourly pattern recap)
 - feat(pattern): every chart's confirmed patterns are posted as soon as xauusd reads them; an invalidated pattern is posted; an hourly recap lists the active and the invalidated patterns. Owner, 27 Nov: "berlaku juga untuk 1H/4H/1D termasuk jika ada pattern invalidated tertrigger, dan setiap jam perlu recap pattern apa yang sedang aktif dengan target harganya dan pattern apa yang invalidated. karena recap jadi tidak perlu gambar."
   - The owner's answers on 27 Nov: the templates as proposed ("Setuju template"); the recap on Threads + Telegram; an unchanged recap skipped ("Lewati"); both kinds auto-approved like Chart pattern ("Ya, auto-approve").

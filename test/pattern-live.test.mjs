@@ -84,3 +84,22 @@ test("M15 drafts get the guardian exactly as H1 to D1: a 0.00 projection or leve
   const m15 = "Education · Pattern breakout · XAUUSD M15\nFlag · direction up\n\nBreakout line 3660.50\nThe pattern fails if an M15 candle closes back below 3655.20.\nMeasured projection: 0.00 (analysis, not a trade objective).\nPrice when read: 3662.35 · 9:20 AM UTC\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.";
   assert.deepEqual([...new Set(checkContentDraft({ text: m15, allowLevels: true }).failures.map((f) => f.check))].sort(), ["projection_not_sane", "zero_level"]);
 });
+
+test("the recap lists one pattern per chart and band, the first by catalogue order (27 Nov 16:09: Diamond Bottom and Measured Move Up on 3607.25)", () => {
+  const p = (pattern, name, chapter, upper, lower, projection) => ({ chart: "H4", pattern, name, chapter, status: "confirmed", direction: "up", upper, lower, projection });
+  const analysis = read([p("diamond_bottom", "Diamond Bottom", 12, 3607.25, 3552.14, 3870.31), p("head_and_shoulders_bottom", "Head-and-shoulders Bottom", 20, 3563.18, 3480.1, 3760.15), p("measured_move_up", "Measured Move Up", 30, 3607.25, 3552.14, 3732.58)], 3623.75);
+  assert.deepEqual(activePatterns(analysis).map((x) => x.pattern), ["diamond_bottom", "head_and_shoulders_bottom"]);
+});
+
+test("a channel with posting slots sends only the newest approved recap; older ones are superseded, never published", async () => {
+  const { DatabaseSync } = await import("node:sqlite");
+  const { addDrafts, decideDraft, nextApproved, getDraft } = await import("../src/desk.mjs");
+  const db = new DatabaseSync(":memory:");
+  const sql = { exec(q, ...b) { const s = db.prepare(q); const out = /^\s*SELECT|\bRETURNING\b/i.test(q) ? s.all(...b) : (s.run(...b), []); return { toArray: () => out.map((r) => ({ ...r })) }; } };
+  const t = Date.parse("2026-11-27T17:30:00Z");
+  const text = "Education · XAUUSD pattern recap · 4:00 PM UTC\nPrice when read: 3623.75\nNot financial advice.";
+  addDrafts(sql, ["16", "17"].map((h) => ({ id: `precap:20261127T${h}:threads`, kind: "pattern_recap", channel: "threads", text, status: "pending" })), { now: t });
+  for (const h of ["16", "17"]) decideDraft(sql, { id: `precap:20261127T${h}:threads`, decision: "approve", actor: "cta-agent (auto-approve)" }, { now: t });
+  assert.equal(nextApproved(sql, "threads", { now: t }).id, "precap:20261127T17:threads");
+  assert.deepEqual([getDraft(sql, "precap:20261127T16:threads").status, getDraft(sql, "precap:20261127T16:threads").error], ["expired", "superseded:precap:20261127T17:threads"]);
+});
