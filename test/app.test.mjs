@@ -1240,7 +1240,7 @@ test("patterns: the 5-minute pass drafts them at once, the hourly run never; no 
   assert.deepEqual(ids(fast).filter((x) => x.endsWith(":threads")), ["pattern:M15:flag:confirmed:3661:3655:threads", "pattern:H1:rectangle:confirmed:3640:3620:threads"], "the 5-minute pass: every chart");
   assert.equal(fast.charts.join(), "M15,H1,H4,D1");
   const hourly = await draftAnalysis(e, { now: t0 + 49 * 60_000 });
-  assert.deepEqual(ids(hourly), [], "the hourly run drafts no pattern post: every chart is the fast pass's");
+  assert.deepEqual(ids(hourly), [], "what the fast pass posted, the hourly run does not post again");
   // 5 minutes later the lines slid (a new rounded id): not again
   reading = read([m15(3668.2, 3663.9), h1], t0 + 5 * 60_000);
   assert.deepEqual(ids(await draftAnalysis(e, { now: t0 + 5 * 60_000, fast: true })), []);
@@ -1291,4 +1291,24 @@ test("live patterns end to end: a published confirmed post, then its bust, is po
   const h3 = await draftAnalysis(e, { now: Date.parse("2026-11-27T11:09:30Z") });
   assert.deepEqual(h3.added.filter((x) => x.startsWith("precap:")), ["precap:20261127T11:threads", "precap:20261127T11:telegram"]);
   assert.match(getDraft(base.d.sql, "precap:20261127T11:threads").text, /Invalidated in the last hour:\n• H1 Rising Wedge · closed back above 3622\.40/);
+});
+
+test("the 5-minute pattern pass is a switch, off by default (orchestrator review of #113: xauusd's analysis() is not cheap): off, the hourly run posts every chart's patterns", async () => {
+  const { fastPassOn } = await import("../src/app.mjs");
+  assert.equal(fastPassOn({}), false);
+  assert.equal(fastPassOn({ PATTERN_FAST_PASS: "on" }), true);
+  assert.equal(fastPassOn({ PATTERN_FAST_PASS: "yes" }), false);
+  const reading = { at: "2026-11-27T09:09:00.000Z", price: 3662.35, zones: [], structure: {}, patterns: [
+    { chart: "M15", pattern: "flag", name: "Flag", chapter: 23, status: "confirmed", direction: "up", upper: 3660.5, lower: 3655.2, projection: 3671.1 },
+    { chart: "H1", pattern: "rectangle", name: "Rectangle", chapter: 40, status: "confirmed", direction: "up", upper: 3640, lower: 3620, projection: 3660 }] };
+  const ids = (r) => r.drafts.map((x) => x.id).filter((x) => x.startsWith("pattern:") && x.endsWith(":threads"));
+  const off = env({ CONTENT_CHANNELS: "threads" });
+  const eOff = { ...off.env, PROJECTION: { ...off.env.PROJECTION, analysis: async () => reading } };
+  assert.deepEqual(ids(await draftAnalysis(eOff, { now: Date.parse("2026-11-27T09:09:30Z") })), ["pattern:M15:flag:confirmed:3661:3655:threads", "pattern:H1:rectangle:confirmed:3640:3620:threads"]);
+  const on = env({ CONTENT_CHANNELS: "threads", PATTERN_FAST_PASS: "on" });
+  const eOn = { ...on.env, PROJECTION: { ...on.env.PROJECTION, analysis: async () => reading } };
+  assert.deepEqual(ids(await draftAnalysis(eOn, { now: Date.parse("2026-11-27T09:09:30Z") })), [], "on: the hourly run leaves the patterns to the 5-minute pass");
+  const src = (f) => readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
+  assert.match(src("src/index.mjs"), /if \(fastPassOn\(env\) && analysisRunDue\(at\)\) \{/, "the 5-minute cron reads the analysis only while the switch is on");
+  assert.doesNotMatch(src("wrangler.jsonc"), /PATTERN_FAST_PASS/, "off in this deploy");
 });

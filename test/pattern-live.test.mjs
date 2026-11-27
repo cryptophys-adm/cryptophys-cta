@@ -76,3 +76,11 @@ test("the two kinds: text only whatever the channel's format, part of Chart patt
   assert.deepEqual(withFamily(["key_levels"]), ["key_levels"]);
   assert.deepEqual(Object.fromEntries(Object.entries(PATTERN_COOLDOWN_MS).map(([k, v]) => [k, v / 3_600_000])), { M15: 4, H1: 16, H4: 64, D1: 384 });
 });
+
+test("M15 drafts get the guardian exactly as H1 to D1: a 0.00 projection or level is refused, at approval and at publish (orchestrator condition on #113)", () => {
+  const e = { ...ledgerEntry({ chart: "M15", pattern: "flag", name: "Flag", status: "confirmed", direction: "up", upper: 3660.5, lower: 3655.2, projection: 3671.1 }, read([]), at) };
+  const bad = invalidatedText({ ...e, projection: 0 }, read([]), { channel: "threads" });
+  assert.ok(checkContentDraft({ text: bad, allowLevels: true }).failures.some((f) => f.check === "projection_not_sane"));
+  const m15 = "Education · Pattern breakout · XAUUSD M15\nFlag · direction up\n\nBreakout line 3660.50\nThe pattern fails if an M15 candle closes back below 3655.20.\nMeasured projection: 0.00 (analysis, not a trade objective).\nPrice when read: 3662.35 · 9:20 AM UTC\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.";
+  assert.deepEqual([...new Set(checkContentDraft({ text: m15, allowLevels: true }).failures.map((f) => f.check))].sort(), ["projection_not_sane", "zero_level"]);
+});

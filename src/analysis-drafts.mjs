@@ -203,12 +203,11 @@ export const patternSeenKey = (p) => `${p.chart}:${p.pattern}:${p.status}`;
 /** Pure: the keys of the confirmed patterns this run read on `charts` (all when null): what the next run compares with. */
 export const seenPatternKeys = (analysis, charts = null) => [...new Set(draftedPatterns(analysis).filter((p) => !charts || charts.includes(p.chart)).map(patternSeenKey))].sort();
 /**
- Every chart's confirmed patterns are read every 5 minutes (owner 2026-11-27: "jika bisa ditrigger langsung ketika
- * pattern 15m confirmed tanpa menunggu jadwal 1H", then "berlaku juga untuk 1H/4H/1D"), by the fast pass with the one
- * seen set (PATTERN_SEEN_KEY); the hourly run drafts no pattern post (it makes the maps and the pattern recap).
+ Every chart's confirmed patterns are read by one pass with one seen set (PATTERN_SEEN_KEY): the hourly run's, or
+ * the 5-minute pass's while it is switched on (owner 2026-11-27: "jika bisa ditrigger langsung ketika pattern 15m
+ * confirmed tanpa menunggu jadwal 1H", then "berlaku juga untuk 1H/4H/1D"; `fastPassOn` in src/app.mjs).
  */
-export const HOURLY_PATTERN_CHARTS = Object.freeze([]);
-export const FAST_PATTERN_CHARTS = Object.freeze(["M15", "H1", "H4", "D1"]);
+export const PATTERN_CHARTS = Object.freeze(["M15", "H1", "H4", "D1"]);
 /**
  * No duplicate content (owner 2026-11-27: "pastikan tidak duplikasi content", then "berlaku juga untuk 1H/4H/1D"): a
  * pattern of the same chart, catalogue name and status is not posted again on a channel within 16 of its chart's bars
