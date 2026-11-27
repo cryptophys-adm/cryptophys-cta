@@ -1,5 +1,6 @@
 // The CTA app's logic: the HTTP face, the drafting runs and publishing (no Workers-runtime import, so the tests
 // run it under Node). src/index.mjs holds the Durable Object and the RPC entrypoints.
+import { levelFailures } from "./guardian.mjs";
 import { dailyDrafts } from "./drafts.mjs";
 import { analysisDrafts, PATTERN_LOOKBACK_MS, PATTERN_SEEN_KEY, seenPatternKeys } from "./analysis-drafts.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "./channels.mjs";
@@ -184,6 +185,15 @@ export async function publishDraft(env, draft, { now = Date.now(), fetcher, slot
   // to publishing posts it; a second run at the same moment gets "already_publishing" and calls nothing.
   const claim = await desk(env).claimPublish({ id: draft.id }, now);
   if (!claim?.ok) return { status: claim?.status ?? "approved", held: "already_publishing" };
+  // The guardian once more on the text as approved, right before the platform (owner 2026-11-27: "pastikan guardian
+  // mengecek dan reject ini sebelum approval posting"): a draft approved before a rule existed, or put back after a
+  // failure, never goes out past it. It fails with the guardian's checks as its error; nothing is called.
+  const gate = recheck(draft, { delayHours: delayOf(env), now });
+  if (!gate.pass) {
+    const checks = [...new Set(gate.failures.map((f) => f.check))].join(", ");
+    console.log("cta_publish_failed", JSON.stringify({ id: draft.id, channel: draft.channel, kind: draft.kind, error: `guardian: ${checks}`, step: "guardian", code: null, subcode: null }));
+    return desk(env).published({ id: draft.id, error: `the guardian refused it at publish: ${checks}` }, now);
+  }
   // Every post goes out humanized (humanize.py in full; owner: "Everything, templates too"), checked by the guardian
   // again; the Archive keeps the text that went out.
   const out = publishText(draft, (d) => recheck(d, { delayHours: delayOf(env), now }));
@@ -567,6 +577,8 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
     // Served while the post is going out too (status publishing, the claim of #93): Threads and Instagram fetch the
     // card during the publish call; without it they answered "400 An unknown error occurred" (2026-11-25 15:15, 16:10).
     if (!m || !PUBLIC_MEDIA.includes(m.draft_status)) return json({ error: "not_found" }, 404);
+    // A post the Archive leaves out (its text fails the guardian's level checks, owner 2026-11-27) is not served either.
+    if (levelFailures(m.draft_text).length) return json({ error: "not_found" }, 404);
     if ((media[2] === "webm") !== (m.content_type === "video/webm")) return json({ error: "not_found" }, 404);
     return image(m, "public, max-age=86400");
   }

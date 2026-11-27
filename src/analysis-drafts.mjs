@@ -11,7 +11,7 @@
 // Never the system's decision, an entry, a stop, a take profit or BUY/SELL as a signal: the content guardian's
 // signal_words rule refuses them. Price levels are allowed here (allowLevels): they are the analysis itself.
 // Each draft also carries its `overlay`: the numbers the Instagram card draws on TradingView's chart (src/card.mjs).
-import { checkContentDraft } from "./guardian.mjs";
+import { checkContentDraft, saneProjection, PROJECTION_MAX_SHARE } from "./guardian.mjs";
 import { dateId, clock12, SHORT_DISCLAIMER, CHART_CREDIT } from "./drafts.mjs";
 import { CHANNELS, TEXT_LIMITS, initialStatus } from "./channels.mjs";
 
@@ -143,24 +143,9 @@ export function chartMapText(analysis, { charts, closed }, { channel = "threads"
   return finish([...lines, ...body], channel);
 }
 
-/** A measured projection further than this share of the reference price (the price when read, else the breakout line) is not shown. */
-export const PROJECTION_MAX_SHARE = 0.5;
-/**
- * Pure: the pattern's measured projection when it is sane, else null (2026-11-27: a gap went out on Threads with
- * "Measured projection: 0.00"). Sane: a finite number above 0, within PROJECTION_MAX_SHARE of the price when read (or
- * of the breakout line), and on the breakout's side: above the upper line for direction up, below the lower for down.
- * A projection that is not sane is left out of the text and the card; the rest of the post stands.
- */
-export function saneProjection(p, price = null) {
-  const x = Number(p?.projection);
-  if (p?.projection == null || !Number.isFinite(x) || x <= 0) return null;
-  const line = Number(p?.direction === "down" ? p?.lower : p?.upper);
-  const ref = Number.isFinite(Number(price)) && Number(price) > 0 ? Number(price) : line;
-  if (!Number.isFinite(ref) || ref <= 0 || Math.abs(x - ref) / ref > PROJECTION_MAX_SHARE) return null;
-  if (p?.direction === "up" && Number.isFinite(Number(p?.upper)) && !(x > Number(p.upper))) return null;
-  if (p?.direction === "down" && Number.isFinite(Number(p?.lower)) && !(x < Number(p.lower))) return null;
-  return x;
-}
+// saneProjection and PROJECTION_MAX_SHARE live in the guardian (src/guardian.mjs), so the drafter and the guardian's
+// projection_not_sane check use one rule; re-exported here for the drafter's callers.
+export { saneProjection, PROJECTION_MAX_SHARE };
 
 /** Pure: one pattern's text for one channel. */
 export function patternText(p, analysis, { channel = "threads" } = {}) {

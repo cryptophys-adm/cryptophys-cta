@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-27 (the guardian refuses a projection that is not sane and a 0.00 level; the Archive leaves them out)
+- feat(guardian): two new checks, `projection_not_sane` and `zero_level`. Owner, 27 Nov: "hapus posting di archived dengan nilai measurement 0.0 dan pastikan guardian mengecek dan reject ini sebelum approval posting."
+  - `projection_not_sane` refuses a "Measured projection" that `saneProjection` would leave out: 0 or below, not a number, more than 50% from the price when read, or on the wrong side of the breakout line. `saneProjection` and `PROJECTION_MAX_SHARE` moved into `src/guardian.mjs`, and `src/analysis-drafts.mjs` re-exports them, so the drafter and the guardian use one rule.
+  - `zero_level` refuses a published level printed as 0.00 or below: breakout line, the fail level, a pattern line, a zone edge, the price when read.
+  - The checks run on approval (a person's and the auto-approve rule's, both through `decideDraft`). The guardian now also runs once more on the approved text right before the platform is called: a draft approved before this rule, or put back after a failure, fails there with the checks as its error, and nothing is sent (`cta_publish_failed`, step `guardian`).
+  - The Archive leaves out a published post whose text fails the checks, and its card is no longer served. The post stays published in the desk with its history; nothing is deleted. On 27 Nov that is `pattern:H1:gap:confirmed:3632:3627` (07:10Z on Threads, "Measured projection: 0.00"). The copy on Threads is not touched.
+  - New `test/guardian-levels.test.mjs`. It covers the exact 07:09 text, a sane projection, a post without one, a zero zone edge, approval, and the Archive. `test/app.test.mjs` adds the publish gate and the card.
+
 ## 2026-11-27 (#108 reverted: owner chose the TradingView widget, option 1)
 - revert(card): #108 reverted: owner chose the TradingView widget (option 1). Owner, 27 Nov, ~08:05Z: "ya pakai opsi 1 widget tradingview". Cards and videos are back to TradingView's Advanced Chart widget with our overlay, and the credit "Chart by TradingView." returns.
   - The revert is the exact inverse of 75345e5 (card, render, guardian, settings, brands, video, studio, SSOT, tests, the schematic screenshots).
