@@ -10,7 +10,7 @@
 //     its name (no catalogue reference: owner 2026-11-15), its lines, what undoes it, the measured projection as analysis.
 // Never the system's decision, an entry, a stop, a take profit or BUY/SELL as a signal: the content guardian's
 // signal_words rule refuses them. Price levels are allowed here (allowLevels): they are the analysis itself.
-// Each draft also carries its `overlay`: the numbers the Instagram card draws as its schematic (src/card.mjs).
+// Each draft also carries its `overlay`: the numbers the Instagram card draws on TradingView's chart (src/card.mjs).
 import { checkContentDraft } from "./guardian.mjs";
 import { dateId, clock12, SHORT_DISCLAIMER, CHART_CREDIT } from "./drafts.mjs";
 import { CHANNELS, TEXT_LIMITS, initialStatus } from "./channels.mjs";
@@ -33,8 +33,8 @@ const an = (chart) => `${/^[HM]/.test(String(chart)) ? "an" : "a"} ${chart}`;
 
 export function finish(lines, channel) {
   // X: the short disclaimer, so the analysis keeps its lines within 280 characters.
-  // Instagram, YouTube, TikTok: the post is the card (or its video), our schematic, so the caption carries its
-  // credit (the guardian's attribution).
+  // Instagram, YouTube, TikTok: the post is the card (or its video) with TradingView's chart, so the caption names it
+  // (the guardian's attribution).
   const tail = ["", ...(["instagram", "youtube", "tiktok"].includes(channel) ? [CHART_CREDIT] : []), channel === "x" ? SHORT_DISCLAIMER : ANALYSIS_DISCLAIMER, ...[ANALYSIS_HASHTAGS[channel] ?? ""].filter(Boolean)];
   const max = TEXT_LIMITS[channel] ?? 500;
   // Too long: drop body lines from the end (never the title or the disclaimer).
@@ -239,7 +239,7 @@ function draft({ id, kind, channel, text, now, overlay = null }) {
 const num = (x) => (Number.isFinite(Number(x)) ? Math.round(Number(x) * 100) / 100 : null);
 const zoneOf = (z) => ({ role: z.role, low: num(z.low), high: num(z.high), strength: z.strength ?? null });
 /**
- * Pure: what the Instagram card draws as its schematic (src/card.mjs). The same numbers as the text, never
+ * Pure: what the Instagram card draws on TradingView's chart (src/card.mjs). The same numbers as the text, never
  * more: the price when read, the zones nearest to it (at most two supply above and two demand below, and the zone the
  * price is in), and for a pattern post its lines and measured projection. Only for channels with an image.
  */

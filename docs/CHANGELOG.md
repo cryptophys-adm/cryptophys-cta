@@ -1,14 +1,5 @@
 # Changelog
 
-## 2026-11-27 (our schematic cards: no TradingView chart on cards or videos)
-- feat(card): the Instagram card, and the video made from it, draw our own schematic instead of TradingView's chart widget. Owner, 27 Nov: "setuju kartu skematik B, footer archive tetap sebut TradingView". This is PR 1 of 2 (cards and videos); the public pages and AGENTS rule 3 follow in PR 2.
-  - The schematic draws only the draft's published numbers (zones, pattern lines, measured projection, price when read) to scale on our own price axis, marked "Schematic: our levels to scale, not a price chart". No candles, no price line, no frame, no network.
-  - The credit is now "Chart by Cryptophys" (card footer, video end card) and "Chart by Cryptophys." (caption, `CHART_CREDIT`). The guardian's attribution rule and the format switch (`withFormat`) require that credit. `brands.chart_symbol` is gone.
-  - The projection guard holds on the card: `schematicOverlay` runs `saneProjection` again before drawing.
-  - The screenshot no longer waits for TradingView's frame and canvas or measures inside it (`chartFrame`, `measureInChart`, `widgetConfig` are gone): about a second a card instead of 7–8.
-  - A recap card, with no numbers to draw, is the panel alone, in larger type.
-  - Unchanged: the home page's live quote (TradingView's Single Quote widget, its frame-src) and the archive's older cards.
-
 ## 2026-11-27 (a measured projection that is not sane is left out)
 - fix(pattern): a pattern post's "Measured projection" line, and the projection arrow on its card, are left out when the projection is not sane. On 27 Nov the H1 gap at 07:09Z went out on Threads with "Measured projection: 0.00".
   - Sane (`saneProjection`) means all of:

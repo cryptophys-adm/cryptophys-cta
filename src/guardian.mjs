@@ -18,7 +18,7 @@
 //   account_data    no account, balance, equity, margin, lot or position;
 //   internal        never Nexus or Omega (the private dashboards);
 //   secret          nothing that looks like a key, token or private key;
-//   attribution     a draft with a chart image carries its credit ("Chart by Cryptophys");
+//   attribution     a draft with a chart image names TradingView;
 //   too_recent      every decision it covers is older than the public delay (0 allowed since 2026-11-25, owner
 //                   "Posts juga realtime": then only a future or unreadable time fails; unset or invalid: 24).
 /** A number that reads like a gold price (3 to 5 digits, or 1–2 digits, a comma and 3 digits). */
@@ -64,7 +64,7 @@ export function checkContentDraft({ text = "", chart = false, decisionTimes = []
   if (found("account_data")) fail("account_data", found("account_data"));
   if (found("internal")) fail("internal", found("internal"));
   if (found("secret")) fail("secret", "a key- or token-like string");
-  if (chart && !/chart by cryptophys/i.test(t)) fail("attribution", "a chart image needs its credit (Chart by Cryptophys)");
+  if (chart && !/tradingview/i.test(t)) fail("attribution", "a chart image needs TradingView's attribution");
   const hours = delayHours === null || delayHours === undefined || String(delayHours).trim() === "" ? NaN : Number(delayHours);
   const delay = Number.isFinite(hours) && hours >= 0 ? hours : 24;
   const cutoff = now - delay * 3_600_000;

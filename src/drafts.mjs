@@ -8,8 +8,8 @@ import { CHANNELS, TEXT_LIMITS, HASHTAGS, initialStatus } from "./channels.mjs";
 export { CHANNELS, TEXT_LIMITS, HASHTAGS };
 
 export const DRAFT_VERSION = "cryptophys.content-draft.v1";
-/** The caption line of a post whose image is our schematic card (Instagram); the guardian requires it. */
-export const CHART_CREDIT = "Chart by Cryptophys.";
+/** The caption line of a post whose image carries TradingView's chart (Instagram); the guardian requires it. */
+export const CHART_CREDIT = "Chart by TradingView.";
 export const DISCLAIMER = "This is an educational recap from our analysis system. Not an invitation to buy or sell, and not financial advice.";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];

@@ -2,8 +2,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { cardHtml, chartOf, panelLines, chartHeightFor, SCHEMATIC_NOTE } from "../src/card.mjs";
-import { renderCard, toBase64, fromBase64, MIN_CARD_BYTES } from "../src/render.mjs";
+import { cardHtml, chartOf, panelLines, widgetConfig, chartHeightFor } from "../src/card.mjs";
+import { renderCard, chartFrame, toBase64, fromBase64, MIN_CARD_BYTES } from "../src/render.mjs";
 import { BRANDS } from "../src/brands.mjs";
 import { addDrafts, getDraft, decideDraft, attachImage, mediaOf, draftsNeedingImage } from "../src/desk.mjs";
 import { analysisDrafts, ANALYSIS_DISCLAIMER } from "../src/analysis-drafts.mjs";
@@ -22,47 +22,40 @@ const ANALYSIS = {
   structure: { H1: { trend: "up" } }
 };
 
-test("the card page: the draft's own text without hashtags or template disclaimers, escaped; our schematic, no TradingView", () => {
-  const draft = { id: "pattern:H4:ascending_triangle:forming:4098:4072:instagram", kind: "pattern", text: `Education · Pattern <b>x</b>\nUpper line 4098.20\n\nChart by Cryptophys.\n${ANALYSIS_DISCLAIMER}\n#XAUUSD #gold` };
+test("the card page: the draft's own text without hashtags or template disclaimers, escaped; TradingView's read-only widget", () => {
+  const draft = { id: "pattern:H4:ascending_triangle:forming:4098:4072:instagram", kind: "pattern", text: `Education · Pattern <b>x</b>\nUpper line 4098.20\n\nChart by TradingView.\n${ANALYSIS_DISCLAIMER}\n#XAUUSD #gold` };
   assert.equal(chartOf(draft), "H4");
   assert.equal(chartOf({ kind: "key_levels", id: "levels:2026-11-17:instagram" }), "H4");
   assert.equal(chartOf({ kind: "daily_recap", id: "daily:2026-11-16:instagram" }), "H1");
   assert.deepEqual(panelLines(draft.text, { disclaimers: [ANALYSIS_DISCLAIMER] }), ["Education · Pattern <b>x</b>", "Upper line 4098.20"]);
-  assert.deepEqual(panelLines("T\nChart by TradingView.\nx"), ["T", "x"], "an older draft's credit line is dropped from the panel too");
   const html = cardHtml(draft, brand, { disclaimers: [ANALYSIS_DISCLAIMER], footerDisclaimer: brand.card_disclaimer });
   assert.match(html, /Education · Pattern &lt;b&gt;x&lt;\/b&gt;/);
   assert.doesNotMatch(html, /#XAUUSD/);
-  assert.equal(brand.chart_attribution, "Chart by Cryptophys");
-  assert.equal("chart_symbol" in brand, false, "no TradingView symbol any more");
-  assert.match(html, /<b>Chart by Cryptophys<\/b>/);
+  assert.match(html, /Chart by TradingView/);
   assert.match(html, /not financial advice/);
-  assert.doesNotMatch(html, /tradingview|<iframe|<script[^>]*\ssrc=|https?:\/\/(?!www\.w3\.org)/i, "no widget, no frame, no outside script or host: the page needs no network");
-  assert.doesNotMatch(html, /id="chart"/, "a draft without an overlay has no chart area");
+  assert.match(html, /https:\/\/s3\.tradingview\.com\/external-embedding\/embed-widget-advanced-chart\.js/);
+  const cfg = widgetConfig({ symbol: brand.chart_symbol, chart: "H4", height: 600 });
+  assert.deepEqual([cfg.symbol, cfg.interval, cfg.allow_symbol_change, cfg.save_image, cfg.locale, cfg.height], ["OANDA:XAUUSD", "240", false, false, "en", 600]);
+  // No drawing, study or data of ours goes to TradingView: the settings are display options only.
+  assert.deepEqual(Object.keys(cfg).filter((k) => /stud|draw|data|price|level/i.test(k)), []);
   assert.deepEqual([chartHeightFor(5), chartHeightFor(9), chartHeightFor(14)], [700, 600, 520]);
-  // With an overlay: the schematic, marked as one.
-  const withOverlay = cardHtml({ ...draft, overlay: { price: 4087.35, zones: [{ role: "supply", low: 4120.5, high: 4128.2 }], pattern: { name: "Ascending Triangle", status: "forming", upper: 4098.2, lower: 4071.6 } } }, brand, { disclaimers: [ANALYSIS_DISCLAIMER] });
-  assert.match(withOverlay, /<div class="chart" id="chart"><svg /);
-  assert.ok(withOverlay.includes(SCHEMATIC_NOTE), "the schematic footnote");
-  assert.equal(SCHEMATIC_NOTE, "Schematic: our levels to scale, not a price chart");
-  assert.doesNotMatch(withOverlay, /tradingview|<iframe/i);
 });
 
-test("a text cannot break out of the card: the brand, the panel and the overlay's words are escaped", () => {
-  const html = cardHtml({ id: "x", kind: "pattern", text: "Education\n</p><script>alert(1)</script>", overlay: { price: 3884.7, zones: [], pattern: { name: "</text><script>alert(2)</script>", status: "forming", upper: 3905.2, lower: 3871.6 } } }, { ...brand, chart_attribution: "</b><script>alert(3)</script>" });
-  assert.doesNotMatch(html, /<script>alert/);
-  assert.equal((html.match(/<script>/g) ?? []).length, 1, "the page's own fit script only");
+test("a text cannot break out of the widget's settings script", () => {
+  const html = cardHtml({ id: "x", kind: "pattern", text: "Education" }, { ...brand, chart_symbol: "</script><script>alert(1)</script>" });
+  assert.doesNotMatch(html, /<\/script><script>alert/);
 });
 
-/** A Puppeteer-style fake: a page whose fit result and screenshot the test sets. */
-function fakeBrowser({ fit = "ok", shot = (() => { const b = new Uint8Array(MIN_CARD_BYTES + 10); b[0] = 0xff; b[1] = 0xd8; return b; })() } = {}) {
+/** A Puppeteer-style fake: a page whose chart frame and fit result the test sets. */
+function fakeBrowser({ frame = true, fit = "ok", shot = (() => { const b = new Uint8Array(MIN_CARD_BYTES + 10); b[0] = 0xff; b[1] = 0xd8; return b; })() } = {}) {
   const calls = [];
   const browser = {
     closed: false,
     async newPage() {
       return {
         async setViewport(v) { calls.push(["viewport", v.width, v.height]); },
-        async setContent(html, o) { calls.push(["content", html.length > 1000, o.waitUntil]); browser.html = html; },
-        frames: () => { throw new Error("the card has no frame to look for"); },
+        async setContent(html, o) { calls.push(["content", html.length > 1000, o.waitUntil]); },
+        frames: () => (frame ? [{ url: () => "about:blank" }, { url: () => "https://www.tradingview-widget.com/embed-widget/advanced-chart/", waitForSelector: async (s) => calls.push(["wait", s]) }] : [{ url: () => "about:blank" }]),
         async evaluate() { return fit; },
         async screenshot(o) { calls.push(["shot", o.type, o.quality]); return shot; }
       };
@@ -72,35 +65,39 @@ function fakeBrowser({ fit = "ok", shot = (() => { const b = new Uint8Array(MIN_
   return { browser, calls, launch: async () => browser };
 }
 
-test("the screenshot: the page, its fit, the JPEG; refuses an overflow, a blank or a non-JPEG card", async () => {
+test("the screenshot: waits for TradingView's canvas and the panel's fit; refuses a missing chart, an overflow or a blank card", async () => {
   const draft = { id: "levels:2026-11-17:instagram", kind: "key_levels", text: "Education · Key-level map\nZone 4060.10–4066.80" };
   const ok = fakeBrowser();
-  const bytes = await renderCard(draft, brand, { launch: ok.launch });
+  const bytes = await renderCard(draft, brand, { launch: ok.launch, sleep: async () => {} });
   assert.equal(bytes[0], 0xff);
-  assert.deepEqual(ok.calls, [["viewport", 1080, 1350], ["content", true, "load"], ["shot", "jpeg", 85]], "no wait for a chart: the schematic is in the page");
+  assert.deepEqual(ok.calls, [["viewport", 1080, 1350], ["content", true, "load"], ["wait", "canvas"], ["shot", "jpeg", 85]]);
   assert.ok(ok.browser.closed);
-  const notJpeg = new Uint8Array(MIN_CARD_BYTES + 10);
-  for (const [opts, re] of [[{ fit: "overflow" }, /does not fit/], [{ fit: null }, /no fit result/], [{ shot: new Uint8Array([0xff, 0xd8, 1]) }, /too small/], [{ shot: notJpeg }, /not a JPEG/]]) {
+  for (const [opts, re] of [[{ frame: false }, /chart did not load/], [{ fit: "overflow" }, /does not fit/], [{ shot: new Uint8Array([0xff, 0xd8, 1]) }, /too small/]]) {
     const f = fakeBrowser(opts);
-    await assert.rejects(renderCard(draft, brand, { launch: f.launch }), re);
+    await assert.rejects(renderCard(draft, brand, { launch: f.launch, sleep: async () => {} }), re);
     assert.ok(f.browser.closed, "the browser is closed on failure too");
   }
   await assert.rejects(renderCard(draft, brand, {}), /no browser/);
+  // The widget's frame appears after the page's load event: polled, not read once.
+  let reads = 0;
+  const late = { frames: () => (++reads < 4 ? [{ url: () => "about:blank" }] : [{ url: () => "https://www.tradingview-widget.com/embed-widget/advanced-chart/" }]) };
+  assert.match((await chartFrame(late, { timeoutMs: 1000, sleep: async () => {} })).url(), /tradingview/);
+  assert.equal(reads, 4);
+  assert.equal(await chartFrame({ frames: () => [] }, { timeoutMs: 1000, sleep: async () => {} }), null, "no frame within the timeout");
   const round = fromBase64(toBase64(bytes));
   assert.deepEqual([...round], [...bytes]);
 });
 
-test("Instagram drafts carry the chart's credit, get a card, then pass the guardian with the image; other channels do not", () => {
+test("Instagram drafts name TradingView, get a card, then pass the guardian with the image; other channels do not", () => {
   const sql = sqlite();
   const now = Date.parse("2026-11-17T06:09:30Z");
   const drafts = analysisDrafts(ANALYSIS, { now, channels: ["threads", "instagram"], levelsRun: true });
   const ig = drafts.filter((d) => d.channel === "instagram");
   assert.deepEqual(ig.map((d) => [d.kind, d.status]), [["key_levels", "needs_image"]], "the forming pattern is no longer drafted (owner 2026-11-25: \"Only confirmed\")");
-  for (const d of ig) assert.match(d.text, /Chart by Cryptophys\./);
-  for (const d of drafts) assert.doesNotMatch(d.text, /TradingView/);
-  for (const d of drafts.filter((d) => d.channel === "threads")) assert.doesNotMatch(d.text, /Chart by/);
+  for (const d of ig) assert.match(d.text, /Chart by TradingView\./);
+  for (const d of drafts.filter((d) => d.channel === "threads")) assert.doesNotMatch(d.text, /TradingView/);
   const recap = dailyDrafts([{ bar_close: "2026-11-15T10:00:00.000Z", stance: "WAIT", bias: "NEUTRAL", session: "london" }], { now: Date.parse("2026-11-16T22:17:00Z"), channels: ["instagram"] }).drafts[0];
-  assert.match(recap.text, /Chart by Cryptophys\./);
+  assert.match(recap.text, /Chart by TradingView\./);
   addDrafts(sql, drafts, { now });
   assert.deepEqual(draftsNeedingImage(sql, { limit: 5 }).map((d) => d.channel), ["instagram"]);
   const levels = ig.find((d) => d.kind === "key_levels");
@@ -129,12 +126,12 @@ test("an approval keeps the guardian's levels rule for analysis drafts (regressi
   assert.equal(decideDraft(sql, { id: "daily:x:threads", decision: "approve", actor: "owner@example.com" }, { now }).status, "blocked");
 });
 
-// ---- The overlay (owner 2026-11-15: patterns, key levels and the projection on the chart; drawn on our schematic) ----
+// ---- The overlay on TradingView's chart (owner 2026-11-15: patterns, key levels and the projection on the chart) ----
 import { overlayOf } from "../src/analysis-drafts.mjs";
-import { overlayPrices, overlaySvg, overlayLabels, geometryProblem, layoutLabels, schematicOverlay, schematicGeo, schematicSvg } from "../src/card.mjs";
+import { overlayPrices, overlayTimes, overlaySvg, overlayLabels, geometryProblem, layoutLabels, measureInChart } from "../src/card.mjs";
 
 const CONFIRMED = { chart: "H4", pattern: "descending_channel", name: "Descending Channel", chapter: 12, status: "confirmed", direction: "down", upper: 3905.2, lower: 3871.6, projection: 3820.4 };
-/** A linear price scale over a 1000 x 670 pane (a higher price is higher on the chart). */
+/** A linear price scale over a 1000 x 670 pane, like TradingView's (a higher price is higher on the chart). */
 const geoFor = (prices, { from = 3790, to = 3940, h = 670 } = {}) => ({ pane: { x: 1, y: 1, w: 1000, h }, xLast: 700, ys: prices.map((p) => ((to - p) / (to - from)) * h), range: { from, to } });
 
 test("the overlay data: the zones nearest the price and the pattern's own numbers, on every draft (a text channel may be switched to Image)", () => {
@@ -162,7 +159,7 @@ test("the overlay's words pass the guardian (levels allowed): zones as informati
   assert.match(words, /Demand zone · buy area 3861\.10–3866\.80\n/);
   assert.match(words, /Measured projection 3820\.40/);
   assert.match(words, /Close above 3905\.20 confirms up/);
-  const g = checkContentDraft({ text: `Education. Not financial advice. Chart by Cryptophys.\n${words}`, chart: true, allowLevels: true });
+  const g = checkContentDraft({ text: `Education. Not financial advice. Chart by TradingView.\n${words}`, chart: true, allowLevels: true });
   assert.ok(g.pass, JSON.stringify(g.failures));
 });
 
@@ -199,60 +196,54 @@ test("a geometry that would misplace the overlay is refused (the card is then no
   assert.equal(layoutLabels([], { top: 0, bottom: 100 }).length, 0);
 });
 
-test("the schematic: our own linear scale over the overlay's numbers, every level inside it, marked as a schematic", () => {
-  const o = overlayOf({ price: 3884.7, zones: [{ role: "supply", low: 3898, high: 3902.4 }, { role: "demand", low: 3861.1, high: 3866.8 }] }, { pattern: CONFIRMED });
-  const prices = overlayPrices(o);
-  const geo = schematicGeo(o, { width: 1080, height: 600 });
-  assert.equal(geometryProblem(geo, prices), null);
-  assert.deepEqual([geo.pane.w, geo.pane.h], [970, 600], "the right 110 px are the price axis");
-  assert.ok(geo.range.from < Math.min(...prices) && geo.range.to > Math.max(...prices), "padded above and below");
-  for (const [i, price] of prices.entries()) {
-    const want = 600 - ((price - geo.range.from) / (geo.range.to - geo.range.from)) * 600;
-    assert.ok(Math.abs(geo.ys[i] - want) < 1e-9, `${price} at its own pixel`);
-  }
-  assert.ok(Math.abs(geo.xLast - 970 * 0.72) < 1e-9, "a confirmed pattern with a projection leaves room for it");
-  assert.ok(Math.abs(schematicGeo({ ...o, pattern: undefined }).xLast - 970 * 0.94) < 1e-9, "a key-level map: little room on the right");
-  const svg = schematicSvg(o, { height: 600 });
-  assert.ok(svg.includes(SCHEMATIC_NOTE) && svg.includes(`aria-label="${SCHEMATIC_NOTE}"`), "the footnote and the label say it is a schematic");
-  for (const words of ["When read", ">3884.70<", "Measured projection 3820.40", "Supply zone · sell area 3898.00–3902.40"]) assert.ok(svg.includes(words), words);
-  assert.doesNotMatch(svg, /<script|on\w+=|<image|href=/i, "no script, no outside image");
-  assert.doesNotMatch(svg.replace(/<marker\b[\s\S]*?<\/marker>/g, ""), /<(path|polyline|polygon)\b/, "no price series: no candles, no line through prices (the arrowhead is the only path)");
+test("the in-chart measurement: widens the view, sets the price range over the levels and recent candles, reads the mapping", () => {
+  const calls = [];
+  const bars = Array.from({ length: 100 }, (_, i) => [i, 0, 3880 + (i % 5), 3870 - (i % 3), 3875]);
+  const ps = { setMode: (m) => calls.push(["mode", m.autoScale]), setPriceRangeInPrice: (r) => { calls.push(["range", Math.round(r.from), Math.round(r.to)]); ps.r = r; }, priceToCoordinate: (p) => ((ps.r.to - p) / (ps.r.to - ps.r.from)) * 670 };
+  const ts = { width: () => 1000, setBarSpacing: (s) => calls.push(["spacing", Math.round(s)]), setRightOffset: (n) => calls.push(["offset", n]), indexToCoordinate: () => 700 };
+  globalThis.window = { chartWidget: { model: () => ({ mainSeries: () => ({ priceScale: () => ps, bars: () => ({ lastIndex: () => 99, valueAt: (i) => bars[i] }), firstValue: () => 3875 }), timeScale: () => ts }), paneWidgets: () => [{ canvasElement: () => ({ getBoundingClientRect: () => ({ x: 1, y: 1, width: 1000, height: 670 }) }) }] } };
+  try {
+    const geo = measureInChart({ prices: [3905.2, 3820.4], futureShare: 0.3, bars: 70 });
+    assert.deepEqual(calls.slice(0, 3), [["spacing", 10], ["offset", 30], ["mode", false]]);
+    const [, from, to] = calls.find((c) => c[0] === "range");
+    assert.ok(from < 3820.4 && to > 3905.2, "the range covers the levels");
+    assert.equal(geometryProblem(geo, [3905.2, 3820.4]), null);
+    delete globalThis.window.chartWidget;
+    assert.deepEqual(measureInChart({ prices: [1], futureShare: 0.1 }), { error: "no chart model" });
+  } finally { delete globalThis.window; }
 });
 
-test("the projection guard holds on the card: an insane or wrong-side projection is not drawn", () => {
-  const base = { price: 3884.7, zones: [] };
-  const draw = (pattern) => schematicSvg(schematicOverlay({ ...base, pattern }), { height: 600 });
-  const good = { name: "Descending Channel", status: "confirmed", direction: "down", upper: 3905.2, lower: 3871.6, projection: 3820.4 };
-  assert.equal(schematicOverlay({ ...base, pattern: good }).pattern.projection, 3820.4);
-  assert.match(draw(good), /Measured projection 3820\.40/);
-  for (const projection of [0, -5, 9999, 3880, Number.NaN]) {
-    assert.equal(schematicOverlay({ ...base, pattern: { ...good, projection } }).pattern.projection, null, String(projection));
-    const svg = draw({ ...good, projection });
-    assert.doesNotMatch(svg, /Measured projection|marker-end/, `${projection}: no projection drawn`);
-    assert.doesNotMatch(svg, /NaN|Infinity/);
-  }
-  assert.equal(schematicOverlay({ ...base, pattern: { ...good, status: "forming" } }).pattern.projection, null, "a forming pattern has none");
-  assert.equal(schematicOverlay(null), null);
-  // The card page passes the guard too.
-  const html = cardHtml({ id: "pattern:H4:x:confirmed:1:2:instagram", kind: "pattern", text: "Education · Pattern breakout\nline", overlay: { ...base, pattern: { ...good, projection: 0 } } }, brand);
-  assert.doesNotMatch(html, /Measured projection/);
-});
-
-test("the screenshot with an overlay: the schematic is in the page given to the browser", async () => {
+test("the screenshot with an overlay: measured in TradingView's frame, drawn in the page; a bad geometry stores no card", async () => {
   const o = overlayOf({ price: 3884.7, zones: [{ role: "demand", low: 3861.1, high: 3866.8 }] }, { pattern: CONFIRMED });
   const draft = { id: "pattern:H4:descending_channel:confirmed:3905:3872:instagram", kind: "pattern", text: "Education · Pattern breakout\nBreakout line 3871.60", overlay: o };
-  const f = fakeBrowser();
-  const bytes = await renderCard(draft, brand, { launch: f.launch });
+  const run = async (geo) => {
+    const seen = { svg: null, measured: null };
+    const jpeg = new Uint8Array(MIN_CARD_BYTES + 1); jpeg[0] = 0xff; jpeg[1] = 0xd8;
+    const browser = { async newPage() { return {
+      async setViewport() {}, async setContent() {},
+      frames: () => [{ url: () => "https://www.tradingview-widget.com/embed-widget/advanced-chart/", waitForSelector: async () => {}, evaluate: async (fn, arg) => { seen.measured = { fn: fn.name, arg }; return geo(arg.prices); } }],
+      evaluate: async (fn, arg) => { if (arg !== undefined) { seen.svg = arg; return null; } return /iframe/.test(String(fn)) ? { x: 0, y: 0 } : "ok"; },
+      async screenshot() { return jpeg; }
+    }; }, async close() {} };
+    const bytes = await renderCard(draft, brand, { launch: async () => browser, sleep: async () => {} });
+    return { bytes, seen };
+  };
+  const { bytes, seen } = await run((prices) => geoFor(prices));
   assert.equal(bytes[0], 0xff);
-  assert.match(f.browser.html, /<div class="chart" id="chart"><svg [^>]*height="700"/);
-  assert.match(f.browser.html, /Measured projection 3820\.40/);
-  assert.ok(f.browser.html.includes(SCHEMATIC_NOTE));
+  assert.equal(seen.measured.fn, "measureInChart");
+  assert.deepEqual([seen.measured.arg.futureShare, seen.measured.arg.bars], [0.3, 70]);
+  assert.deepEqual(seen.measured.arg.prices, overlayPrices(o));
+  assert.match(seen.svg, /Measured projection 3820\.40/);
+  await assert.rejects(run((prices) => ({ ...geoFor(prices), ys: prices.map(() => 10) })), /overlay cannot be placed/);
+  await assert.rejects(run(() => ({ error: "no chart model" })), /overlay cannot be placed \(no chart model\)/);
 });
+
 
 test("the pattern's lines are drawn as fitted, from its start candle, and carried to the current candle", () => {
   const lines = { from: "2026-11-10T08:00:00.000Z", to: "2026-11-14T20:00:00.000Z", upper: [3990, 3905.2], lower: [3950, 3871.6] };
   const o = overlayOf({ price: 3884.7, zones: [] }, { pattern: { ...CONFIRMED, lines } });
   assert.deepEqual(o.pattern.lines, lines);
+  assert.deepEqual(overlayTimes(o), [lines.from, lines.to]);
   assert.equal(overlayOf({ price: 1, zones: [] }, { pattern: { ...CONFIRMED, lines: { ...lines, from: lines.to } } }).pattern.lines, undefined, "a start after the end is refused");
   const prices = overlayPrices(o);
   assert.ok(prices.includes(3990) && prices.includes(3950), "the start prices are in the range");
@@ -266,9 +257,26 @@ test("the pattern's lines are drawn as fitted, from its start candle, and carrie
   const slope = (y(3905.2) - y(3990)) / 350;
   assert.equal(Number(m[2]).toFixed(1), (y(3905.2) + slope * 50).toFixed(1));
   assert.match(svg, /<circle cx="301\.0"/, "the start is marked");
-  // No anchors: the levels flat over the recent candles.
+  // No anchors (or one not found on TradingView's chart): the levels flat over the recent candles.
   const flat = overlaySvg(o, { ...geo, xs: [null, 650] });
   assert.doesNotMatch(flat, /<circle/);
   assert.match(flat, new RegExp(`y1="${y(3905.2).toFixed(1)}" x2="701\\.0" y2="${y(3905.2).toFixed(1)}"`));
   assert.match(geometryProblem({ ...geo, xs: [-5, 650] }, prices), /pattern point/);
+});
+
+test("the in-chart measurement finds each anchor's candle by time and widens the view to its start", () => {
+  const H4 = 4 * 3600;
+  const open0 = Date.parse("2026-11-01T00:00:00Z") / 1000;
+  const bars = Array.from({ length: 200 }, (_, i) => [open0 + i * H4, 0, 3900, 3880, 3890]);
+  const calls = [];
+  const ps = { setMode() {}, setPriceRangeInPrice(r) { ps.r = r; }, priceToCoordinate: (p) => ((ps.r.to - p) / (ps.r.to - ps.r.from)) * 670 };
+  const ts = { width: () => 1000, setBarSpacing: (s) => calls.push(["spacing", s]), setRightOffset() {}, indexToCoordinate: (i) => i * 3 };
+  globalThis.window = { chartWidget: { model: () => ({ mainSeries: () => ({ priceScale: () => ps, bars: () => ({ lastIndex: () => 199, valueAt: (i) => bars[i] }), firstValue: () => 3890 }), timeScale: () => ts }), paneWidgets: () => [{ canvasElement: () => ({ getBoundingClientRect: () => ({ x: 1, y: 1, width: 1000, height: 670 }) }) }] } };
+  try {
+    // Close times: bar 100 closes at open(101); the last bar (199) is still open.
+    const from = new Date((open0 + 101 * H4) * 1000).toISOString(), to = new Date((open0 + 199 * H4 + 60) * 1000).toISOString();
+    const geo = measureInChart({ prices: [3900, 3880], futureShare: 0.3, bars: 70, times: [from, to, "2025-01-01T00:00:00Z"] });
+    assert.deepEqual(geo.xs, [300, 597, null], "bar 100, the last bar, and a time before the loaded candles");
+    assert.ok(calls[0][1] < (1000 * 0.7) / 70, "the view widened to show the pattern's start");
+  } finally { delete globalThis.window; }
 });
