@@ -15,7 +15,10 @@
   // The only data source: the xauusd AI Worker's PublicProjection (recaps after 24 hours; real-time analysis with
   // key levels and patterns; never a decision, plan or account). Read-only RPC over a Service Binding.
   "services": [
-    { "binding": "PROJECTION", "service": "xauusd-ai-trading-assistant", "entrypoint": "PublicProjection" }
+    { "binding": "PROJECTION", "service": "xauusd-ai-trading-assistant", "entrypoint": "PublicProjection" },
+    // The kernel's agent RPC, host-pinned to this Worker (ADR-0007 amendment): the router reads Command's CTA Beam row as
+    // cta-model-router (model_router.status) and reports its own paid sign (model_router.report_paid); nothing else.
+    { "binding": "AGENTS", "service": "cryptophys-ai-kernel", "entrypoint": "AgentRpc", "props": { "host_worker": "cryptophys-cta" } }
   ],
   // Browser Run: the Instagram cards (TradingView's own chart widget plus the Cryptophys panel, src/card.mjs),
   // screenshotted right after drafting. 10 browser hours a month are included; a card takes about 7 seconds.

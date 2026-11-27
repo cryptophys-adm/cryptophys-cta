@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-27 (Beam for CTA: Command is the switch)
+- feat(router): CTA's Beam is now switched on Command (Cerebrum → Command, the CTA row), as ADR-0007's design for CTA describes. Owner, 27 Nov: "usulan saya". Platform piece 1 is CTA_CEILING with `cta-model-router` (proposal cns_2f9751ac…).
+  - `organism.json` declares the agent `cta-model-router` with exactly `model_router.status` and `model_router.report_paid`, tier 1, no seat.
+  - `wrangler.jsonc` and the deploy block get the Service Binding `AGENTS` to `cryptophys-ai-kernel` / `AgentRpc`, with `props.host_worker = "cryptophys-cta"`.
+  - The router reads `model_router.status` at most once a minute, sending `{}` (never a `system`). It calls Beam only when CTA's own state is on, the mode is free_only and the global row reads `paid_off === 0`, D1's integer. No global row counts as off.
+  - No binding, a refused or failed read, or another system's answer all mean off (`command_off`). A stale read is never used.
+  - The studio's switch now only stops the model here.
+  - On a paid sign the router calls `model_router.report_paid` with `http_402`, `billing_error` or `cost_field`, never on a 429. If that report does not reach the kernel, the studio's switch goes off too.
+  - The studio's model block shows Command's state. Its button is now "Stop the model here" / "Allow the model again (Command decides)".
+  - Once deployed, Beam is off for CTA until the owner turns CTA's row on, on Command.
+  - Tests: new AG20. AG6, AG7, AG18 and AG19, the switch test and the cta-write end-to-end test now use a stand-in binding. The DNA test checks the new agent and the binding.
+
 ## 2026-11-26 (public wording: the recap covers the last 24 hours)
 - content(about, room): three public sentences now say the recap covers the last 24 hours, instead of "24 hours later" or "yesterday". They follow the realtime recap (#104). Owner, 26 Nov: "setuju halaman about", then the wording "Last 24 hours".
   - About, step 2: "Decisions are shown only as a recap of the last 24 hours." (was "…as a recap, 24 hours later.")

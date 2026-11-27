@@ -34,6 +34,16 @@
           ],
           "tier_max": 1,
           "voter": false
+        },
+        {
+          "id": "cta-model-router",
+          "display_name": "CTA model router client",
+          "capabilities": [
+            "model_router.status",
+            "model_router.report_paid"
+          ],
+          "tier_max": 1,
+          "voter": false
         }
       ],
       "engines": []
@@ -87,6 +97,14 @@
         "binding": "PROJECTION",
         "service": "xauusd-ai-trading-assistant",
         "entrypoint": "PublicProjection"
+      },
+      {
+        "binding": "AGENTS",
+        "service": "cryptophys-ai-kernel",
+        "entrypoint": "AgentRpc",
+        "props": {
+          "host_worker": "cryptophys-cta"
+        }
       }
     ],
     "browser": {

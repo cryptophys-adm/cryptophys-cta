@@ -16,7 +16,7 @@ import { hookScore, hookFormula, openingLine, HOOK_CHECKS } from "../src/agent/h
 import { splitPost, joinPost, checkWritten, writeMode, runWrite, factTokens, WRITE_KINDS, OUTCOME_WORDS } from "../src/agent/write.mjs";
 import { lintPost, textFor } from "../src/agent/lint.mjs";
 import { CHANNELS } from "../src/channels.mjs";
-import { askModel, modelConfig, costOf, wibDayStartIso, MODEL_DEFAULTS, AGENT_SECRETS, MODEL_STOPS, RATE_KEY, rateUntil } from "../src/agent/router.mjs";
+import { askModel, modelConfig, costOf, wibDayStartIso, MODEL_DEFAULTS, AGENT_SECRETS, MODEL_STOPS, RATE_KEY, rateUntil, KERNEL_KEY, reportPaidSign } from "../src/agent/router.mjs";
 import { weeklySummary, summaryOk, summaryKey } from "../src/agent/weekly.mjs";
 import { triage, checkReply, shapeAnswer, replyMode, runReplies, roomReply, roomOf, ROOM_MAX_AGE_MIN, MARKET_REPLY, DISCLAIMER, REPLY_CHANNELS, REPLY_CAPS, DRY_RUN_HOURS } from "../src/agent/replies.mjs";
 import { autoAt, dueNow, AUTO_WINDOW_MINUTES } from "../src/agent/auto-approve.mjs";
@@ -26,6 +26,12 @@ import { draftedPatterns, analysisDrafts, dueChartMaps, chartMapText, chartsOfId
 import { publishThreads } from "../src/publishers.mjs";
 import { HASHTAGS } from "../src/channels.mjs";
 import { keyLevelsText } from "../src/analysis-drafts.mjs";
+
+/** A stand-in for the kernel's AgentRpc binding: Command's CTA Beam row on (free_only), report_paid accepted. */
+const commandOn = (state = "on", mode = "free_only", paid_off = false) => {
+  const calls = [];
+  return { calls, syscall: async (agent, capability, input) => { calls.push({ agent, capability, input }); return capability === "model_router.status" ? { outcome: "succeeded", result: { schema: "model_router.status.v1", system: "cta", state: { state, mode }, global: { paid_off: paid_off ? 1 : 0 } } } : { outcome: "succeeded", result: { changed: true } }; } };
+};
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 const POST = "Education · XAUUSD key-level map · Wednesday, 25 November 2026 1:41 AM UTC\nPrice when read: 3544.30\n\nSupply zones (sell area):\n• 3595.29–3600.00 (4H swing high)\n\nChart by TradingView.\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD #gold #education";
@@ -162,14 +168,14 @@ test("AG6 the model router: the key, the switch, the daily cap, Reflection's ref
     return { s, setting: async (k) => (s.settings[k] ? { value: s.settings[k], updated_by: "x", updated_at: "t" } : null), saveSetting: async (i) => { s.settings[i.key] = i.value; return true; },
       record: async (c) => { s.calls.push(c); return true; }, spendSince: async () => ({ calls: s.calls.length, tokens_in: 0, tokens_out: 0, cost_usd: s.calls.reduce((a, c) => a + (c.cost_usd || 0), 0) }), recent: async () => s.calls };
   };
-  const env = { REFLECTION_API_KEY: "rk-test" };
+  const env = { REFLECTION_API_KEY: "rk-test", AGENTS: commandOn() };
   const msgs = [{ role: "user", content: "hi" }];
   const answer = (status, body, retention = "zero") => async (url, init) => { answer.last = { url, init }; return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "reflection-data-retention": retention } }); };
   assert.deepEqual(MODEL_DEFAULTS, { base: "https://api.reflection.ai/openai/v1", model: "Beam-1.0-501B-A23B", daily_usd: 1, price_in: 0.4, price_out: 1.2, free_only: true, tokens_in_day: 1_000_000, tokens_out_day: 200_000, rpm: 20 });
   assert.deepEqual(AGENT_SECRETS, ["REFLECTION_API_KEY"]);
   assert.deepEqual(await askModel({}, store(), { purpose: "t", messages: msgs, fetcher: () => { throw new Error("no call"); } }), { ok: false, skipped: "no_key" });
-  const fresh = store();
-  assert.deepEqual(await askModel(env, fresh, { purpose: "t", messages: msgs, fetcher: () => { throw new Error("no call"); } }), { ok: false, skipped: "off", reason: "not turned on yet" }, "off until an approver turns it on");
+  // Command's CTA row is the switch (owner 2026-11-27: "usulan saya"): without the kernel binding, off.
+  assert.deepEqual(await askModel({ REFLECTION_API_KEY: "rk-test" }, store(), { purpose: "t", messages: msgs, fetcher: () => { throw new Error("no call"); } }), { ok: false, skipped: "command_off", reason: "not_connected" }, "off until Command's CTA row is read");
   const on = () => { const x = store(); x.s.settings.agent_model = { enabled: true }; return x; };
   const ok = on();
   const r = await askModel(env, ok, { purpose: "audit_summary", messages: msgs, fetcher: answer(200, { choices: [{ message: { content: " Fine. " } }], usage: { prompt_tokens: 1000, completion_tokens: 500 } }) });
@@ -188,8 +194,17 @@ test("AG6 the model router: the key, the switch, the daily cap, Reflection's ref
   assert.equal((await askModel(env, train, { purpose: "t", messages: msgs, fetcher: answer(200, { choices: [{ message: { content: "x" } }] }, "contributor") })).skipped, "retention");
   assert.equal(train.s.settings.agent_model.enabled, false, "contributor terms turn the model off");
   const broke = on();
-  const b = await askModel(env, broke, { purpose: "t", messages: msgs, fetcher: answer(403, { error: { code: "prepaid_balance_exhausted" } }) });
-  assert.deepEqual([b.ok, b.skipped, broke.s.calls[0].status, broke.s.calls[0].detail, broke.s.settings.agent_model.enabled], [false, "paid", "http_403", "paid", false], "free only: a credit error turns the model off");
+  const kernel = commandOn();
+  const b = await askModel({ ...env, AGENTS: kernel }, broke, { purpose: "t", messages: msgs, fetcher: answer(403, { error: { code: "prepaid_balance_exhausted" } }) });
+  assert.deepEqual([b.ok, b.skipped, b.reported, broke.s.calls[0].status, broke.s.calls[0].detail], [false, "paid", true, "http_403", "paid"], "free only: a credit error is a paid sign");
+  assert.deepEqual(kernel.calls.map((c) => [c.agent, c.capability, c.input]), [["cta-model-router", "model_router.status", {}], ["cta-model-router", "model_router.report_paid", { signal: "billing_error" }]], "reported to the platform: the global stop");
+  assert.equal(broke.s.settings.agent_model.enabled, true, "the studio's switch stays as it was: Command turns Beam on again");
+  assert.deepEqual(await askModel({ ...env, AGENTS: kernel }, broke, { purpose: "t", messages: msgs, fetcher: () => { throw new Error("no call"); } }), { ok: false, skipped: "command_off", reason: "paid_stop" });
+  // The platform could not be told: the studio's own switch goes off too.
+  const lost = on();
+  const deaf = { syscall: async (a, c) => (c === "model_router.status" ? { outcome: "succeeded", result: { schema: "model_router.status.v1", system: "cta", state: { state: "on", mode: "free_only" }, global: { paid_off: 0 } } } : { outcome: "denied", reason: "agent_not_registered" }) };
+  assert.equal((await askModel({ ...env, AGENTS: deaf }, lost, { purpose: "t", messages: msgs, fetcher: answer(402, { error: { message: "Payment required" } }) })).reported, false);
+  assert.equal(lost.s.settings.agent_model.enabled, false);
   const loud = on();
   const l = await askModel({ ...env, MODEL_FREE_ONLY: "off" }, loud, { purpose: "t", messages: msgs, fetcher: answer(403, { error: { code: "prepaid_balance_exhausted" } }) });
   assert.deepEqual([l.ok, l.status, loud.s.calls[0].detail, loud.s.settings.agent_model.enabled], [false, 403, "prepaid_balance_exhausted", true], "MODEL_FREE_ONLY off: the refusal only stops the call");
@@ -207,7 +222,7 @@ test("AG7 the weekly summary: once a week, only the audit's facts, no added numb
   const saved = { agent_model: { enabled: true } }, calls = [];
   const store = { setting: async (k) => (saved[k] ? { value: saved[k] } : null), saveSetting: async (i) => { saved[i.key] = i.value; }, record: async (c) => calls.push(c), spendSince: async () => ({ cost_usd: 0 }), recent: async () => [] };
   const fetcher = async () => new Response(JSON.stringify({ choices: [{ message: { content: "War Room held the median over 3 posts." } }], usage: { prompt_tokens: 10, completion_tokens: 10 } }), { headers: { "reflection-data-retention": "zero" } });
-  const env = { REFLECTION_API_KEY: "rk" };
+  const env = { REFLECTION_API_KEY: "rk", AGENTS: commandOn() };
   assert.equal((await weeklySummary(env, store, posts, { now: NOW, fetcher })).status, "written");
   assert.deepEqual(saved[summaryKey("threads")], { week: "2026-11-15T17:00:00.000Z", text: "War Room held the median over 3 posts.", model: "beam" });
   assert.equal((await weeklySummary(env, store, posts, { now: NOW, fetcher: () => { throw new Error("no second call"); } })).status, "done_already");
@@ -587,19 +602,18 @@ test("AG18 free only, the token caps, the minute guard (owner 2026-11-25: \"teta
     return { s, setting: async (k) => (s.settings[k] ? { value: s.settings[k] } : null), saveSetting: async (i) => { s.settings[i.key] = i.value; return true; },
       record: async (c) => { s.calls.push(c); return true; }, spendSince: async (since) => ({ calls: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0, ...(typeof spent === "function" ? spent(since) : spent) }), recent: async () => s.calls };
   };
-  const env = { REFLECTION_API_KEY: "rk-test" }, msgs = [{ role: "user", content: "hi" }];
+  const env = { REFLECTION_API_KEY: "rk-test", AGENTS: commandOn() }, msgs = [{ role: "user", content: "hi" }];
   const answer = (status, body) => async () => new Response(JSON.stringify(body), { status, headers: { "reflection-data-retention": "zero" } });
   const none = () => { throw new Error("no call"); };
-  assert.deepEqual(MODEL_STOPS, ["off", "no_key", "budget", "retention", "tokens", "rpm", "paid", "rate"]);
-  // 402, and an answer that reports a cost: off, once, with the reason; the caller falls back
-  const p402 = store();
-  assert.equal((await askModel(env, p402, { purpose: "write:threads", messages: msgs, fetcher: answer(402, { error: { message: "Payment required" } }) })).skipped, "paid");
-  assert.equal(p402.s.settings.agent_model.enabled, false);
-  assert.match(p402.s.settings.agent_model.reason, /payment|cost/);
-  assert.equal((await askModel(env, p402, { purpose: "t", messages: msgs, fetcher: none })).skipped, "off", "off until an approver turns it on");
-  const billed = store();
-  assert.equal((await askModel(env, billed, { purpose: "t", messages: msgs, fetcher: answer(200, { choices: [{ message: { content: "x" } }], usage: { prompt_tokens: 10, completion_tokens: 5, cost: 0.002 } }) })).skipped, "paid", "a reported cost above 0");
-  assert.equal(billed.s.settings.agent_model.enabled, false);
+  assert.deepEqual(MODEL_STOPS, ["off", "no_key", "budget", "retention", "tokens", "rpm", "paid", "rate", "command_off"]);
+  // 402, and an answer that reports a cost: reported to the platform (its signal), then Beam reads off; the caller falls back
+  const k402 = commandOn(), p402 = store();
+  assert.equal((await askModel({ ...env, AGENTS: k402 }, p402, { purpose: "write:threads", messages: msgs, fetcher: answer(402, { error: { message: "Payment required" } }) })).skipped, "paid");
+  assert.deepEqual(k402.calls.at(-1).input, { signal: "http_402" });
+  assert.equal((await askModel({ ...env, AGENTS: k402 }, p402, { purpose: "t", messages: msgs, fetcher: none })).skipped, "command_off", "off until the owner turns it on again on Command");
+  const kCost = commandOn(), billed = store();
+  assert.equal((await askModel({ ...env, AGENTS: kCost }, billed, { purpose: "t", messages: msgs, fetcher: answer(200, { choices: [{ message: { content: "x" } }], usage: { prompt_tokens: 10, completion_tokens: 5, cost: 0.002 } }) })).skipped, "paid", "a reported cost above 0");
+  assert.deepEqual(kCost.calls.at(-1).input, { signal: "cost_field" });
   // CTA's own daily token caps and the minute guard: no call
   assert.equal((await askModel(env, store({ tokens_in: 1_000_000 }), { purpose: "t", messages: msgs, fetcher: none })).skipped, "tokens");
   assert.equal((await askModel(env, store({ tokens_out: 200_000 }), { purpose: "t", messages: msgs, fetcher: none })).skipped, "tokens");
@@ -635,7 +649,7 @@ test("AG19 a 429 is a rate stop, never paid: the model stays on and waits for th
     return { s, setting: async (k) => (s.settings[k] ? { value: s.settings[k] } : null), saveSetting: async (i) => { s.settings[i.key] = i.value; return true; },
       record: async (c) => { s.calls.push(c); return true; }, spendSince: async () => ({ calls: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0 }), recent: async () => s.calls };
   };
-  const env = { REFLECTION_API_KEY: "rk-test" }, msgs = [{ role: "user", content: "hi" }];
+  const env = { REFLECTION_API_KEY: "rk-test", AGENTS: commandOn() }, msgs = [{ role: "user", content: "hi" }];
   const answer = (status, body, headers = {}) => async () => new Response(JSON.stringify(body), { status, headers: { "reflection-data-retention": "zero", ...headers } });
   const none = () => { throw new Error("no call"); };
   const now = Date.parse("2026-11-26T01:20:00Z");
@@ -656,13 +670,63 @@ test("AG19 a 429 is a rate stop, never paid: the model stays on and waits for th
   assert.equal(rateUntil("", "Thu, 26 Nov 2026 01:25:00 GMT", now), Date.parse("2026-11-26T01:25:00Z"));
   assert.equal(rateUntil("per day", "17", now), Date.parse("2026-11-27T00:00:00Z"), "a daily limit waits for 00:00 UTC");
   // A 403 with billing words is still paid; a 5xx with billing words is not.
-  const p403 = store();
-  assert.equal((await askModel(env, p403, { purpose: "t", messages: msgs, now, fetcher: answer(403, { error: { code: "insufficient_balance", message: "Upgrade to a paid plan" } }) })).skipped, "paid");
-  assert.equal(p403.s.settings.agent_model.enabled, false);
+  const p403 = store(), k403 = commandOn();
+  assert.equal((await askModel({ ...env, AGENTS: k403 }, p403, { purpose: "t", messages: msgs, now, fetcher: answer(403, { error: { code: "insufficient_balance", message: "Upgrade to a paid plan" } }) })).skipped, "paid");
+  assert.deepEqual(k403.calls.at(-1).input, { signal: "billing_error" });
   const p500 = store();
-  const e = await askModel(env, p500, { purpose: "t", messages: msgs, now, fetcher: answer(503, { error: { message: "billing service unavailable" } }) });
+  const e = await askModel({ ...env, AGENTS: commandOn() }, p500, { purpose: "t", messages: msgs, now, fetcher: answer(503, { error: { message: "billing service unavailable" } }) });
   assert.deepEqual([e.ok, e.skipped, e.status, p500.s.settings.agent_model.enabled], [false, undefined, 503, true], "a 5xx is an error, never paid");
   // cta-write stops quietly on a rate stop (the template stays).
   const deps = { candidates: async () => [{ id: "p", kind: "pattern", channel: "threads", text: "Education · x\nbody 1\n\nNot financial advice." }], ask: async () => ({ ok: false, skipped: "rate" }), check: () => ({ pass: true }), record: async () => { throw new Error("no record"); } };
   assert.equal((await runWrite("threads", deps)).stopped, "rate");
+});
+
+test("AG20 Command's CTA Beam row is the switch: read at most once a minute, fail closed, the studio only turns Beam off (owner 2026-11-27: \"usulan saya\")", async () => {
+  const store = () => {
+    const s = { settings: {}, calls: [] };
+    return { s, setting: async (k) => (s.settings[k] ? { value: s.settings[k] } : null), saveSetting: async (i) => { s.settings[i.key] = i.value; return true; },
+      record: async (c) => { s.calls.push(c); return true; }, spendSince: async () => ({ calls: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0 }), recent: async () => s.calls };
+  };
+  const msgs = [{ role: "user", content: "hi" }];
+  const ok = async () => new Response(JSON.stringify({ choices: [{ message: { content: "Fine." } }] }), { headers: { "reflection-data-retention": "zero" } });
+  const none = () => { throw new Error("no call"); };
+  const t0 = Date.parse("2026-11-27T04:00:00Z");
+  // On, free only: Beam is called; the status is read once a minute however many calls ask.
+  const k = commandOn(), st = store(), env = { REFLECTION_API_KEY: "rk", AGENTS: k };
+  for (const dt of [0, 10_000, 59_000]) assert.equal((await askModel(env, st, { purpose: "t", messages: msgs, now: t0 + dt, fetcher: ok })).ok, true);
+  assert.equal(k.calls.filter((c) => c.capability === "model_router.status").length, 1, "one read in the minute");
+  await askModel(env, st, { purpose: "t", messages: msgs, now: t0 + 61_000, fetcher: ok });
+  assert.equal(k.calls.filter((c) => c.capability === "model_router.status").length, 2, "read again after a minute");
+  assert.deepEqual(st.s.settings[KERNEL_KEY], { at: new Date(t0 + 61_000).toISOString(), on: true, state: "on", mode: "free_only", paid_off: false, reason: null });
+  // Another isolate (a new binding object) on the same desk uses the stored read while it is fresh.
+  const k2 = commandOn();
+  assert.equal((await askModel({ ...env, AGENTS: k2 }, st, { purpose: "t", messages: msgs, now: t0 + 90_000, fetcher: ok })).ok, true);
+  assert.equal(k2.calls.length, 0);
+  // Off on Command, paid capped, or a global paid stop: no call.
+  for (const [kk, reason] of [[commandOn("off"), "command_off"], [commandOn("on", "paid_capped"), "command_off"], [commandOn("on", "free_only", true), "paid_stop"]])
+    assert.deepEqual(await askModel({ ...env, AGENTS: kk }, store(), { purpose: "t", messages: msgs, now: t0, fetcher: none }), { ok: false, skipped: "command_off", reason });
+  // Fail closed: no binding, a refused read, a thrown read, another system's answer.
+  assert.equal((await askModel({ REFLECTION_API_KEY: "rk" }, store(), { purpose: "t", messages: msgs, now: t0, fetcher: none })).reason, "not_connected");
+  assert.equal((await askModel({ ...env, AGENTS: { syscall: async () => ({ outcome: "denied", reason: "agent_not_registered" }) } }, store(), { purpose: "t", messages: msgs, now: t0, fetcher: none })).reason, "agent_not_registered");
+  assert.equal((await askModel({ ...env, AGENTS: { syscall: async () => { throw new Error("down"); } } }, store(), { purpose: "t", messages: msgs, now: t0, fetcher: none })).reason, "read_failed");
+  assert.equal((await askModel({ ...env, AGENTS: { syscall: async () => ({ outcome: "succeeded", result: { schema: "model_router.status.v1", system: "cerebrum", state: { state: "on", mode: "free_only" } } }) } }, store(), { purpose: "t", messages: msgs, now: t0, fetcher: none })).reason, "not_cta_status");
+  // global.paid_off is D1's 0 or 1: no global row, or a 1, is off; CTA without a row (state null) is off.
+  const answer = (state, global) => ({ syscall: async () => ({ outcome: "succeeded", result: { schema: "model_router.status.v1", system: "cta", state, effective: state?.state ?? "off", global } }) });
+  assert.equal((await askModel({ ...env, AGENTS: answer({ state: "on", mode: "free_only" }, null) }, store(), { purpose: "t", messages: msgs, now: t0, fetcher: none })).reason, "no_global_row");
+  assert.equal((await askModel({ ...env, AGENTS: answer({ state: "on", mode: "free_only" }, { paid_off: 1 }) }, store(), { purpose: "t", messages: msgs, now: t0, fetcher: none })).reason, "paid_stop");
+  assert.equal((await askModel({ ...env, AGENTS: answer(null, { paid_off: 0 }) }, store(), { purpose: "t", messages: msgs, now: t0, fetcher: none })).reason, "command_off");
+  assert.equal((await askModel({ ...env, AGENTS: answer({ state: "on", mode: "free_only" }, { paid_off: 0 }) }, store(), { purpose: "t", messages: msgs, now: t0, fetcher: ok })).ok, true);
+  // A stale on is never used: after a minute a failed read is off.
+  const flaky = store(); flaky.s.settings[KERNEL_KEY] = { at: new Date(t0 - 120_000).toISOString(), on: true };
+  assert.equal((await askModel({ ...env, AGENTS: { syscall: async () => { throw new Error("down"); } } }, flaky, { purpose: "t", messages: msgs, now: t0, fetcher: none })).skipped, "command_off");
+  // The studio's switch only turns Beam off: off there stops it whatever Command says; on there never turns it on.
+  const local = store(); local.s.settings.agent_model = { enabled: false, reason: "turned off in the studio" };
+  assert.deepEqual(await askModel(env, local, { purpose: "t", messages: msgs, now: t0, fetcher: none }), { ok: false, skipped: "off", reason: "turned off in the studio" });
+  const allowed = store(); allowed.s.settings.agent_model = { enabled: true };
+  assert.equal((await askModel({ ...env, AGENTS: commandOn("off") }, allowed, { purpose: "t", messages: msgs, now: t0, fetcher: none })).skipped, "command_off");
+  // report_paid: one call with the platform's signal; a refused report still leaves Beam off.
+  const kp = commandOn();
+  assert.equal(await reportPaidSign({ AGENTS: kp }, store(), "http_402", t0), true);
+  assert.deepEqual(kp.calls, [{ agent: "cta-model-router", capability: "model_router.report_paid", input: { signal: "http_402" } }]);
+  assert.equal(await reportPaidSign({}, store(), "http_402", t0), false, "no binding: not reported (the studio's switch then goes off)");
 });

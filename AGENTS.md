@@ -58,7 +58,8 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
 4. **Model-written public text only behind the CTA's guards** (amended 2026-11-25, owner: "amandemen aturan 4 agar
    bisa mengadopsi semua"; before, "No model writes public text"). Fixed templates over the xauusd `PublicProjection`
    (read-only RPC) stay the default. Every skill of the CTA agent (`src/agent/`, the `cta-*` skills) may use the model
-   behind `src/agent/router.mjs` (off until an approver turns it on, within its daily cap) to write public text, posts,
+   behind `src/agent/router.mjs` (off until the owner turns CTA's Beam row on in the platform's Command, owner 2026-11-27:
+   "usulan saya"; the studio's switch only stops it; within its daily cap) to write public text, posts,
    replies, comments and messages included, and each text it writes:
    - is written only from the facts the step hands it (the `PublicProjection`, or the comment it answers, which is
      untrusted), and names no number those facts do not hold;
@@ -75,7 +76,8 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
    added or dropped, in the same order and each under the same role word and chart, with the same negations and outcome words; no advice, forecast or certainty word the template does not use), keeps the template's first
    line and closing block, and is off until an approver turns it on (studio setting `agent_write`, the kill switch)
    and the About page's sentence about the model carries the owner's words (`about_lede_ok`).
-5. **Kernel.** This is an external organ (tier 1, no council seat, `signals.observe` and `reports.publish` only),
+5. **Kernel.** This is an external organ (tier 1, no council seat, `signals.observe` and `reports.publish` only; and one
+   agent, `cta-model-router`, with exactly `model_router.status` and `model_router.report_paid`, the platform's `CTA_CEILING`),
    declared in `organism.json` and read by the platform Forge over `EXT_ORGANISM_CTA`. Platform-side changes (the
    origin entry, the bindings, Access paths) go through the platform's own repository and its consensus.
 6. **Studio security.** `/studio` and `/api/studio/*` verify the Cloudflare Access JWT in the Worker (fail
