@@ -1335,6 +1335,7 @@ test("the 5-minute pass reads xauusd's patterns() only: never analysis() when it
   const close = (t, extra = {}) => ({ version: "cryptophys.public-patterns.v1", at_close_ms: Date.parse(t), closed: { M15: Date.parse(t), H1: Date.parse("2026-11-27T18:00:00Z"), H4: Date.parse("2026-11-27T16:00:00Z"), D1: Date.parse("2026-11-26T22:00:00Z") }, patterns: [wedge], price: 3640.2, price_at: t, ...extra });
   // a new M15 close with a new confirmed pattern and a price: posted, no analysis()
   value = close("2026-11-27T18:15:00.000Z");
+  value = { ...value, price_at: Date.parse("2026-11-27T18:15:00.000Z") }; // xauusd sends ms
   const r1 = await draftAnalysis(e, { now: Date.parse("2026-11-27T18:20:00Z"), fast: true });
   assert.deepEqual(r1.added.sort(), ["pattern:M15:broadening_wedge_descending:confirmed:3625:3596:telegram", "pattern:M15:broadening_wedge_descending:confirmed:3625:3596:threads"]);
   assert.match(getDraft(base.d.sql, "pattern:M15:broadening_wedge_descending:confirmed:3625:3596:telegram").text, /Price when read: 3640\.20 · 6:15 PM UTC/);

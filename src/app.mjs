@@ -319,7 +319,9 @@ async function fastPatternPass(env, { now = Date.now() } = {}) {
   // A late series can rewrite the value with the same at_close_ms: the closes per chart decide (orchestrator review).
   if (last?.closed && JSON.stringify(last.closed) === JSON.stringify(res.closed)) return { status: "same_close" };
   const price = Number.isFinite(Number(res.price)) && Number(res.price) > 0 ? Number(res.price) : null;
-  const atMs = Number.isFinite(Date.parse(res.price_at ?? "")) ? Date.parse(res.price_at) : Number(res.at_close_ms);
+  // price_at: ms from xauusd (a number), or an ISO string; else the reading's latest close.
+  const atRaw = res.price_at;
+  const atMs = typeof atRaw === "number" && Number.isFinite(atRaw) ? atRaw : Number.isFinite(Date.parse(atRaw ?? "")) ? Date.parse(atRaw) : Number(res.at_close_ms);
   let reading = { at: new Date(Number.isFinite(atMs) ? atMs : now).toISOString(), price, zones: [], patterns: res.patterns };
   let priceFrom = price != null ? "patterns" : null;
   if (price == null) {
