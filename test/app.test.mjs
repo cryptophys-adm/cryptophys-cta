@@ -1262,7 +1262,8 @@ test("live patterns end to end: a published confirmed post, then its bust, is po
   let reading;
   const e = { ...base.env, PROJECTION: { ...base.env.PROJECTION, analysis: async () => reading } };
   const wedge = (extra = {}) => ({ chart: "H1", pattern: "wedge_rising", name: "Rising Wedge", chapter: 50, status: "confirmed", direction: "down", upper: 3622.4, lower: 3606.1, projection: 3580, ...extra });
-  const read = (patterns, t, price = 3600) => ({ at: new Date(t).toISOString(), price, zones: [], patterns, structure: {} });
+  // the H1 close the reading carries (xauusd's analysis().closed), the hour of the reading
+  const read = (patterns, t, price = 3600) => ({ at: new Date(t).toISOString(), price, zones: [], patterns, structure: {}, closed: { H1: new Date(Math.floor(t / 3_600_000) * 3_600_000).toISOString() } });
   const t0 = Date.parse("2026-11-27T08:20:00Z");
   reading = read([wedge()], t0);
   const first = await draftAnalysis(e, { now: t0, fast: true });
@@ -1283,14 +1284,16 @@ test("live patterns end to end: a published confirmed post, then its bust, is po
   // 10:20: it busts (a close back above its upper line): the invalidated post, on Threads only (where it went out)
   reading = read([wedge({ status: "busted", direction: "up" })], Date.parse("2026-11-27T10:20:00Z"), 3631.2);
   const bust = await draftAnalysis(e, { now: Date.parse("2026-11-27T10:20:00Z"), fast: true });
-  assert.deepEqual(bust.added, ["pinvalid:H1:wedge_rising:3622:3606:threads"]);
+  assert.deepEqual(bust.added, ["pinvalid:H1:wedge_rising:3622:3606:threads"], "once, only where the confirmed post went out (Threads), with its card");
+  assert.ok(getDraft(base.d.sql, "pinvalid:H1:wedge_rising:3622:3606:threads").overlay?.pattern, "it carries the overlay its card draws");
   assert.match(getDraft(base.d.sql, "pinvalid:H1:wedge_rising:3622:3606:threads").text, /An H1 candle closed back above 3622\.40: the breakout did not hold\./);
   assert.deepEqual((await draftAnalysis(e, { now: Date.parse("2026-11-27T10:25:00Z"), fast: true })).added, [], "once");
   // 11:09: the recap names it as invalidated in the last hour
   reading = read([wedge({ status: "busted", direction: "up" })], Date.parse("2026-11-27T11:09:00Z"), 3633);
   const h3 = await draftAnalysis(e, { now: Date.parse("2026-11-27T11:09:30Z") });
   assert.deepEqual(h3.added.filter((x) => x.startsWith("precap:")), ["precap:20261127T11:threads", "precap:20261127T11:telegram"]);
-  assert.match(getDraft(base.d.sql, "precap:20261127T11:threads").text, /Invalidated in the last hour:\n• H1 Rising Wedge · closed back above 3622\.40/);
+  assert.match(getDraft(base.d.sql, "precap:20261127T11:threads").text, /Invalidated since the last close:\n• H1 Rising Wedge · closed back above 3622\.40/);
+  assert.match(getDraft(base.d.sql, "precap:20261127T09:threads").text, /Invalidated since the last close: none/);
 });
 
 test("the 5-minute pattern pass is a switch, off by default (orchestrator review of #113: xauusd's analysis() is not cheap): off, the hourly run posts every chart's patterns", async () => {

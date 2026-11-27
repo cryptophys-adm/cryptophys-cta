@@ -285,11 +285,12 @@ async function patternPass(env, d, analysis, { now, channels, settings, dropped 
   const addedSet = new Set(added);
   const drafted = (analysis.patterns ?? []).filter((p) => drafts.some((x) => addedSet.has(x.id) && x.id.startsWith(`pattern:${p.chart}:${p.pattern}:confirmed:`)));
   const { ledger, invalidated } = updateLedger(Array.isArray(ledgerRow?.value?.items) ? ledgerRow.value.items : [], analysis, { drafted, now });
-  // An invalidated pattern is posted on the text channels where its confirmed post went out.
+  // An invalidated pattern is posted once, with its card, on the channels where its confirmed post went out (owner
+  // 2026-11-27: "dengan gambarnya dan hanya 1x posting termasuk jika terjadi invalidated").
   const out = [];
   for (const e of invalidated) {
     const went = new Set(history.filter((h) => h.status === "published").map((h) => patternOfId(h.id)).filter((o) => o && o.chart === e.chart && o.pattern === e.pattern && o.status === "confirmed").map((o) => o.channel));
-    out.push(...invalidationDrafts([e], analysis, { channels: channels.filter((c) => went.has(c) && SPECS[c]?.media === "none"), now }));
+    out.push(...invalidationDrafts([e], analysis, { channels: channels.filter((c) => went.has(c)), now }));
   }
   const ready = await settled(env, out, settings, now, dropped);
   const invalid = ready.length ? await d.add(ready, now) : [];
@@ -317,14 +318,13 @@ export async function draftAnalysis(env, { now = Date.now(), fast = false } = {}
   const pat = fastPassOn(env) ? { drafts: [], added: [] } : await patternPass(env, d, analysis, { now, channels, settings, dropped });
   const knownLevels = new Set(await d.idsWithPrefix("levels:"));
   const maps = analysisDrafts(analysis, { now, channels, levelsRun: new Date(now).getUTCHours() === 6, knownLevels, patternCharts: [] });
-  // The hourly recap: the active confirmed patterns and those invalidated since the last recap (this run's included);
-  // none when it would say nothing new (owner 2026-11-27: "Lewati", no duplicate).
+  // The pattern recap at this reading's close (owner 2026-11-27: per closing candle, M15 with H1; "1A", "2A"): the
+  // close's charts' active confirmed patterns and those invalidated since the last close (this run's included); none
+  // when it would say nothing new ("Lewati", no duplicate).
   const ledgerRow = await d.studioSetting(PATTERN_LEDGER_KEY);
   const ledger = Array.isArray(ledgerRow?.value?.items) ? ledgerRow.value.items : [];
   const last = await d.studioSetting(PATTERN_RECAP_KEY);
-  const since = Date.parse(last?.value?.at ?? "") || now - 3_600_000;
-  const invalidated = ledger.filter((e) => e.invalidated_at && Date.parse(e.invalidated_at) > since && Date.parse(e.invalidated_at) <= now);
-  const recap = Array.isArray(analysis?.patterns) ? patternRecapDrafts(analysis, { invalidated, lastSignature: last?.value?.signature ?? null, channels: channels.filter((c) => PATTERN_RECAP_CHANNELS.includes(c)), now }) : { drafts: [], skipped: "no_reading" };
+  const recap = Array.isArray(analysis?.patterns) ? patternRecapDrafts(analysis, { ledger, lastSignature: last?.value?.signature ?? null, channels: channels.filter((c) => PATTERN_RECAP_CHANNELS.includes(c)), now }) : { drafts: [], skipped: "no_reading" };
   const rest = await settled(env, [...maps, ...recap.drafts], settings, now, dropped);
   const added = rest.length ? await d.add(rest, now) : [];
   if (recap.drafts.length) await d.saveStudioSetting({ key: PATTERN_RECAP_KEY, value: { at: new Date(now).toISOString(), signature: recap.signature }, actor: "cta-agent" }, now);

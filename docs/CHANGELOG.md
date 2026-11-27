@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-27 (the pattern recap at each close; the invalidated post with its card)
+- feat(pattern): the pattern recap follows each timeframe's close, and an invalidated pattern is posted with its card. Owner, 27 Nov: "recap pattern berhasil tapi contentnya kurang pas, tidak ada invalidated. Recap ubah per closing candle sesuai timeframe saja kecuali pattern 15m, tetap mengikuti per 1H. Untuk confirmed pattern semua TF diposting setiap kali terbentuk tapi dengan gambarnya dan hanya 1x posting termasuk jika terjadi invalidated." Then "1A 2A": the charts that close together in one recap, and the invalidated part always shown.
+  - **Recap per close** (`recapClose`). At each fresh H1 close (within 70 minutes, `analysis().closed`), one recap covers the charts closing at that time: H1 with M15 every hour, and H4 and D1 joined at their own closes ("H4 + H1 close", as the key-level map). Its title reads "Education · XAUUSD pattern recap · H4 + H1 close · 4:00 PM UTC". It lists only those charts' active confirmed patterns, one per band.
+  - **Invalidated part always shown.** "Invalidated since the last close:" lists the close's charts' patterns invalidated within their chart's last candle (1 h for H1 and M15, 4 h for H4, 24 h for D1), or reads "Invalidated since the last close: none".
+  - **Skipped** with no fresh close, when there is nothing to list (no active pattern and none invalidated), or when the recap would repeat the last one. Text only, Threads and Telegram, as before.
+  - **Invalidated post with its card.** `pattern_invalidated` is no longer text only. It carries the pattern's overlay (its lines as read now, no projection), on its own chart (`chartOf`) under the "Chart pattern" label. It is posted once, on every channel where the confirmed post went out, Instagram, YouTube and TikTok included (with the card's credit).
+  - **Confirmed posts:** every chart, with their card, once each, as before (#112, #113).
+  - Invalidation of a one-sided pattern needs xauusd's `busted` status (xauusd #654); until it deploys, only a two-sided pattern confirmed the other way is caught.
+
 ## 2026-11-27 (the pattern recap: one pattern per band; newest recap wins on a slotted channel)
 - fix(pattern): the first hourly recap (16:09Z, Telegram) listed H4 Diamond Bottom and H4 Measured Move Up on the same 3607.25 breakout. The recap now lists one pattern per chart and band, the first by catalogue order (`activePatterns` with `sameBand`), as the posts already do (#112).
 - fix(pattern): Threads posts in its slots, so the 16:09 recap waited for one. Of a channel's approved recaps only the newest may go out (`supersedeRecaps`, run with `supersedeMaps` before a slot picks its post); an older one is expired with error "superseded:<newer id>" and is never published.

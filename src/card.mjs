@@ -19,7 +19,7 @@ export const CARD_HEIGHT = 1350;
 export const chartHeightFor = (lines) => (lines <= 7 ? 700 : lines <= 11 ? 600 : 520);
 export const CARD_VERSION = "cryptophys.cta-card.v2";
 
-const KIND_LABEL = { pattern: "Chart pattern", key_levels: "Key-level map", daily_recap: "Daily recap", warroom: "War Room reading" };
+const KIND_LABEL = { pattern: "Chart pattern", pattern_invalidated: "Chart pattern", key_levels: "Key-level map", daily_recap: "Daily recap", warroom: "War Room reading" };
 /** TradingView widget intervals. */
 const INTERVAL = { M15: "15", H1: "60", H4: "240", D1: "D" };
 
@@ -27,6 +27,8 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 
 /** The chart timeframe of a draft: a pattern's own chart; the key-level map on its largest chart, else H4; the daily recap on H1. */
 export function chartOf(draft) {
+  // An invalidated pattern's card (owner 2026-11-27: "dengan gambarnya"): the pattern's own chart.
+  if (draft?.kind === "pattern_invalidated" && INTERVAL[draft?.overlay?.pattern?.chart]) return draft.overlay.pattern.chart;
   if (draft?.kind === "pattern") {
     const m = /^pattern:(M15|H1|H4|D1):/.exec(String(draft.id ?? ""));
     if (m) return m[1];

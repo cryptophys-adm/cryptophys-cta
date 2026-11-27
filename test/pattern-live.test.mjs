@@ -4,7 +4,7 @@
 // recap is skipped ("Lewati"); both kinds auto-approved like Chart pattern ("Ya, auto-approve").
 import test from "node:test";
 import assert from "node:assert/strict";
-import { updateLedger, ledgerEntry, invalidatedText, patternRecapText, patternRecapDrafts, invalidationDrafts, activePatterns, failOf, kindFamily, TEXT_ONLY_KINDS, PATTERN_RECAP_CHANNELS, PATTERN_COOLDOWN_MS } from "../src/analysis-drafts.mjs";
+import { updateLedger, ledgerEntry, invalidatedText, patternRecapText, patternRecapDrafts, recapClose, invalidationDrafts, activePatterns, failOf, kindFamily, TEXT_ONLY_KINDS, PATTERN_RECAP_CHANNELS, PATTERN_COOLDOWN_MS } from "../src/analysis-drafts.mjs";
 import { checkContentDraft } from "../src/guardian.mjs";
 import { applySettings, defaultSettings } from "../src/settings.mjs";
 import { withFamily } from "../src/app.mjs";
@@ -28,47 +28,62 @@ test("the ledger: a posted confirmed pattern is invalidated once when it busts o
   assert.equal(updateLedger(first.ledger, read([wedge({ status: "busted" })]), { now: at + 17 * 24 * 3_600_000 }).ledger.length, 0, "left after the chart's lookback");
 });
 
-test("the invalidated post: text only, the owner's template word for word, passes the guardian", () => {
+test("the invalidated post: the owner's template word for word, passes the guardian, with its card where its confirmed post went", () => {
   const e = ledgerEntry(wedge(), read([wedge()]), at);
   const text = invalidatedText(e, read([], 3631.2, at), { channel: "threads" });
   assert.equal(text, "Education · Pattern invalidated · XAUUSD H1\nRising Wedge · direction down\n\nAn H1 candle closed back above 3622.40: the breakout did not hold.\nIts measured projection 3580.00 no longer applies.\nPrice when read: 3631.20 · 9:20 AM UTC\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.");
   assert.deepEqual(passes(text).failures, []);
   const noProj = invalidatedText({ ...e, projection: null }, read([]), { channel: "telegram" });
   assert.doesNotMatch(noProj, /measured projection/i, "a projection that was not sane was never posted, so it is not named");
-  const ds = invalidationDrafts([e], read([]), { channels: ["threads", "telegram"], now: at });
-  assert.deepEqual(ds.map((d) => [d.id, d.kind, d.status]), [["pinvalid:H1:wedge_rising:3622:3606:threads", "pattern_invalidated", "pending"], ["pinvalid:H1:wedge_rising:3622:3606:telegram", "pattern_invalidated", "pending"]]);
+  const ds = invalidationDrafts([e], read([wedge({ status: "busted", direction: "up" })]), { channels: ["threads", "instagram"], now: at });
+  assert.deepEqual(ds.map((d) => [d.id, d.kind, d.status]), [["pinvalid:H1:wedge_rising:3622:3606:threads", "pattern_invalidated", "pending"], ["pinvalid:H1:wedge_rising:3622:3606:instagram", "pattern_invalidated", "needs_image"]]);
+  assert.match(ds[1].text, /Chart by TradingView\./, "the card's credit where the post is the card");
+  assert.deepEqual([ds[0].overlay.pattern.upper, ds[0].overlay.pattern.lower, ds[0].overlay.pattern.projection, ds[0].overlay.pattern.direction], [3622.4, 3606.1, null, "down"], "the card draws its lines, no projection");
 });
 
-test("the hourly recap: the owner's template, active with measured projection and invalidated in the last hour; skipped when empty or unchanged", () => {
+test("the recap at each close (owner 1A, 2A): H1 with M15 every hour, H4 and D1 joined at their closes; invalidated always shown, none when empty", () => {
   const mm = { chart: "H4", pattern: "measured_move_up", name: "Measured Move Up", chapter: 30, status: "confirmed", direction: "up", upper: 3607.25, lower: 3552.14, projection: 3732.58 };
   const flag = { chart: "M15", pattern: "flag", name: "Flag", chapter: 23, status: "confirmed", direction: "up", upper: 3660.5, lower: 3655.2, projection: 3671.1 };
-  const analysis = read([flag, mm, wedge({ status: "forming" })], 3662.35, Date.parse("2026-11-27T09:09:00Z"));
-  assert.deepEqual(activePatterns(analysis).map((p) => p.chart), ["H4", "M15"], "largest chart first; forming is not active");
-  const inv = [{ ...ledgerEntry(wedge(), read([]), at), invalidated_at: new Date(at).toISOString() }];
-  const text = patternRecapText({ active: activePatterns(analysis), invalidated: inv, analysis, hourIso: "2026-11-27T09:00:00.000Z" }, { channel: "telegram" });
-  assert.equal(text, "Education · XAUUSD pattern recap · 9:00 AM UTC\nPrice when read: 3662.35\n\nActive (confirmed):\n• H4 Measured Move Up · up · breakout 3607.25 · measured projection 3732.58\n• M15 Flag · up · breakout 3660.50 · measured projection 3671.10\n\nInvalidated in the last hour:\n• H1 Rising Wedge · closed back above 3622.40\n\nPatterns fail often; a measured projection is analysis, not a trade objective.\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD #gold");
-  assert.deepEqual(passes(text).failures, []);
-  // Threads' 500 characters: the smallest charts' lines go first, never the title, price, closing line or disclaimer
-  const many = read(Array.from({ length: 8 }, (_, i) => ({ ...flag, pattern: `flag${i}`, name: `Flag ${i}` })), 3662.35);
-  const short = patternRecapText({ active: activePatterns(many), invalidated: inv, analysis: many, hourIso: "2026-11-27T09:00:00.000Z" }, { channel: "threads" });
-  assert.ok(short.length <= 500 && /^Education · XAUUSD pattern recap/.test(short) && /Patterns fail often/.test(short) && /not financial advice/.test(short));
-  // the drafts: Threads and Telegram only, text, not again when nothing changed, none when empty
-  const now = Date.parse("2026-11-27T09:09:30Z");
+  const rect = { chart: "H1", pattern: "rectangle", name: "Rectangle", chapter: 40, status: "confirmed", direction: "up", upper: 3640, lower: 3620, projection: 3660 };
+  const closedAt = (h1, h4, d1) => ({ H1: h1, H4: h4, D1: d1 });
+  const reading = (closed, t) => ({ ...read([flag, mm, rect, wedge({ status: "forming" })], 3662.35, t), closed });
+  // 16:00 is an H4 close too: "H4 + H1 close", the H4, H1 and M15 patterns
+  const at16 = Date.parse("2026-11-27T16:09:30Z");
+  const r16 = reading(closedAt("2026-11-27T16:00:00.000Z", "2026-11-27T16:00:00.000Z", "2026-11-26T22:00:00.000Z"), at16);
+  assert.deepEqual(recapClose(r16, at16), { closeIso: "2026-11-27T16:00:00.000Z", title: ["H4", "H1"], charts: ["H4", "H1", "M15"] });
+  const one = patternRecapDrafts(r16, { channels: ["threads", "telegram", "instagram"], now: at16 });
+  assert.deepEqual(one.drafts.map((d) => [d.id, d.kind]), [["precap:20261127T16:threads", "pattern_recap"], ["precap:20261127T16:telegram", "pattern_recap"]]);
+  assert.equal(one.drafts[1].text, "Education · XAUUSD pattern recap · H4 + H1 close · 4:00 PM UTC\nPrice when read: 3662.35\n\nActive (confirmed):\n• H4 Measured Move Up · up · breakout 3607.25 · measured projection 3732.58\n• H1 Rectangle · up · breakout 3640.00 · measured projection 3660.00\n• M15 Flag · up · breakout 3660.50 · measured projection 3671.10\n\nInvalidated since the last close: none\n\nPatterns fail often; a measured projection is analysis, not a trade objective.\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD #gold");
+  assert.deepEqual(passes(one.drafts[1].text).failures, []);
+  // 17:00, an H1 close only: H1 and M15, no H4; an H1 pattern invalidated within the hour is listed
+  const at17 = Date.parse("2026-11-27T17:09:30Z");
+  const r17 = reading(closedAt("2026-11-27T17:00:00.000Z", "2026-11-27T16:00:00.000Z", "2026-11-26T22:00:00.000Z"), at17);
+  const ledger = [{ ...ledgerEntry(wedge(), read([]), at16), invalidated_at: "2026-11-27T16:40:00.000Z" }, { ...ledgerEntry(wedge({ chart: "H1", pattern: "old" }), read([]), at16), invalidated_at: "2026-11-27T15:40:00.000Z" }];
+  const t17 = patternRecapDrafts(r17, { ledger, channels: ["telegram"], now: at17 }).drafts[0].text;
+  assert.match(t17, /^Education · XAUUSD pattern recap · H1 close · 5:00 PM UTC/);
+  assert.doesNotMatch(t17, /H4 Measured Move Up/);
+  assert.match(t17, /• H1 Rectangle[\s\S]*• M15 Flag/);
+  assert.match(t17, /Invalidated since the last close:\n• H1 Rising Wedge · closed back above 3622\.40\n/);
+  assert.equal((t17.match(/closed back above/g) ?? []).length, 1, "invalidated before the last close: not listed again");
+  // skipped: no fresh close, nothing to list, or the same as the last
+  assert.equal(patternRecapDrafts({ ...r17, closed: closedAt("2026-11-27T14:00:00.000Z") }, { now: at17 }).skipped, "no_close");
+  assert.equal(patternRecapDrafts({ ...read([]), closed: r17.closed }, { now: at17 }).skipped, "empty");
+  const sig = patternRecapDrafts(r17, { now: at17 }).signature;
+  assert.equal(patternRecapDrafts(r17, { lastSignature: sig, now: at17 }).skipped, "unchanged");
+  // Threads' 500 characters
+  const many = { ...read(Array.from({ length: 8 }, (_, i) => ({ ...flag, pattern: `flag${i}`, name: `Flag ${i}`, upper: 3600 + 20 * i, lower: 3595 + 20 * i, projection: 3610 + 20 * i })), 3662.35), closed: r17.closed };
+  const short = patternRecapDrafts(many, { channels: ["threads"], now: at17 }).drafts[0].text;
+  assert.ok(short.length <= 500 && /Invalidated since the last close: none/.test(short) && /not financial advice/.test(short));
   assert.deepEqual(PATTERN_RECAP_CHANNELS, ["threads", "telegram"]);
-  const one = patternRecapDrafts(analysis, { invalidated: inv, channels: ["threads", "telegram", "instagram"], now });
-  assert.deepEqual(one.drafts.map((d) => [d.id, d.kind]), [["precap:20261127T09:threads", "pattern_recap"], ["precap:20261127T09:telegram", "pattern_recap"]]);
-  assert.deepEqual(patternRecapDrafts(analysis, { invalidated: inv, lastSignature: one.signature, now: now + 3_600_000 }), { drafts: [], signature: one.signature, skipped: "unchanged" });
-  assert.equal(patternRecapDrafts(read([]), { now }).skipped, "empty");
-  assert.equal(patternRecapDrafts(analysis, { lastSignature: one.signature, now }).drafts.length, 2, "the invalidated list changed: a new recap");
 });
 
-test("the two kinds: text only whatever the channel's format, part of Chart pattern for kinds and auto-approve; cooldowns per chart", () => {
-  assert.deepEqual(TEXT_ONLY_KINDS, ["pattern_invalidated", "pattern_recap"]);
+test("the recap is text only whatever the channel's format; the invalidated post takes its card (owner 2026-11-27); both are Chart pattern for kinds and auto-approve; cooldowns per chart", () => {
+  assert.deepEqual(TEXT_ONLY_KINDS, ["pattern_recap"]);
   assert.equal(kindFamily("pattern_recap"), "pattern");
   const imageThreads = { ...defaultSettings("threads"), format: "image" };
   const d = (kind) => ({ id: `${kind}:x:threads`, kind, channel: "threads", text: "Education · x. Not financial advice.", status: "pending", guardian: { pass: true, failures: [] } });
   const out = applySettings([d("pattern_recap"), d("pattern_invalidated"), d("pattern")], { threads: imageThreads });
-  assert.deepEqual(out.map((x) => x.status), ["pending", "pending", "needs_image"], "the recap and the invalidated post never wait for a card");
+  assert.deepEqual(out.map((x) => x.status), ["pending", "needs_image", "needs_image"], "the recap never waits for a card; the invalidated post has one, like the confirmed post");
   const dropped = [];
   assert.deepEqual(applySettings([d("pattern_recap")], { threads: { ...imageThreads, kinds: ["key_levels"] } }, { dropped }), []);
   assert.equal(dropped[0].reason, "kind_off", "a channel without Chart pattern takes neither");
@@ -102,4 +117,13 @@ test("a channel with posting slots sends only the newest approved recap; older o
   for (const h of ["16", "17"]) decideDraft(sql, { id: `precap:20261127T${h}:threads`, decision: "approve", actor: "cta-agent (auto-approve)" }, { now: t });
   assert.equal(nextApproved(sql, "threads", { now: t }).id, "precap:20261127T17:threads");
   assert.deepEqual([getDraft(sql, "precap:20261127T16:threads").status, getDraft(sql, "precap:20261127T16:threads").error], ["expired", "superseded:precap:20261127T17:threads"]);
+});
+
+test("the invalidated post's card shows the pattern's own chart and the Chart pattern label", async () => {
+  const { chartOf, cardHtml } = await import("../src/card.mjs");
+  const { BRANDS } = await import("../src/brands.mjs");
+  const e = ledgerEntry(wedge({ chart: "H4" }), read([]), at);
+  const [d] = invalidationDrafts([e], read([wedge({ chart: "H4", status: "busted", direction: "up" })]), { channels: ["instagram"], now: at });
+  assert.equal(chartOf(d), "H4");
+  assert.match(cardHtml(d, BRANDS["xauusd-ai-cta"]), /Education · Chart pattern/);
 });

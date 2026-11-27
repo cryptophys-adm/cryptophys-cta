@@ -360,7 +360,7 @@ export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS
 /** The text-only kinds of the pattern family: never a card, whatever the channel's format. */
 export const PATTERN_INVALIDATED = "pattern_invalidated";
 export const PATTERN_RECAP = "pattern_recap";
-export const TEXT_ONLY_KINDS = Object.freeze([PATTERN_INVALIDATED, PATTERN_RECAP]);
+export const TEXT_ONLY_KINDS = Object.freeze([PATTERN_RECAP]);
 /** The kind a channel's settings (kinds, auto-approve) read for a draft's kind. */
 export const KIND_FAMILY = Object.freeze({ [PATTERN_INVALIDATED]: "pattern", [PATTERN_RECAP]: "pattern" });
 export const kindFamily = (kind) => KIND_FAMILY[kind] ?? kind;
@@ -431,22 +431,35 @@ const activeLine = (p, price) => {
   return `• ${p.chart} ${p.name} · ${p.direction === "up" ? "up" : p.direction === "down" ? "down" : "unclear"} · breakout ${f2(failOf(p).line)}${proj != null ? ` · measured projection ${f2(proj)}` : ""}`;
 };
 const invalidLine = (e) => `• ${e.chart} ${e.name} · closed back ${e.side} ${f2(e.level)}`;
-/** Pure: what a recap says, for the "nothing changed" check: the active patterns' lines and the invalidated keys. */
-export const recapSignature = (active, invalidated) => JSON.stringify([active.map((p) => `${p.chart}:${p.pattern}:${p.direction}:${Math.round(p.upper)}:${Math.round(p.lower)}`), invalidated.map((e) => `${e.key}@${e.invalidated_at}`)]);
+/** Pure: what a recap says, for the "nothing changed" check: its charts, the active patterns' lines and the invalidated keys. */
+export const recapSignature = (active, invalidated, charts = []) => JSON.stringify([charts, active.map((p) => `${p.chart}:${p.pattern}:${p.direction}:${Math.round(p.upper)}:${Math.round(p.lower)}`), invalidated.map((e) => `${e.key}@${e.invalidated_at}`)]);
+const CHART_MS = Object.freeze({ M15: 900_000, H1: 3_600_000, H4: 4 * 3_600_000, D1: 24 * 3_600_000 });
 /**
- * Pure: the hourly pattern recap, text only (owner's approved template of 2026-11-27): the active confirmed patterns
- * with their measured projection, and the patterns invalidated in the last hour. Too long for the channel: the
- * active list loses its last lines (the smallest charts), then the invalidated list; never the title, the price, the
- * closing line or the disclaimer.
+ * Pure: the recap at this reading's close (owner 2026-11-27: "Recap ubah per closing candle sesuai timeframe saja
+ * kecuali pattern 15m, tetap mengikuti per 1H"; "1A": the charts that close together in one post, as the key-level
+ * map): the H1 close, with M15, every hour; H4 and D1 joined at their own closes. Null when the H1 close is not fresh.
  */
-export function patternRecapText({ active, invalidated, analysis, hourIso }, { channel = "threads" } = {}) {
+export function recapClose(analysis, now = Date.now()) {
+  const h1 = Date.parse(analysis?.closed?.H1 ?? "");
+  if (!Number.isFinite(h1) || now - h1 > MAP_FRESH_MINUTES * 60_000 || h1 > now + 60_000) return null;
+  const closing = MAP_CHARTS.filter((c) => Date.parse(analysis?.closed?.[c] ?? "") === h1);
+  return { closeIso: new Date(h1).toISOString(), title: closing, charts: [...closing, "M15"] };
+}
+/**
+ * Pure: the pattern recap at a close, text only (the owner's approved template of 2026-11-27, per close: "1A", and
+ * "2A": the invalidated part always shown, "none" when empty): the close's charts' active confirmed patterns with
+ * their measured projection, and those invalidated since the last close. Too long for the channel: the active list
+ * loses its last lines (the smallest charts), then the invalidated list; never the title, the price, the closing line
+ * or the disclaimer.
+ */
+export function patternRecapText({ active, invalidated, analysis, closeIso, title = ["H1"] }, { channel = "threads" } = {}) {
   const price = analysis?.price;
   let act = active.map((p) => activeLine(p, price)), inv = invalidated.map(invalidLine);
   const build = () => {
-    const lines = [`Education · XAUUSD pattern recap · ${clock12(hourIso)} UTC`];
+    const lines = [`Education · XAUUSD pattern recap · ${title.join(" + ")} close · ${clock12(closeIso)} UTC`];
     if (price != null) lines.push(`Price when read: ${f2(price)}`);
     if (act.length) lines.push("", "Active (confirmed):", ...act);
-    if (inv.length) lines.push("", "Invalidated in the last hour:", ...inv);
+    lines.push("", ...(inv.length ? ["Invalidated since the last close:", ...inv] : ["Invalidated since the last close: none"]));
     lines.push("", "Patterns fail often; a measured projection is analysis, not a trade objective.");
     const tail = ["", channel === "x" ? SHORT_DISCLAIMER : ANALYSIS_DISCLAIMER, ...[ANALYSIS_HASHTAGS[channel] ?? ""].filter(Boolean)];
     return [...lines, ...tail].join("\n");
@@ -456,27 +469,38 @@ export function patternRecapText({ active, invalidated, analysis, hourIso }, { c
   while (text.length > max && (act.length || inv.length)) { if (act.length) act = act.slice(0, -1); else inv = inv.slice(0, -1); text = build(); }
   return text.length <= max && (act.length || inv.length) ? text : null;
 }
-export const patternRecapId = (hourIso, channel) => `precap:${String(hourIso).slice(0, 13).replace(/[-:]/g, "")}:${channel}`;
+export const patternRecapId = (closeIso, channel) => `precap:${String(closeIso).slice(0, 13).replace(/[-:]/g, "")}:${channel}`;
 
 /** Pure: the invalidation drafts for the channels where the pattern's confirmed post went out. */
 export function invalidationDrafts(invalidated, analysis, { channels = [], now = Date.now() } = {}) {
   const out = [];
   for (const e of invalidated) for (const channel of channels) {
     const text = invalidatedText(e, analysis, { channel });
-    if (text) out.push(draft({ id: invalidatedId(e, channel), kind: PATTERN_INVALIDATED, channel, text, now }));
+    // With its card (owner 2026-11-27: "dengan gambarnya dan hanya 1x posting termasuk jika terjadi invalidated"): the
+    // pattern's lines as read now, no projection (it no longer applies).
+    const p = (analysis?.patterns ?? []).find((x) => x.chart === e.chart && x.pattern === e.pattern) ?? e;
+    const overlay = overlayOf(analysis, { pattern: { ...p, name: e.name, chart: e.chart, status: "confirmed", direction: e.direction, projection: null } });
+    if (text) out.push(draft({ id: invalidatedId(e, channel), kind: PATTERN_INVALIDATED, channel, text, now, overlay }));
   }
   return out;
 }
-/** Pure: the hourly recap drafts, or none when it would say nothing or the same as the last one. */
-export function patternRecapDrafts(analysis, { invalidated = [], lastSignature = null, channels = PATTERN_RECAP_CHANNELS, now = Date.now() } = {}) {
-  const active = activePatterns(analysis);
-  const sig = recapSignature(active, invalidated);
+/**
+ * Pure: the recap drafts at this reading's close, or none when there is no fresh H1 close, nothing to list (no active
+ * pattern and none invalidated: "Lewati"), or the same as the last one. `ledger`: the ledger's entries; an entry of the
+ * close's charts invalidated within its chart's last candle is listed.
+ */
+export function patternRecapDrafts(analysis, { ledger = [], lastSignature = null, channels = PATTERN_RECAP_CHANNELS, now = Date.now() } = {}) {
+  const close = recapClose(analysis, now);
+  if (!close) return { drafts: [], skipped: "no_close" };
+  const end = Date.parse(close.closeIso);
+  const active = activePatterns(analysis).filter((p) => close.charts.includes(p.chart));
+  const invalidated = (ledger ?? []).filter((e) => close.charts.includes(e.chart) && e.invalidated_at && Date.parse(e.invalidated_at) > end - (CHART_MS[e.chart] ?? 3_600_000) && Date.parse(e.invalidated_at) <= now);
+  const sig = recapSignature(active, invalidated, close.charts);
   if ((!active.length && !invalidated.length) || sig === lastSignature) return { drafts: [], signature: sig, skipped: !active.length && !invalidated.length ? "empty" : "unchanged" };
-  const hourIso = new Date(Math.floor(now / 3_600_000) * 3_600_000).toISOString();
   const drafts = [];
   for (const channel of channels.filter((c) => PATTERN_RECAP_CHANNELS.includes(c))) {
-    const text = patternRecapText({ active, invalidated, analysis, hourIso }, { channel });
-    if (text) drafts.push(draft({ id: patternRecapId(hourIso, channel), kind: PATTERN_RECAP, channel, text, now }));
+    const text = patternRecapText({ active, invalidated, analysis, closeIso: close.closeIso, title: close.title }, { channel });
+    if (text) drafts.push(draft({ id: patternRecapId(close.closeIso, channel), kind: PATTERN_RECAP, channel, text, now }));
   }
-  return { drafts, signature: sig };
+  return { drafts, signature: sig, charts: close.charts };
 }
