@@ -244,14 +244,14 @@ test("the native deploy block in organism.json equals wrangler.jsonc, and the or
 test("Instagram cards: rendered for drafts that need one, then served publicly only once the draft is approved", async () => {
   resetKeyCacheForTests();
   const { d, env: e } = env({ PUBLIC_ORIGIN: "https://cta.cryptophys.work" });
-  const text = "Education · Pattern forming · XAUUSD H4\nAscending Triangle\n\nUpper line 4098.20 · lower line 4071.60\n\nChart by TradingView.\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD";
+  const text = "Education · Pattern forming · XAUUSD H4\nAscending Triangle\n\nUpper line 4098.20 · lower line 4071.60\n\nChart by Cryptophys.\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD";
   addDrafts(d.sql, [
     { id: "pattern:H4:asc:forming:4098:4072:instagram", kind: "pattern", channel: "instagram", text, status: "needs_image" },
     { id: "pattern:H4:bad:forming:4098:4072:instagram", kind: "pattern", channel: "instagram", text: text + "\nx", status: "needs_image" }
   ], { now: Date.now() - 1000 });
   const jpeg = new Uint8Array(30_000); jpeg[0] = 0xff; jpeg[1] = 0xd8;
   let rendered = 0;
-  const render = async (draft) => { rendered += 1; if (draft.id.includes(":bad:")) throw new Error("the TradingView chart did not load"); return jpeg; };
+  const render = async (draft) => { rendered += 1; if (draft.id.includes(":bad:")) throw new Error("the card did not load"); return jpeg; };
   assert.deepEqual(await renderImages(e, {}), { status: "no_browser" });
   const r = await renderImages(e, { launch: () => ({}), render });
   assert.equal(rendered, 2);
@@ -313,7 +313,7 @@ test("the studio's render-now: a person only, same origin", async () => {
 test("video drafts: rendered as a WebM after their card, served as video only once approved, never as a .jpg", async () => {
   resetKeyCacheForTests();
   const { d, env: e } = env({ PUBLIC_ORIGIN: "https://cta.cryptophys.work" });
-  const text = "Education · Pattern forming · XAUUSD H4\nAscending Triangle\n\nChart by TradingView.\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD";
+  const text = "Education · Pattern forming · XAUUSD H4\nAscending Triangle\n\nChart by Cryptophys.\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD";
   addDrafts(d.sql, [{ id: "pattern:H4:asc:forming:4098:4072:youtube", kind: "pattern", channel: "youtube", text, status: "needs_video" }], { now: Date.now() - 1000 });
   const webm = new Uint8Array(1_200_000); webm.set([0x1a, 0x45, 0xdf, 0xa3]);
   const calls = [];
@@ -774,8 +774,8 @@ test("Telegram with the card: sendPhoto (multipart) with the caption when it fit
   const fetcher = async (url, init) => { calls.push({ url: String(url), form: init.body instanceof FormData ? init.body : null, json: typeof init.body === "string" ? JSON.parse(init.body) : null }); return Response.json({ ok: true, result: { message_id: calls.length } }); };
   const image = async () => ({ bytes: new Uint8Array([255, 216, 255]), mime: "image/jpeg" });
   const account = { bot_token: "123:SECRET", chat_id: "-1001234567890" };
-  const short = await publishTelegram({ account, text: "Education · XAUUSD\nChart by TradingView.", image, fetcher });
-  assert.deepEqual([calls.length, /sendPhoto$/.test(calls[0].url), calls[0].form.get("caption"), calls[0].form.get("photo").type, short.remote_id], [1, true, "Education · XAUUSD\nChart by TradingView.", "image/jpeg", "1"]);
+  const short = await publishTelegram({ account, text: "Education · XAUUSD\nChart by Cryptophys.", image, fetcher });
+  assert.deepEqual([calls.length, /sendPhoto$/.test(calls[0].url), calls[0].form.get("caption"), calls[0].form.get("photo").type, short.remote_id], [1, true, "Education · XAUUSD\nChart by Cryptophys.", "image/jpeg", "1"]);
   calls.length = 0;
   const long = await publishTelegram({ account, text: "x".repeat(1500), image, fetcher });
   assert.deepEqual([calls.length, /sendPhoto$/.test(calls[0].url), calls[0].form.get("caption"), /sendMessage$/.test(calls[1].url), long.remote_id], [2, true, null, true, "2"], "over 1024: the photo, then the text");
@@ -796,7 +796,7 @@ test("Create: the format chosen per channel before the post is made; an edit kee
   const r = await (await post({ kind: "custom", posts: [{ channel: "telegram", text, format: "image" }] })).json();
   assert.equal(r.ok, true, JSON.stringify(r));
   const made = getDraft(d.sql, r.added[0]);
-  assert.deepEqual([made.status, /Chart by TradingView/.test(made.text)], ["needs_image", true]);
+  assert.deepEqual([made.status, /Chart by Cryptophys/.test(made.text)], ["needs_image", true]);
   const edited = editDraft(d.sql, { id: made.id, text: made.text.replace("London", "Asia"), actor: "owner@example.com", check: (x) => editCheck(x) });
   assert.equal(edited.status, "needs_image", "an edit keeps the card it was made with");
   const st = await (await handle(req("/api/studio/status", { token: person }), e, opts)).json();
@@ -833,7 +833,7 @@ test("Threads and X with the card (owner 2026-11-17 \"Ok\"): Threads IMAGE from 
     calls.push({ url: String(url), form: init.body instanceof FormData ? init.body : null, json: typeof init.body === "string" ? JSON.parse(init.body) : null, auth: init.headers?.authorization });
     return String(url).endsWith("/media/upload") ? Response.json({ data: { id: "1880028106020515840" } }) : Response.json({ data: { id: "99" } });
   };
-  const r = await publishX({ account: { access_token: "XSECRET" }, text: "Education · XAUUSD\nChart by TradingView.", image, fetcher });
+  const r = await publishX({ account: { access_token: "XSECRET" }, text: "Education · XAUUSD\nChart by Cryptophys.", image, fetcher });
   assert.deepEqual([calls.length, calls[0].url.endsWith("/2/media/upload"), calls[0].form.get("media_category"), calls[0].form.get("media").type], [2, true, "tweet_image", "image/jpeg"]);
   assert.deepEqual([calls[1].json.media.media_ids, r.remote_id], [["1880028106020515840"], "99"]);
   await assert.rejects(publishX({ account: { access_token: "XSECRET" }, text: "t", image, fetcher: async () => Response.json({ title: "Forbidden", detail: "missing media.write" }, { status: 403 }) }), /media upload 403 missing media\.write/);

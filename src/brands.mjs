@@ -14,9 +14,8 @@ export const BRANDS = Object.freeze({
     handles: Object.freeze({ threads: "cryptophys.adm" }),
     capacity: "education",
     disclaimer: "This content is education and analysis from the Cryptophys system. It is not an invitation to buy or sell and not financial advice. Trading decisions and their risks are entirely your own.",
-    chart_attribution: "Chart by TradingView",
-    // The symbol of TradingView's own chart widget on the Instagram card (TradingView draws it from its own data).
-    chart_symbol: "OANDA:XAUUSD",
+    // The credit on our own schematic cards (owner 2026-11-27: option B; the card draws only our published numbers).
+    chart_attribution: "Chart by Cryptophys",
     card_disclaimer: "Education and analysis. Not an invitation to buy or sell, and not financial advice."
   })
 });

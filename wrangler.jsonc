@@ -20,8 +20,8 @@
     // cta-model-router (model_router.status) and reports its own paid sign (model_router.report_paid); nothing else.
     { "binding": "AGENTS", "service": "cryptophys-ai-kernel", "entrypoint": "AgentRpc", "props": { "host_worker": "cryptophys-cta" } }
   ],
-  // Browser Run: the Instagram cards (TradingView's own chart widget plus the Cryptophys panel, src/card.mjs),
-  // screenshotted right after drafting. 10 browser hours a month are included; a card takes about 7 seconds.
+  // Browser Run: the Instagram cards (our schematic of the draft's numbers plus the panel, src/card.mjs),
+  // screenshotted right after drafting. 10 browser hours a month are included; a card takes about a second.
   "browser": { "binding": "BROWSER" },
   // The approval queue, the published archive and the refreshed tokens: one Durable Object with SQLite storage.
   "durable_objects": {
