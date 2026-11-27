@@ -161,6 +161,22 @@ export function projectionReached(p, price) {
   return p.direction === "up" ? pr >= x : p.direction === "down" ? pr <= x : false;
 }
 
+/**
+ * A breakout is posted only while fresh (owner 2026-11-27: "setuju aturan breakout maksimal 2 candle"): confirmed
+ * within the last BREAKOUT_FRESH_BARS bars of its own chart (M15 30 minutes, H1 2 hours, H4 8 hours, D1 2 days),
+ * from xauusd's `confirmed_at_ms` to the reading's time. Older: not posted ("breakout_stale"; it stays in the recap).
+ * Without `confirmed_at_ms`: not posted ("breakout_time_unknown"), so nothing stale slips through.
+ */
+export const BREAKOUT_FRESH_BARS = 2;
+const BAR_MS = Object.freeze({ M15: 900_000, H1: 3_600_000, H4: 4 * 3_600_000, D1: 24 * 3_600_000 });
+/** Pure: "fresh", "stale" or "unknown" for a breakout confirmed at `confirmedAtMs` on `chart`, read at `readMs`. */
+export function breakoutState(chart, confirmedAtMs, readMs) {
+  const t = Number(confirmedAtMs), bar = BAR_MS[chart];
+  if (confirmedAtMs == null || !Number.isFinite(t) || t <= 0 || !bar || !Number.isFinite(readMs)) return "unknown";
+  return readMs - t <= BREAKOUT_FRESH_BARS * bar ? "fresh" : "stale";
+}
+export const BREAKOUT_SKIP = Object.freeze({ stale: "breakout_stale", unknown: "breakout_time_unknown" });
+
 /** Pure: one pattern's text for one channel. */
 export function patternText(p, analysis, { channel = "threads" } = {}) {
   const lines = [];
@@ -354,6 +370,9 @@ export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS
       if (bands.some((b) => sameBand(b, p))) continue;
       bands.push(p);
       if (known.has(id) || seenBefore.has(patternSeenKey(p)) || patternDrafted(p, channel, history, now) || bandDrafted(p, channel, history, now) || patternCooling(p, channel, history, now)) continue;
+      // Only a fresh breakout (owner 2026-11-27: "setuju aturan breakout maksimal 2 candle").
+      const fresh = breakoutState(p.chart, p.confirmed_at_ms, Number.isFinite(Date.parse(analysis?.at ?? "")) ? Date.parse(analysis.at) : now);
+      if (fresh !== "fresh") { skipped?.push({ id, channel, reason: BREAKOUT_SKIP[fresh] }); continue; }
       // The move is done before the post would go out: not posted (owner 2026-11-27, "setuju"; 18:09 M15 wedge).
       if (projectionReached(p, analysis?.price)) { skipped?.push({ id, channel, reason: "projection_reached" }); continue; }
       const text = patternText(p, analysis, { channel });
@@ -413,6 +432,8 @@ export function updateLedger(ledger, analysis, { drafted = [], now = Date.now() 
     if (!p) continue;
     if (p.status === "busted" || (p.status === "confirmed" && p.direction && e.direction && p.direction !== e.direction)) {
       e.invalidated_at = new Date(now).toISOString();
+      // when the bust was confirmed (xauusd's confirmed_at_ms), for the fresh-breakout rule of its post
+      e.bust_at_ms = Number.isFinite(Number(p.confirmed_at_ms)) && Number(p.confirmed_at_ms) > 0 ? Number(p.confirmed_at_ms) : null;
       invalidated.push(e);
     }
   }

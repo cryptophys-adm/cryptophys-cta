@@ -4,6 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { fresh, freshValue } from "./fresh.mjs";
 import { DatabaseSync } from "node:sqlite";
 import { handle, accountOf, accountFor, publishDraft, SECRETS, STUDIO_SECRETS, roleOf, channelsOf, renderImages, collectInsights, runSchedule, cardPathOf, agentReplies, aboutLedeLive, agentWrite, PUBLIC_MEDIA, draftAnalysis } from "../src/app.mjs";
 import { PATTERN_SEEN_KEY } from "../src/analysis-drafts.mjs";
@@ -1125,7 +1126,7 @@ test("a pattern is posted when it becomes confirmed, not again while it stays so
   const wedge = (upper, lower) => ({ chart: "H1", pattern: "wedge_rising", name: "Rising Wedge", status: "confirmed", direction: "down", upper, lower, projection: 3580 });
   let reading = { at: "2026-11-26T06:09:00.000Z", price: 3600, zones: [], patterns: [wedge(3618, 3606)], structure: {} };
   const base = env({ CONTENT_CHANNELS: "threads" });
-  const e = { ...base.env, PROJECTION: { ...base.env.PROJECTION, analysis: async () => reading, patterns: async () => patternsFrom(reading) } };
+  const e = { ...base.env, PROJECTION: { ...base.env.PROJECTION, analysis: async () => fresh(reading), patterns: async () => patternsFrom(fresh(reading)) } };
   const ids = (r) => r.drafts.map((x) => x.id).filter((x) => x.startsWith("pattern:"));
   const r1 = await draftAnalysis(e, { fast: true, now: Date.parse("2026-11-26T06:09:30Z") });
   assert.deepEqual(ids(r1), ["pattern:H1:wedge_rising:confirmed:3618:3606:threads"], "posted when it is first seen confirmed");
@@ -1234,7 +1235,7 @@ test("patterns: the 5-minute pass drafts them at once, the hourly run never; no 
   // "pastikan tidak duplikasi content".
   const base = env();
   let reading;
-  const e = { ...base.env, PROJECTION: { ...base.env.PROJECTION, analysis: async () => reading, patterns: async () => patternsFrom(reading) } };
+  const e = { ...base.env, PROJECTION: { ...base.env.PROJECTION, analysis: async () => fresh(reading), patterns: async () => patternsFrom(fresh(reading)) } };
   const m15 = (upper, lower, extra = {}) => ({ chart: "M15", pattern: "flag", name: "Flag", chapter: 23, status: "confirmed", direction: "up", upper, lower, projection: upper + 2 * (upper - lower), ...extra });
   const h1 = { chart: "H1", pattern: "rectangle", name: "Rectangle", chapter: 40, status: "confirmed", direction: "up", upper: 3640, lower: 3620, projection: 3680 };
   const read = (patterns, at) => ({ at: new Date(at).toISOString(), price: 3662.35, zones: [], patterns, structure: {} });
@@ -1265,7 +1266,7 @@ test("patterns: the 5-minute pass drafts them at once, the hourly run never; no 
 test("live patterns end to end: a published confirmed post, then its bust, is posted as invalidated once on that channel; the hourly recap names both and is skipped when nothing changed", async () => {
   const base = env({ CONTENT_CHANNELS: "threads,telegram,instagram" });
   let reading;
-  const e = { ...base.env, PROJECTION: { ...base.env.PROJECTION, analysis: async () => reading, patterns: async () => patternsFrom(reading) } };
+  const e = { ...base.env, PROJECTION: { ...base.env.PROJECTION, analysis: async () => fresh(reading), patterns: async () => patternsFrom(fresh(reading)) } };
   const wedge = (extra = {}) => ({ chart: "H1", pattern: "wedge_rising", name: "Rising Wedge", chapter: 50, status: "confirmed", direction: "down", upper: 3622.4, lower: 3606.1, projection: 3580, ...extra });
   // the H1 close the reading carries (xauusd's analysis().closed), the hour of the reading
   const read = (patterns, t, price = 3600) => ({ at: new Date(t).toISOString(), price, zones: [], patterns, structure: {}, closed: { H1: new Date(Math.floor(t / 3_600_000) * 3_600_000).toISOString() } });
@@ -1312,10 +1313,10 @@ test("the 5-minute pattern pass is a switch (on in this deploy): off, the hourly
     { chart: "H1", pattern: "rectangle", name: "Rectangle", chapter: 40, status: "confirmed", direction: "up", upper: 3640, lower: 3620, projection: 3680 }] };
   const ids = (r) => r.drafts.map((x) => x.id).filter((x) => x.startsWith("pattern:") && x.endsWith(":threads"));
   const off = env({ CONTENT_CHANNELS: "threads" });
-  const eOff = { ...off.env, PROJECTION: { ...off.env.PROJECTION, analysis: async () => reading, patterns: async () => patternsFrom(reading) } };
+  const eOff = { ...off.env, PROJECTION: { ...off.env.PROJECTION, analysis: async () => fresh(reading), patterns: async () => patternsFrom(fresh(reading)) } };
   assert.deepEqual(ids(await draftAnalysis(eOff, { now: Date.parse("2026-11-27T09:09:30Z") })), ["pattern:M15:flag:confirmed:3661:3655:threads", "pattern:H1:rectangle:confirmed:3640:3620:threads"]);
   const on = env({ CONTENT_CHANNELS: "threads", PATTERN_FAST_PASS: "on" });
-  const eOn = { ...on.env, PROJECTION: { ...on.env.PROJECTION, analysis: async () => reading, patterns: async () => patternsFrom(reading) } };
+  const eOn = { ...on.env, PROJECTION: { ...on.env.PROJECTION, analysis: async () => fresh(reading), patterns: async () => patternsFrom(fresh(reading)) } };
   assert.deepEqual(ids(await draftAnalysis(eOn, { now: Date.parse("2026-11-27T09:09:30Z") })), [], "on: the hourly run leaves the patterns to the 5-minute pass");
   const src = (f) => readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
   assert.match(src("src/index.mjs"), /if \(!fastPassOn\(env\) \|\| !analysisRunDue\(at\)\) return;/, "the pattern cron reads xauusd only while the switch is on and gold trades");
@@ -1330,7 +1331,7 @@ test("the 5-minute pass reads xauusd's patterns() only: never analysis() when it
   let value;
   const e = { ...base.env, PROJECTION: { ...base.env.PROJECTION,
     analysis: async () => { calls.analysis += 1; return { at: "2026-11-27T18:09:00.000Z", price: 3640, zones: [], patterns: [] }; },
-    patterns: async (input) => { calls.patterns.push(input ?? null); return value; } } };
+    patterns: async (input) => { calls.patterns.push(input ?? null); return freshValue(value); } } };
   const wedge = { chart: "M15", pattern: "broadening_wedge_descending", name: "Descending Broadening Wedge", chapter: 7, status: "confirmed", direction: "up", upper: 3625.34, lower: 3596.4, projection: 3650.11 };
   const close = (t, extra = {}) => ({ version: "cryptophys.public-patterns.v1", at_close_ms: Date.parse(t), closed: { M15: Date.parse(t), H1: Date.parse("2026-11-27T18:00:00Z"), H4: Date.parse("2026-11-27T16:00:00Z"), D1: Date.parse("2026-11-26T22:00:00Z") }, patterns: [wedge], price: 3640.2, price_at: t, ...extra });
   // a new M15 close with a new confirmed pattern and a price: posted, no analysis()
@@ -1395,4 +1396,21 @@ test("the pattern post is rechecked at publish: a projection the price reached b
   fresh = { ...fresh, price: undefined };
   assert.equal((await publishDraft(e, getDraft(d.sql, "pattern:M15:p3:confirmed:3625:3596:telegram"), { fetcher, now })).status, "published");
   assert.equal(calls.analysis, 0);
+});
+
+test("the invalidated post is not drafted for a stale bust (breakout_stale), though the ledger marks it invalidated for the recap", async () => {
+  const base = env({ CONTENT_CHANNELS: "threads" });
+  let reading;
+  const e = { ...base.env, PROJECTION: { ...base.env.PROJECTION, analysis: async () => reading, patterns: async () => patternsFrom(reading) } };
+  const t0 = Date.parse("2026-11-30T08:20:00Z");
+  const wedge = (extra = {}) => ({ chart: "H1", pattern: "wedge_rising", name: "Rising Wedge", chapter: 50, status: "confirmed", direction: "down", upper: 3622.4, lower: 3606.1, projection: 3580, confirmed_at_ms: t0 - 10 * 60_000, ...extra });
+  reading = { at: new Date(t0).toISOString(), price: 3600, zones: [], patterns: [wedge()] };
+  await draftAnalysis(e, { now: t0, fast: true });
+  base.d.sql.exec("UPDATE drafts SET status = 'published' WHERE id = ?", "pattern:H1:wedge_rising:confirmed:3622:3606:threads");
+  const t1 = t0 + 6 * 3_600_000;
+  reading = { at: new Date(t1).toISOString(), price: 3631, zones: [], patterns: [wedge({ status: "busted", direction: "up", projection: null, confirmed_at_ms: t1 - 3 * 3_600_000 })] };
+  const r = await draftAnalysis(e, { now: t1, fast: true });
+  assert.deepEqual(r.added, []);
+  assert.deepEqual(r.dropped, [{ id: "pinvalid:H1:wedge_rising:3622:3606:*", reason: "breakout_stale" }]);
+  assert.ok(studioSetting(base.d.sql, "pattern_ledger").value.items[0].invalidated_at, "invalidated in the ledger, so the recap lists it");
 });

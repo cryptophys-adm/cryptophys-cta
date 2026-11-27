@@ -150,7 +150,9 @@ test("the quota is read from Meta, never assumed; a token is refreshed through i
 
 // Real-time analysis (owner 2026-11-14: "fokus pada hasil analytics dan key level ... kecuali info buy/sell zone";
 // "Real-time, hanya analisa").
-import { analysisDrafts, keyLevelsText, patternText, postablePatterns, MAX_PATTERN_DRAFTS_PER_DAY, PATTERN_LOOKBACK_MS, patternDrafted, patternOfId, saneProjection, PROJECTION_MAX_SHARE, overlayOf, sameBand, bandDrafted, PATTERN_BAND_SHARE, patternLookbackMs, UNCAPPED_PATTERN_CHARTS } from "../src/analysis-drafts.mjs";
+import { analysisDrafts as analysisDraftsRaw, keyLevelsText, patternText, postablePatterns, MAX_PATTERN_DRAFTS_PER_DAY, PATTERN_LOOKBACK_MS, patternDrafted, patternOfId, saneProjection, PROJECTION_MAX_SHARE, overlayOf, sameBand, bandDrafted, PATTERN_BAND_SHARE, patternLookbackMs, UNCAPPED_PATTERN_CHARTS } from "../src/analysis-drafts.mjs";
+import { fresh } from "./fresh.mjs";
+const analysisDrafts = (a, o) => analysisDraftsRaw(fresh(a), o);
 import { draftIdsWithPrefix, kindCountsSince, draftsWithPrefixSince } from "../src/desk.mjs";
 
 

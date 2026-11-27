@@ -2,7 +2,7 @@
 // run it under Node). src/index.mjs holds the Durable Object and the RPC entrypoints.
 import { levelFailures } from "./guardian.mjs";
 import { dailyDrafts } from "./drafts.mjs";
-import { analysisDrafts, PATTERN_LOOKBACK_MS, PATTERN_SEEN_KEY, PATTERN_CHARTS, seenPatternKeys, KIND_FAMILY, PATTERN_LEDGER_KEY, PATTERN_RECAP_KEY, updateLedger, invalidationDrafts, patternRecapDrafts, patternOfId, PATTERN_RECAP_CHANNELS, patternsDue, projectionReached } from "./analysis-drafts.mjs";
+import { analysisDrafts, PATTERN_LOOKBACK_MS, PATTERN_SEEN_KEY, PATTERN_CHARTS, seenPatternKeys, KIND_FAMILY, PATTERN_LEDGER_KEY, PATTERN_RECAP_KEY, updateLedger, invalidationDrafts, patternRecapDrafts, patternOfId, PATTERN_RECAP_CHANNELS, patternsDue, projectionReached, breakoutState, BREAKOUT_SKIP, invalidatedId } from "./analysis-drafts.mjs";
 import { CHANNEL_SPECS as SPECS } from "./channels.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "./channels.mjs";
 import { publishTo, publishingQuota, refreshToken, tiktokAccessToken, googleAccessToken, REFRESH_AFTER_DAYS, isBusinessToken, threadsReplies, publishThreadsReply } from "./publishers.mjs";
@@ -306,7 +306,12 @@ async function patternPass(env, d, analysis, { now, channels, settings, dropped 
   // An invalidated pattern is posted once, with its card, on the channels where its confirmed post went out (owner
   // 2026-11-27: "dengan gambarnya dan hanya 1x posting termasuk jika terjadi invalidated").
   const out = [];
+  const readMs = Number.isFinite(Date.parse(analysis?.at ?? "")) ? Date.parse(analysis.at) : now;
   for (const e of invalidated) {
+    // Its post too only while the bust is fresh (owner 2026-11-27: "setuju aturan breakout maksimal 2 candle"); it is
+    // invalidated in the ledger either way, so the recap lists it.
+    const fresh = breakoutState(e.chart, e.bust_at_ms, readMs);
+    if (fresh !== "fresh") { dropped.push({ id: invalidatedId(e, "*"), reason: BREAKOUT_SKIP[fresh] }); continue; }
     const went = new Set(history.filter((h) => h.status === "published").map((h) => patternOfId(h.id)).filter((o) => o && o.chart === e.chart && o.pattern === e.pattern && o.status === "confirmed").map((o) => o.channel));
     out.push(...invalidationDrafts([e], analysis, { channels: channels.filter((c) => went.has(c)), now }));
   }
