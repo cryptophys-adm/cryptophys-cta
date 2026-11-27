@@ -579,7 +579,7 @@
     head.appendChild(make("span", "meta count", `${d.text.length}${limit ? `/${limit}` : ""} characters · ${when(d.created_at)}`));
     card.appendChild(head);
     card.appendChild(make("div", "text", d.text));
-    // The Instagram card (TradingView's chart and the Cryptophys panel), as Instagram will get it.
+    // The Instagram card (our schematic of the draft's numbers and the panel), as Instagram will get it.
     const media = /\/media\/([0-9a-f]{32})\.(jpg|webm)$/.exec(d.image_url || "");
     if (media && media[2] === "jpg") { const img = make("img", "cardimg"); img.alt = "Instagram card"; img.loading = "lazy"; img.src = `/api/studio/media?id=${media[1]}`; card.appendChild(img); }
     // The YouTube Shorts / TikTok video (9:16), as the platform will get it.
@@ -1018,7 +1018,7 @@
   const CREATE_KINDS = [["custom", "Custom post"], ["key_levels", "Key-level map"], ["pattern", "Chart pattern"], ["daily_recap", "Daily recap"], ["warroom", "War Room"]];
   /** The kinds with a choice under them: a pattern, or the War Room's source (owner 2026-11-18). */
   const OPTION_LABEL = { pattern: "Pattern", warroom: "Source" };
-  const MEDIA_NOTE = { image: "The chart card (TradingView's chart with our levels, and the Cryptophys panel) is made after saving.", video: "The 9:16 video made from the chart card is made after saving." };
+  const MEDIA_NOTE = { image: "The chart card (a schematic of our levels, and the Cryptophys panel) is made after saving.", video: "The 9:16 video made from the chart card is made after saving." };
   const FORMAT_BADGE = { none: "Text only", text: "Text only", image: "Image card", video: "Video" };
   const cs = { kind: "custom", ref: null, chosen: null, texts: {}, textsB: {}, results: {}, timers: {}, formats: {}, started: false, dirty: false };
   /** The format of this channel's post: a person's choice here, else the channel's setting (owner 2026-11-17). */
@@ -1121,7 +1121,7 @@
         }
         bd.appendChild(seg);
       }
-      if (formatOf(c) === "image" || formatOf(c) === "video") pv.appendChild(make("div", `pm ${formatOf(c)}`, MEDIA_NOTE[formatOf(c)] + (info.media === "none" ? " TradingView's credit is added to the text." : "")));
+      if (formatOf(c) === "image" || formatOf(c) === "video") pv.appendChild(make("div", `pm ${formatOf(c)}`, MEDIA_NOTE[formatOf(c)] + (info.media === "none" ? " The chart's credit is added to the text." : "")));
       const paint = () => {
         const limit = { threads: 500, instagram: 2200, x: 280, telegram: 4096, youtube: 5000, tiktok: 2200 }[c];
         count.textContent = `${ta.value.length}/${limit}`;

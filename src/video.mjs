@@ -1,11 +1,11 @@
 // The short video for YouTube Shorts and TikTok (owner 2026-11-15: Threads, Instagram, X, Telegram channel,
 // YouTube & TikTok; "lanjutkan semua"). A 1080 x 1920 (9:16) video of VIDEO_SECONDS, made in the browser (Browser
-// Run) from the draft's card (src/card.mjs: TradingView's chart with our overlay, the panel), so the video carries
+// Run) from the draft's card (src/card.mjs: our schematic of the draft's numbers, the panel), so the video carries
 // exactly what the guardian checked and nothing more:
 //   - the cover, from the first frame: the brand, what the post is, the card and the title (2026-11-18: the platforms
 //     take the first frame as the thumbnail, and a fade-in from black gave YouTube and TikTok a dark one);
 //   - the card, slowly closing in, with the draft's lines appearing one by one under it;
-//   - the end: "Chart by TradingView", the disclaimer and cta.cryptophys.work.
+//   - the end: "Chart by Cryptophys", the disclaimer and cta.cryptophys.work.
 // The page draws on a canvas and records it with the browser's MediaRecorder (WebM, VP9 or VP8, 30 fps); the
 // recorder writes no duration, so src/webm.mjs adds it. Pure: the page is built from the card, the draft and the brand.
 import { panelLines } from "./card.mjs";

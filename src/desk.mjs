@@ -358,7 +358,7 @@ export function draftsNeedingImage(sql, { limit = 3, retry = false } = {}) {
 
 const MEDIA_ID = /^[0-9a-f]{32}$/;
 /**
- * Stores a draft's card and moves the draft on: the guardian runs again with the image (TradingView's attribution
+ * Stores a draft's card and moves the draft on: the guardian runs again with the image (the chart's credit
  * is required), then the draft waits for a person ("pending") or is blocked. Only a draft that needs an image.
  */
 export function attachImage(sql, { id, mediaId, data, bytes, imageUrl, contentType = "image/jpeg", delayHours = 24 }, { now = Date.now() } = {}) {

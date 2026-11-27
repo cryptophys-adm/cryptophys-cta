@@ -48,32 +48,31 @@ Bindings:
   2026-11-16): a white top bar, the studio's left navigation (Dashboard, Content queue, Performance, Channels, switched
   by the URL hash), white cards on a light grey page, one blue for actions; Cryptophys's own mark and name only. No
   inline script or style, no web font (CSP `'self'`); a test holds both. Its stylesheet, `public/cta.css`, holds only rules the studio can match (one-theme PR 5, TH24).
-- `BROWSER` → Browser Run: the Instagram cards (`src/card.mjs`, `src/render.mjs`). A card is 1080 × 1350:
-  TradingView's own Advanced Chart widget (`OANDA:XAUUSD`, the draft's timeframe) with **our overlay drawn over it**
-  (owner 2026-11-15: "Langsung gambar beserta pola dan key level serta proyeksi horizon di chart"; "Overlay on
-  TradingView"), above the Cryptophys panel (the draft's own guardian-checked text) and a footer with "Chart by
-  TradingView" and the disclaimer.
-  - The overlay: the zones nearest the price (supply above, demand below; on the chart the zone only, no metric names:
-    owner 2026-11-15 "di chart cukup zone tidak perlu membawa metrics"), a pattern's upper and lower lines drawn as
-    fitted from its start candle (owner 2026-11-15: "gambar juga garis pattern di chart"; the analysis gives each line's
-    start and end time and price, and the browser finds those candles on TradingView's chart by time; without them the
-    levels are drawn flat), and for
-    a confirmed pattern a dashed arrow from the breakout line at the last bar into a shaded future area, ending at the
-    measured projection (no time is claimed: the analysis has a price, not a horizon); for a forming pattern, the
-    two confirmation arrows. Only the draft's own numbers (`overlay`, stored with the draft).
-  - How it is placed: TradingView's embed has no drawing API, so the browser reads the chart's own price-to-pixel
-    mapping inside TradingView's frame (`measureInChart`), sets the view (the last 40–96 candles by timeframe, a future
-    area on the right, a price range over those candles and every level), and the SVG layer is drawn from that
-    mapping in the card page. Nothing is drawn inside TradingView and no bar leaves the browser. This reads
-    TradingView's internal chart objects (not a public API): if they change, `geometryProblem` refuses the card, the
-    draft stays `needs_image` with the reason, and nothing wrong is published.
-  - The browser loads the card page (`load`), waits for TradingView's frame and its canvas, never for an idle network (the widget's connections stay open).
-  - Rendered right after each drafting run (about 7–8 seconds a card, at most 3 a run, 3 tries per draft), kept in
+- `BROWSER` → Browser Run: the Instagram cards (`src/card.mjs`, `src/render.mjs`). A card is 1080 × 1350: **our
+  schematic** of the draft's own numbers (owner 2026-11-27: "setuju kartu skematik B"; before, TradingView's Advanced
+  Chart widget with our overlay), above the Cryptophys panel (the draft's own guardian-checked text) and a footer with
+  "Chart by Cryptophys" and the disclaimer. A card without numbers to draw (the daily recap) is the panel alone.
+  - The schematic is not a price chart: no candles and no line through prices, only what the draft publishes, drawn
+    to scale on our own linear price axis (`schematicGeo`: the overlay's prices, padded, 110 px axis on the right) with
+    gridlines, the price when read as a badge and a dotted line, a dashed "When read" line, and the footnote
+    `SCHEMATIC_NOTE` "Schematic: our levels to scale, not a price chart" (also the SVG's label). Inline SVG, no
+    network: no TradingView frame, symbol or data.
+  - The overlay: the zones nearest the price (supply above, demand below; the zone only, no metric names: owner
+    2026-11-15 "di chart cukup zone tidak perlu membawa metrics"), a pattern's upper and lower lines from its start to
+    the reading, carried on at the same slope (owner 2026-11-15: "gambar juga garis pattern di chart"; without the
+    analysis's line anchors they are drawn flat), and for a confirmed pattern a dashed arrow from the breakout line into
+    a shaded future area, ending at the measured projection (no time is claimed); for a forming pattern, the two
+    confirmation arrows. Only the draft's own numbers (`overlay`, stored with the draft).
+  - The projection guard holds on the card: `schematicOverlay` passes a confirmed pattern's projection through
+    `saneProjection` again, so an insane or wrong-side projection is never drawn, whatever the stored overlay says.
+  - The browser loads the card page (`load`), reads the panel's fit (`data-fit`), and takes the JPEG; a card whose
+    text does not fit is never stored.
+  - Rendered right after each drafting run (about a second a card, at most 3 a run, 3 tries per draft), kept in
     the Desk (`media`, base64); the draft then waits for a person. `@cloudflare/puppeteer` is the one runtime
     dependency (`nodejs_compat`).
   - The video (YouTube Shorts, TikTok; `src/video.mjs`): the same card, then a 9:16 1080 × 1920 recording of
     `VIDEO_SECONDS` (14 s): the brand, the card slowly closing in with the draft's own lines appearing one by one,
-    and an end card with "Chart by TradingView", the disclaimer and cta.cryptophys.work. The card and the title are on
+    and an end card with "Chart by Cryptophys", the disclaimer and cta.cryptophys.work. The card and the title are on
     screen from the first frame, the cover the platforms take as the thumbnail; TikTok's cover is set 1 s in
     (`video_cover_timestamp_ms`). Drawn on a canvas and
     recorded by the browser's MediaRecorder (WebM VP9/VP8, about 30 fps, about 4 MB); the recorder writes no duration,
@@ -125,7 +124,7 @@ Entrypoints: `OrganismDna.dna()` (the platform census), `CtaHealth.health()` (dr
 | `GET /api/studio/templates?kind=&channels=&ref=` | Access JWT | Create: a blank post (`custom`) or the engine's template (`key_levels`, `pattern`, `daily_recap`) filled with the current projection, or a War Room reading (`warroom`, `ref` news, 15m, 1h, 4h or 1d), per channel, with the channel's hashtags |
 | `POST /api/studio/check` | a person, same origin, JSON | Create: the guardian's check of one channel's text as typed (length, the guardian's rules, a custom post's own words) |
 | `POST /api/studio/compose` | a person, same origin, JSON | Create: `{ kind, ref, posts: [{ channel, text, text_b?, format? }] }` (`text_b`: an A/B variant; `format`: text, image or video, chosen before the post is made, else the channel's setting; a format the channel cannot post is refused); saved only when every channel passes; drafts `manual:<day>:<id>:<channel>` wait for approval (event `composed`, the person as actor); a template's card numbers come from the server's analysis, never the browser |
-| `GET /api/studio/settings` | Access JWT | each channel's settings (stored over the defaults), the formats each channel can take, who changed them last; never a token. The format drives every draft, scheduled or made by hand (`withFormat`): a text channel set to Image (Telegram, owner 2026-11-17) waits for the chart card, its text names TradingView, and the publisher sends the card (Telegram: `sendPhoto`, the text as caption up to 1024 characters, else right after; Threads: an IMAGE container from the card's public URL; X: `POST /2/media/upload` with `tweet_image`, then the post with its media id, scope `media.write`, so an X account connected before 2026-11-17 reconnects once) |
+| `GET /api/studio/settings` | Access JWT | each channel's settings (stored over the defaults), the formats each channel can take, who changed them last; never a token. The format drives every draft, scheduled or made by hand (`withFormat`): a text channel set to Image (Telegram, owner 2026-11-17) waits for the chart card, its text carries the chart's credit, and the publisher sends the card (Telegram: `sendPhoto`, the text as caption up to 1024 characters, else right after; Threads: an IMAGE container from the card's public URL; X: `POST /2/media/upload` with `tweet_image`, then the post with its media id, scope `media.write`, so an X account connected before 2026-11-17 reconnects once) |
 | `POST /api/studio/settings` | a person, same origin, JSON | `{ channel, settings }`: validated by `src/settings.mjs`, stored in the Desk (`channel_settings`), an event per change |
 
 The Worker verifies the Access JWT itself (team `cryptophys.cloudflareaccess.com`; audience `ACCESS_AUD`, a plain var in
@@ -150,10 +149,10 @@ Cloudflare reads a cron's weekday field as 1 = Sunday to 7 = Saturday, so the tr
 | Channel | Media | Publisher | Secrets |
 |---|---|---|---|
 | Threads (`@cryptophys.adm`; the brand id stays `xauusd-ai-cta`) | text, or the card; one topic tag (`topic_tag` XAUUSD) and no in-text hashtag line (owner 2026-11-25) | built | `THREADS_ACCESS_TOKEN`, `THREADS_USER_ID` |
-| Instagram | image: the card (TradingView chart + our overlay + Cryptophys panel), rendered by Browser Run; the caption names TradingView | built | `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_USER_ID` |
+| Instagram | image: the card (our schematic of the draft's numbers + Cryptophys panel), rendered by Browser Run; the caption carries "Chart by Cryptophys." | built | `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_USER_ID` |
 | X | text, 280 characters (short recap) | built (billed per post by X) | `X_ACCESS_TOKEN` |
 | Telegram channel | text | built (Bot API; the bot is a channel admin) | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
-| YouTube Shorts | video (WebM, 9:16, 14 s) from the card; the description names TradingView | built: resumable upload, public asked; private until Google verifies the API project | `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN` |
+| YouTube Shorts | video (WebM, 9:16, 14 s) from the card; the description carries "Chart by Cryptophys." | built: resumable upload, public asked; private until Google verifies the API project | `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN` |
 | TikTok | the same video | built: Direct Post, FILE_UPLOAD in one chunk, the most public privacy the creator allows; private (SELF_ONLY) until TikTok audits the app | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REFRESH_TOKEN` (TikTok rotates it; the Desk keeps the newest) |
 
 Team roles (owner 2026-11-16, pro marketing extras; `roleOf` in `src/app.mjs`). `STUDIO_APPROVERS` is a Worker secret
@@ -200,7 +199,7 @@ Create (owner 2026-11-16: content creation in the studio; person-written posts a
 approval; `src/compose.mjs`, the studio's Create page). A person picks a start (a custom post, or the key-level map,
 chart pattern or daily recap template filled with the current projection) and the channels, edits each channel's
 text, sees a preview and the guardian's result as they type, and sends it to the queue. The guardian checks as for
-the engine's drafts: price levels only in the analysis kinds, TradingView's credit where the post is the chart card or
+the engine's drafts: price levels only in the analysis kinds, the chart's credit ("Chart by Cryptophys.") where the post is the chart card or
 its video, the recap's delay rule with the recap window's decisions; a custom post needs at least 20 characters of its
 own besides the template lines. A post is saved only when every channel passes; the drafts then wait for approval like
 any other (cards and videos are made for them by the same run). Settings' kinds and daily maximum bound the engine,
