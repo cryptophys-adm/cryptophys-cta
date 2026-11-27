@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-27 (a measured projection that is not sane is left out)
+- fix(pattern): a pattern post's "Measured projection" line, and the projection arrow on its card, are left out when the projection is not sane. On 27 Nov the H1 gap at 07:09Z went out on Threads with "Measured projection: 0.00".
+  - Sane (`saneProjection`) means all of:
+    - a finite number above 0;
+    - within 50% of the price when read, or of the breakout line (`PROJECTION_MAX_SHARE`);
+    - on the breakout's side: above the upper line for direction up, below the lower line for down.
+  - The rest of the post stands.
+  - The card overlay no longer turns a missing projection into 0. `num(null)` gave 0.
+  - xauusd fixes the source. New test in `test/engine.test.mjs`.
+
 ## 2026-11-27 (Beam for CTA: Command is the switch)
 - feat(router): CTA's Beam is now switched on Command (Cerebrum → Command, the CTA row), as ADR-0007's design for CTA describes. Owner, 27 Nov: "usulan saya". Platform piece 1 is CTA_CEILING with `cta-model-router` (proposal cns_2f9751ac…).
   - `organism.json` declares the agent `cta-model-router` with exactly `model_router.status` and `model_router.report_paid`, tier 1, no seat.
