@@ -216,6 +216,36 @@ export function patternDrafted(p, channel, history, now = Date.now()) {
   });
 }
 
+/**
+ * One pattern post per chart and breakout band (owner 2026-11-26: "Ya jangan ada duplikasi"; 27 Nov: H4
+ * measured_move_up and diamond_bottom, two catalogue names on the same lines 3607.25 / 3552.14, went out on Threads in
+ * the same minute). Two confirmed patterns of one chart share a band when their upper lines and their lower lines are
+ * each within PATTERN_BAND_SHARE of the pattern's height (at least 1, the id's rounding); the first by catalogue order
+ * (`chapter`) is posted, the others are not, in the same run and against the chart's drafts within its lookback.
+ */
+export const PATTERN_BAND_SHARE = 0.1;
+/** Pure: whether two patterns (or a pattern and a draft id read back) sit on the same band of the same chart and status. */
+export function sameBand(a, b) {
+  if (!a || !b || a.chart !== b.chart || a.status !== b.status) return false;
+  const au = Number(a.upper), al = Number(a.lower), bu = Number(b.upper), bl = Number(b.lower);
+  if (![au, al, bu, bl].every(Number.isFinite)) return false;
+  const tol = Math.max(1, PATTERN_BAND_SHARE * Math.max(Math.abs(au - al), Math.abs(bu - bl)));
+  return Math.abs(au - bu) <= tol && Math.abs(al - bl) <= tol;
+}
+/** Pure: whether a pattern of any catalogue name on `p`'s band was already drafted for `channel` within the chart's lookback. */
+export function bandDrafted(p, channel, history, now = Date.now()) {
+  const since = now - patternLookbackMs(p?.chart);
+  return (history ?? []).some((h) => {
+    const o = patternOfId(h?.id);
+    if (!o || o.channel !== channel || o.pattern === p?.pattern) return false;
+    const at = Date.parse(h?.created_at);
+    if (Number.isFinite(at) && at < since) return false;
+    return sameBand(o, p);
+  });
+}
+/** Catalogue order: a pattern's chapter, lowest first; a pattern without one after those with one, in its given order. */
+const byCatalogue = (list) => list.map((p, i) => ({ p, i })).sort((a, b) => (Number(a.p.chapter) || Infinity) - (Number(b.p.chapter) || Infinity) || a.i - b.i).map((x) => x.p);
+
 function draft({ id, kind, channel, text, now, overlay = null }) {
   const guardian = checkContentDraft({ text, chart: false, decisionTimes: [], allowLevels: true, now });
   return { id, kind, channel, text, image_url: null, window: null, decision_times: [], guardian, overlay, status: !guardian.pass ? "blocked" : initialStatus(channel) };
@@ -275,10 +305,14 @@ export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS
       if (text) out.push(draft({ id: `levels:${day}:${channel}`, kind: "key_levels", channel, text, now, overlay: overlayOf(analysis, { maxZones: 3 }) }));
     }
     let room = MAX_PATTERN_DRAFTS_PER_DAY - (Number(postedToday[channel]) || 0);
-    for (const p of draftedPatterns(analysis)) {
+    const bands = [];
+    for (const p of byCatalogue(draftedPatterns(analysis))) {
       if (room <= 0) break;
       const id = `pattern:${patternKey(p)}:${channel}`;
-      if (known.has(id) || seenBefore.has(patternSeenKey(p)) || patternDrafted(p, channel, history, now)) continue;
+      // one post per chart and band: a pattern earlier in the catalogue on the same lines takes it, this run or before
+      if (bands.some((b) => sameBand(b, p))) continue;
+      bands.push(p);
+      if (known.has(id) || seenBefore.has(patternSeenKey(p)) || patternDrafted(p, channel, history, now) || bandDrafted(p, channel, history, now)) continue;
       const text = patternText(p, analysis, { channel });
       if (!text) continue;
       out.push(draft({ id, kind: "pattern", channel, text, now, overlay: overlayOf(analysis, { pattern: p }) }));

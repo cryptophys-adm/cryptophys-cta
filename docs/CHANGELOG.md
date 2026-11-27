@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-27 (one pattern post per chart and breakout band)
+- fix(pattern): two catalogue names on the same lines are posted once. On 27 Nov at 08:10Z, H4 measured_move_up and diamond_bottom, both on 3607.25 / 3552.14, went out on Threads in the same minute. The owner's standing rule (26 Nov) is "Ya jangan ada duplikasi".
+  - `sameBand`: same chart and status, and the upper lines and the lower lines are each within `PATTERN_BAND_SHARE` (0.1) of the pattern's height, at least 1 for the id's rounding.
+  - The first by catalogue order (`chapter`) is drafted. The others are skipped, both in the same run and against that channel's earlier pattern drafts of any name within the chart's lookback (`bandDrafted`).
+  - Patterns are now drafted in catalogue order. This is prevention only: today's two posts stay.
+
 ## 2026-11-27 (the guardian refuses a projection that is not sane and a 0.00 level; the Archive leaves them out)
 - feat(guardian): two new checks, `projection_not_sane` and `zero_level`. Owner, 27 Nov: "hapus posting di archived dengan nilai measurement 0.0 dan pastikan guardian mengecek dan reject ini sebelum approval posting."
   - `projection_not_sane` refuses a "Measured projection" that `saneProjection` would leave out: 0 or below, not a number, more than 50% from the price when read, or on the wrong side of the breakout line. `saneProjection` and `PROJECTION_MAX_SHARE` moved into `src/guardian.mjs`, and `src/analysis-drafts.mjs` re-exports them, so the drafter and the guardian use one rule.
