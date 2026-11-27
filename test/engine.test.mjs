@@ -150,7 +150,7 @@ test("the quota is read from Meta, never assumed; a token is refreshed through i
 
 // Real-time analysis (owner 2026-11-14: "fokus pada hasil analytics dan key level ... kecuali info buy/sell zone";
 // "Real-time, hanya analisa").
-import { analysisDrafts, keyLevelsText, patternText, postablePatterns, MAX_PATTERN_DRAFTS_PER_DAY, PATTERN_LOOKBACK_MS, patternDrafted, patternOfId } from "../src/analysis-drafts.mjs";
+import { analysisDrafts, keyLevelsText, patternText, postablePatterns, MAX_PATTERN_DRAFTS_PER_DAY, PATTERN_LOOKBACK_MS, patternDrafted, patternOfId, saneProjection, PROJECTION_MAX_SHARE, overlayOf } from "../src/analysis-drafts.mjs";
 import { draftIdsWithPrefix, kindCountsSince, draftsWithPrefixSince } from "../src/desk.mjs";
 
 
@@ -363,4 +363,28 @@ test("the recap window follows the projection's delay: the last 24 hours at 0 (o
   const cut = dailyDrafts(bars(now - 60_000, RECAPS_OLD_CAP), { now, channels: ["threads"], windowDelayHours: 0 });
   assert.deepEqual([cut.drafts.length, cut.summary.cut, cut.summary.bars], [0, true, 0]);
   assert.equal(recapsCut(bars(now - 60_000, 40), recapSpan(now, 0).from), false, "a short day is not a cut reply");
+});
+
+test("a measured projection that is not sane is left out of the post and the card (2026-11-27: a gap went out with \"Measured projection: 0.00\")", () => {
+  const at = Date.parse("2026-11-27T07:09:30Z");
+  const gap = (projection, extra = {}) => ({ chart: "H1", pattern: "gap", name: "Gap", status: "confirmed", direction: "up", upper: 3631.57, lower: 3627.36, projection, ...extra });
+  const analysis = (p) => ({ at: "2026-11-27T07:09:00.000Z", price: 3662.35, zones: [], patterns: [p], structure: {} });
+  // The 07:09 post: projection 0 → no projection line, no arrow on the card; the breakout and its undo stay.
+  const t0 = patternText(gap(0), analysis(gap(0)), { channel: "threads" });
+  assert.doesNotMatch(t0, /Measured projection/);
+  assert.match(t0, /Breakout line 3631\.57/);
+  assert.match(t0, /closes back below 3627\.36/);
+  assert.equal(overlayOf(analysis(gap(0)), { pattern: gap(0) }).pattern.projection, null);
+  // Not sane: below 0, not a number, more than 50% from the price, or on the wrong side of the breakout.
+  for (const bad of [-5, NaN, null, undefined, 6000, 1500, 3600]) assert.equal(saneProjection(gap(bad), 3662.35), null, String(bad));
+  assert.equal(saneProjection({ ...gap(3700), direction: "down", lower: 3627.36 }, 3662.35), null, "down but above the lower line");
+  // Sane: kept, in the text and on the card.
+  assert.equal(saneProjection(gap(3720.5), 3662.35), 3720.5);
+  assert.match(patternText(gap(3720.5), analysis(gap(3720.5)), { channel: "threads" }), /Measured projection: 3720\.50 \(analysis, not a trade objective\)\./);
+  assert.equal(overlayOf(analysis(gap(3720.5)), { pattern: gap(3720.5) }).pattern.projection, 3720.5);
+  assert.equal(saneProjection({ ...gap(3500), direction: "down", upper: 3631.57, lower: 3600 }, 3590), 3500);
+  assert.equal(PROJECTION_MAX_SHARE, 0.5);
+  // The head-and-shoulders bottom of 02:09 (3776.67 from 3600.59) stays.
+  assert.equal(saneProjection({ direction: "up", upper: 3579.71, lower: 3426.81, projection: 3776.67 }, 3600.59), 3776.67);
+  void at;
 });
