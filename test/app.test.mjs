@@ -1231,7 +1231,7 @@ test("patterns: the 5-minute pass drafts them at once, the hourly run never; no 
   let reading;
   const e = { ...base.env, PROJECTION: { ...base.env.PROJECTION, analysis: async () => reading } };
   const m15 = (upper, lower, extra = {}) => ({ chart: "M15", pattern: "flag", name: "Flag", chapter: 23, status: "confirmed", direction: "up", upper, lower, projection: upper + 2 * (upper - lower), ...extra });
-  const h1 = { chart: "H1", pattern: "rectangle", name: "Rectangle", chapter: 40, status: "confirmed", direction: "up", upper: 3640, lower: 3620, projection: 3660 };
+  const h1 = { chart: "H1", pattern: "rectangle", name: "Rectangle", chapter: 40, status: "confirmed", direction: "up", upper: 3640, lower: 3620, projection: 3680 };
   const read = (patterns, at) => ({ at: new Date(at).toISOString(), price: 3662.35, zones: [], patterns, structure: {} });
   const ids = (r) => (r.drafts ?? []).filter((x) => x.id.startsWith("pattern:")).map((x) => x.id);
   const t0 = Date.parse("2026-11-27T09:20:00Z");
@@ -1303,7 +1303,7 @@ test("the 5-minute pattern pass is a switch, off by default (orchestrator review
   assert.equal(fastPassOn({ PATTERN_FAST_PASS: "yes" }), false);
   const reading = { at: "2026-11-27T09:09:00.000Z", price: 3662.35, zones: [], structure: {}, patterns: [
     { chart: "M15", pattern: "flag", name: "Flag", chapter: 23, status: "confirmed", direction: "up", upper: 3660.5, lower: 3655.2, projection: 3671.1 },
-    { chart: "H1", pattern: "rectangle", name: "Rectangle", chapter: 40, status: "confirmed", direction: "up", upper: 3640, lower: 3620, projection: 3660 }] };
+    { chart: "H1", pattern: "rectangle", name: "Rectangle", chapter: 40, status: "confirmed", direction: "up", upper: 3640, lower: 3620, projection: 3680 }] };
   const ids = (r) => r.drafts.map((x) => x.id).filter((x) => x.startsWith("pattern:") && x.endsWith(":threads"));
   const off = env({ CONTENT_CHANNELS: "threads" });
   const eOff = { ...off.env, PROJECTION: { ...off.env.PROJECTION, analysis: async () => reading } };

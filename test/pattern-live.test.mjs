@@ -45,7 +45,7 @@ test("the invalidated post: the owner's template word for word, passes the guard
 test("the recap at each close (owner 1A, 2A): H1 with M15 every hour, H4 and D1 joined at their closes; invalidated always shown, none when empty", () => {
   const mm = { chart: "H4", pattern: "measured_move_up", name: "Measured Move Up", chapter: 30, status: "confirmed", direction: "up", upper: 3607.25, lower: 3552.14, projection: 3732.58 };
   const flag = { chart: "M15", pattern: "flag", name: "Flag", chapter: 23, status: "confirmed", direction: "up", upper: 3660.5, lower: 3655.2, projection: 3671.1 };
-  const rect = { chart: "H1", pattern: "rectangle", name: "Rectangle", chapter: 40, status: "confirmed", direction: "up", upper: 3640, lower: 3620, projection: 3660 };
+  const rect = { chart: "H1", pattern: "rectangle", name: "Rectangle", chapter: 40, status: "confirmed", direction: "up", upper: 3640, lower: 3620, projection: 3680 };
   const closedAt = (h1, h4, d1) => ({ H1: h1, H4: h4, D1: d1 });
   const reading = (closed, t) => ({ ...read([flag, mm, rect, wedge({ status: "forming" })], 3662.35, t), closed });
   // 16:00 is an H4 close too: "H4 + H1 close", the H4, H1 and M15 patterns
@@ -54,7 +54,7 @@ test("the recap at each close (owner 1A, 2A): H1 with M15 every hour, H4 and D1 
   assert.deepEqual(recapClose(r16, at16), { closeIso: "2026-11-27T16:00:00.000Z", title: ["H4", "H1"], charts: ["H4", "H1", "M15"] });
   const one = patternRecapDrafts(r16, { channels: ["threads", "telegram", "instagram"], now: at16 });
   assert.deepEqual(one.drafts.map((d) => [d.id, d.kind]), [["precap:20261127T16:threads", "pattern_recap"], ["precap:20261127T16:telegram", "pattern_recap"]]);
-  assert.equal(one.drafts[1].text, "Education · XAUUSD pattern recap · H4 + H1 close · 4:00 PM UTC\nPrice when read: 3662.35\n\nActive (confirmed):\n• H4 Measured Move Up · up · breakout 3607.25 · measured projection 3732.58\n• H1 Rectangle · up · breakout 3640.00 · measured projection 3660.00\n• M15 Flag · up · breakout 3660.50 · measured projection 3671.10\n\nInvalidated since the last close: none\n\nPatterns fail often; a measured projection is analysis, not a trade objective.\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD #gold");
+  assert.equal(one.drafts[1].text, "Education · XAUUSD pattern recap · H4 + H1 close · 4:00 PM UTC\nPrice when read: 3662.35\n\nActive (confirmed):\n• H4 Measured Move Up · up · breakout 3607.25 · measured projection 3732.58\n• H1 Rectangle · up · breakout 3640.00 · measured projection 3680.00\n• M15 Flag · up · breakout 3660.50 · measured projection 3671.10\n\nInvalidated since the last close: none\n\nPatterns fail often; a measured projection is analysis, not a trade objective.\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD #gold");
   assert.deepEqual(passes(one.drafts[1].text).failures, []);
   // 17:00, an H1 close only: H1 and M15, no H4; an H1 pattern invalidated within the hour is listed
   const at17 = Date.parse("2026-11-27T17:09:30Z");
@@ -142,4 +142,32 @@ test("the invalidated card: its own status, the image says invalidated, lines on
   const svg = overlaySvg(o, geo);
   assert.match(svg, /Rising Wedge · H1 · invalidated/);
   assert.doesNotMatch(svg, /Measured projection|Projection area|confirms|stroke-dasharray="12 8"|marker-end/);
+});
+
+test("projection reached (owner 2026-11-27, \"setuju\"): not posted at or beyond it, up and down; the recap says \"measured projection reached\"; logged as projection_reached", async () => {
+  const { projectionReached, analysisDrafts } = await import("../src/analysis-drafts.mjs");
+  const up = { chart: "M15", pattern: "broadening_wedge_descending", name: "Descending Broadening Wedge", chapter: 7, status: "confirmed", direction: "up", upper: 3625.34, lower: 3596.4, projection: 3650.11 };
+  const down = { ...up, pattern: "broadening_wedge_ascending", name: "Ascending Broadening Wedge", direction: "down", upper: 3700, lower: 3680, projection: 3650.11 };
+  // up: at, beyond, short of it
+  assert.equal(projectionReached(up, 3650.11), true, "up, exactly equal");
+  assert.equal(projectionReached(up, 3653.47), true, "up, beyond (the 18:09 M15 post)");
+  assert.equal(projectionReached(up, 3640), false);
+  // down: at, beyond, short of it
+  assert.equal(projectionReached(down, 3650.11), true, "down, exactly equal");
+  assert.equal(projectionReached(down, 3640), true, "down, beyond");
+  assert.equal(projectionReached(down, 3670), false);
+  assert.equal(projectionReached({ ...up, status: "forming" }, 3660), false, "only a confirmed pattern");
+  // the post: not drafted, logged
+  const at18 = Date.parse("2026-11-27T18:09:30Z");
+  const reading = (patterns, price) => ({ at: new Date(at18).toISOString(), price, zones: [], patterns, closed: { H1: "2026-11-27T18:00:00.000Z" } });
+  const skipped = [];
+  const drafts = analysisDrafts(reading([up], 3653.47), { now: at18, channels: ["threads", "telegram"], maps: false, skipped }).filter((d) => d.kind === "pattern");
+  assert.deepEqual(drafts, [], "no post, so no card");
+  assert.deepEqual(skipped.map((s) => s.reason), ["projection_reached", "projection_reached"]);
+  assert.equal(analysisDrafts(reading([up], 3640), { now: at18, channels: ["threads"], maps: false }).filter((d) => d.kind === "pattern").length, 1, "short of it: posted");
+  // the recap: the pattern stays, the number gives way to "measured projection reached"; the guardian passes it
+  const recap = patternRecapDrafts(reading([up], 3653.47), { channels: ["telegram"], now: at18 }).drafts[0].text;
+  assert.match(recap, /• M15 Descending Broadening Wedge · up · breakout 3625\.34 · measured projection reached\n/);
+  assert.doesNotMatch(recap, /3650\.11/);
+  assert.deepEqual(passes(recap).failures, []);
 });

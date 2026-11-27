@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 (a pattern whose measured projection the price already reached is not posted)
+- feat(pattern): a confirmed pattern is not posted when the price when read already reached its measured projection. That is up with the price at or above the projection, or down with the price at or below it (`projectionReached`). The move is done, so there is no post and no card. The run logs it under `dropped` with reason `projection_reached`. The owner approved this on 27 Nov ("setuju"), after the 18:09Z M15 Descending Broadening Wedge went out with "Measured projection: 3650.11" while the price was already 3653.47.
+  - The recap keeps such a pattern and writes "measured projection reached" in place of the number. The guardian reads those words as naming no level.
+  - Only a sane projection counts. The invalidated post is unchanged.
+
 ## 2026-11-27 (the pattern recap at each close; the invalidated post with its card)
 - feat(pattern): the pattern recap follows each timeframe's close, and an invalidated pattern is posted with its card. Owner, 27 Nov: "recap pattern berhasil tapi contentnya kurang pas, tidak ada invalidated. Recap ubah per closing candle sesuai timeframe saja kecuali pattern 15m, tetap mengikuti per 1H. Untuk confirmed pattern semua TF diposting setiap kali terbentuk tapi dengan gambarnya dan hanya 1x posting termasuk jika terjadi invalidated." Then "1A 2A": the charts that close together in one recap, and the invalidated part always shown.
   - **Recap per close** (`recapClose`). At each fresh H1 close (within 70 minutes, `analysis().closed`), one recap covers the charts closing at that time: H1 with M15 every hour, and H4 and D1 joined at their own closes ("H4 + H1 close", as the key-level map). Its title reads "Education · XAUUSD pattern recap · H4 + H1 close · 4:00 PM UTC". It lists only those charts' active confirmed patterns, one per band.

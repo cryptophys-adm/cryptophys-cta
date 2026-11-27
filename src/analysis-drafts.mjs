@@ -149,6 +149,18 @@ export function chartMapText(analysis, { charts, closed }, { channel = "threads"
 // projection_not_sane check use one rule; re-exported here for the drafter's callers.
 export { saneProjection, PROJECTION_MAX_SHARE };
 
+/**
+ * Pure: whether the price when read already reached a confirmed pattern's measured projection (owner 2026-11-27,
+ * "setuju": up, the price at or above it; down, at or below it). Such a pattern is not posted (the move is done; the
+ * run logs it as `projection_reached`), and the recap writes "measured projection reached" in place of the number.
+ * Only a sane projection counts; one that is not sane is never shown anyway.
+ */
+export function projectionReached(p, price) {
+  const x = saneProjection(p, price), pr = Number(price);
+  if (x == null || p?.status !== "confirmed" || !Number.isFinite(pr)) return false;
+  return p.direction === "up" ? pr >= x : p.direction === "down" ? pr <= x : false;
+}
+
 /** Pure: one pattern's text for one channel. */
 export function patternText(p, analysis, { channel = "threads" } = {}) {
   const lines = [];
@@ -317,7 +329,7 @@ function linesOf(p) {
  * `known` the pattern keys already drafted, `history` the recent pattern drafts ({ id, created_at }), so a confirmed
  * pattern is posted once while xauusd keeps it, even as its lines move (patternDrafted).
  */
-export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS, levelsRun = false, postedToday = {}, known = new Set(), knownLevels = new Set(), history = [], seenBefore = new Set(), patternCharts = null, maps: withMaps = true } = {}) {
+export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS, levelsRun = false, postedToday = {}, known = new Set(), knownLevels = new Set(), history = [], seenBefore = new Set(), patternCharts = null, maps: withMaps = true, skipped = null } = {}) {
   const day = new Date(now).toISOString().slice(0, 10);
   const out = [];
   const perChart = Boolean(analysis?.zones_by_chart && analysis?.closed);
@@ -342,6 +354,8 @@ export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS
       if (bands.some((b) => sameBand(b, p))) continue;
       bands.push(p);
       if (known.has(id) || seenBefore.has(patternSeenKey(p)) || patternDrafted(p, channel, history, now) || bandDrafted(p, channel, history, now) || patternCooling(p, channel, history, now)) continue;
+      // The move is done before the post would go out: not posted (owner 2026-11-27, "setuju"; 18:09 M15 wedge).
+      if (projectionReached(p, analysis?.price)) { skipped?.push({ id, channel, reason: "projection_reached" }); continue; }
       const text = patternText(p, analysis, { channel });
       if (!text) continue;
       out.push(draft({ id, kind: "pattern", channel, text, now, overlay: overlayOf(analysis, { pattern: p }) }));
@@ -428,7 +442,8 @@ export function activePatterns(analysis) {
 }
 const activeLine = (p, price) => {
   const proj = saneProjection(p, price);
-  return `• ${p.chart} ${p.name} · ${p.direction === "up" ? "up" : p.direction === "down" ? "down" : "unclear"} · breakout ${f2(failOf(p).line)}${proj != null ? ` · measured projection ${f2(proj)}` : ""}`;
+  const shown = proj == null ? "" : projectionReached(p, price) ? " · measured projection reached" : ` · measured projection ${f2(proj)}`;
+  return `• ${p.chart} ${p.name} · ${p.direction === "up" ? "up" : p.direction === "down" ? "down" : "unclear"} · breakout ${f2(failOf(p).line)}${shown}`;
 };
 const invalidLine = (e) => `• ${e.chart} ${e.name} · closed back ${e.side} ${f2(e.level)}`;
 /** Pure: what a recap says, for the "nothing changed" check: its charts, the active patterns' lines and the invalidated keys. */

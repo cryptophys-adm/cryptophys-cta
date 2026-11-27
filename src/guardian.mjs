@@ -91,7 +91,8 @@ export function levelFailures(text) {
     }
   }
   const proj = /measured\s+projection:?\s+(\S+?)(?=[\s(]|\.?$|\.\s)/im.exec(t);
-  if (proj) {
+  // "measured projection reached" (the recap's words for a projection the price already reached) names no level.
+  if (proj && !/^reached\b/i.test(proj[1])) {
     const x = numOf(proj[1].replace(/\.$/, ""));
     const dir = /\bdirection\s+(up|down)\b/i.exec(t)?.[1]?.toLowerCase() ?? null;
     const lineM = /breakout\s+line:?\s+(-?[\d,]*\.?\d+)/i.exec(t);
