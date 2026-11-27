@@ -150,7 +150,7 @@ test("the quota is read from Meta, never assumed; a token is refreshed through i
 
 // Real-time analysis (owner 2026-11-14: "fokus pada hasil analytics dan key level ... kecuali info buy/sell zone";
 // "Real-time, hanya analisa").
-import { analysisDrafts, keyLevelsText, patternText, postablePatterns, MAX_PATTERN_DRAFTS_PER_DAY, PATTERN_LOOKBACK_MS, patternDrafted, patternOfId, saneProjection, PROJECTION_MAX_SHARE, overlayOf } from "../src/analysis-drafts.mjs";
+import { analysisDrafts, keyLevelsText, patternText, postablePatterns, MAX_PATTERN_DRAFTS_PER_DAY, PATTERN_LOOKBACK_MS, patternDrafted, patternOfId, saneProjection, PROJECTION_MAX_SHARE, overlayOf, sameBand, bandDrafted, PATTERN_BAND_SHARE } from "../src/analysis-drafts.mjs";
 import { draftIdsWithPrefix, kindCountsSince, draftsWithPrefixSince } from "../src/desk.mjs";
 
 
@@ -387,4 +387,29 @@ test("a measured projection that is not sane is left out of the post and the car
   // The head-and-shoulders bottom of 02:09 (3776.67 from 3600.59) stays.
   assert.equal(saneProjection({ direction: "up", upper: 3579.71, lower: 3426.81, projection: 3776.67 }, 3600.59), 3776.67);
   void at;
+});
+
+test("one pattern post per chart and breakout band: two catalogue names on the same lines post once, the first by catalogue order", () => {
+  // 27 Nov 08:10Z: H4 measured_move_up and diamond_bottom, both 3607.25 / 3552.14, both went out on Threads.
+  const at = Date.parse("2026-11-27T07:09:30Z");
+  const pat = (pattern, name, chapter, upper, lower, extra = {}) => ({ chart: "H4", pattern, name, chapter, status: "confirmed", direction: "up", upper, lower, projection: 3732.58, ...extra });
+  const analysis = (patterns) => ({ at: new Date(at).toISOString(), price: 3662.35, zones: [], patterns });
+  const both = [pat("measured_move_up", "Measured Move Up", 30, 3607.25, 3552.14), pat("diamond_bottom", "Diamond Bottom", 12, 3607.25, 3552.14)];
+  const ids = (a, opts = {}) => analysisDrafts(a, { now: at, channels: ["threads", "telegram"], ...opts }).filter((d) => d.kind === "pattern").map((d) => d.id);
+  assert.deepEqual(ids(analysis(both)), ["pattern:H4:diamond_bottom:confirmed:3607:3552:threads", "pattern:H4:diamond_bottom:confirmed:3607:3552:telegram"], "the lower chapter takes the band, on each channel");
+  // within the tolerance (a tenth of the height, at least 1): the same band; outside it, another pattern
+  assert.equal(PATTERN_BAND_SHARE, 0.1);
+  assert.equal(sameBand(both[0], { ...both[1], upper: 3610.5, lower: 3549 }), true);
+  assert.equal(sameBand(both[0], { ...both[1], upper: 3640, lower: 3552.14 }), false);
+  assert.equal(sameBand(both[0], { ...both[1], chart: "H1" }), false, "another chart");
+  assert.equal(sameBand(both[0], { ...both[1], status: "forming" }), false, "another status");
+  assert.deepEqual(ids(analysis([both[0], pat("flag", "Flag", 23, 3700, 3680)])).filter((x) => x.endsWith(":threads")), ["pattern:H4:flag:confirmed:3700:3680:threads", "pattern:H4:measured_move_up:confirmed:3607:3552:threads"], "different bands both post, in catalogue order");
+  // a later run: the band was posted under one name; another name on it is not posted
+  const history = [{ id: "pattern:H4:diamond_bottom:confirmed:3607:3552:threads", created_at: new Date(at).toISOString() }];
+  const later = at + 3_600_000;
+  assert.equal(bandDrafted(both[0], "threads", history, later), true);
+  assert.equal(bandDrafted(both[0], "telegram", history, later), false, "per channel");
+  assert.deepEqual(analysisDrafts(analysis([both[0]]), { now: later, channels: ["threads"], history }).filter((d) => d.kind === "pattern"), []);
+  // past the chart's lookback the band is free again
+  assert.equal(bandDrafted(both[0], "threads", history, at + PATTERN_LOOKBACK_MS + 1), false);
 });
