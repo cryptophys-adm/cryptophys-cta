@@ -39,6 +39,7 @@ test("the invalidated post: the owner's template word for word, passes the guard
   assert.deepEqual(ds.map((d) => [d.id, d.kind, d.status]), [["pinvalid:H1:wedge_rising:3622:3606:threads", "pattern_invalidated", "pending"], ["pinvalid:H1:wedge_rising:3622:3606:instagram", "pattern_invalidated", "needs_image"]]);
   assert.match(ds[1].text, /Chart by TradingView\./, "the card's credit where the post is the card");
   assert.deepEqual([ds[0].overlay.pattern.upper, ds[0].overlay.pattern.lower, ds[0].overlay.pattern.projection, ds[0].overlay.pattern.direction], [3622.4, 3606.1, null, "down"], "the card draws its lines, no projection");
+  assert.deepEqual(ds[0].overlay.zones, [], "and no zone or other level");
 });
 
 test("the recap at each close (owner 1A, 2A): H1 with M15 every hour, H4 and D1 joined at their closes; invalidated always shown, none when empty", () => {
