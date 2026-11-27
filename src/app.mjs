@@ -276,7 +276,7 @@ async function patternPass(env, d, analysis, { now, channels, settings, dropped 
   const seenBefore = new Set(Array.isArray(seen?.value?.keys) ? seen.value.keys : []);
   // M15 patterns have no daily cap and do not count toward the others' (owner 2026-11-27: "Tanpa batas khusus").
   const postedToday = await d.kindCounts("pattern", new Date(now).toISOString().slice(0, 10), "pattern:M15:");
-  const made = analysisDrafts(analysis, { now, channels, postedToday, known, history, seenBefore, patternCharts: PATTERN_CHARTS, maps: false });
+  const made = analysisDrafts(analysis, { now, channels, postedToday, known, history, seenBefore, patternCharts: PATTERN_CHARTS, maps: false, skipped: dropped });
   const drafts = await settled(env, made, settings, now, dropped);
   const added = drafts.length ? await d.add(drafts, now) : [];
   if (!Array.isArray(analysis?.patterns)) return { drafts, added };

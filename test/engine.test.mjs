@@ -418,7 +418,7 @@ test("M15 confirmed patterns are posted at the hourly run with no daily cap (own
   // "tambah content per 1h jika ada pattern 15m confirmed juga diposting"; cap: "Tanpa batas khusus".
   const at = Date.parse("2026-11-27T09:09:30Z");
   const pat = (chart, pattern, upper, lower, extra = {}) => ({ chart, pattern, name: pattern, chapter: null, status: "confirmed", direction: "up", upper, lower, projection: upper + (upper - lower), ...extra });
-  const analysis = { at: new Date(at).toISOString(), price: 3662.35, zones: [], patterns: [pat("M15", "flag", 3660.5, 3655.2), pat("M15", "pennant", 3670, 3664), pat("H1", "rectangle", 3640, 3620), pat("M15", "wedge_falling", 3655, 3640, { status: "forming" })] };
+  const analysis = { at: new Date(at).toISOString(), price: 3662.35, zones: [], patterns: [pat("M15", "flag", 3660.5, 3655.2), pat("M15", "pennant", 3670, 3664), pat("H1", "rectangle", 3640, 3620, { projection: 3680 }), pat("M15", "wedge_falling", 3655, 3640, { status: "forming" })] };
   assert.deepEqual(UNCAPPED_PATTERN_CHARTS, ["M15"]);
   const ids = (opts = {}) => analysisDrafts(analysis, { now: at, channels: ["threads"], ...opts }).filter((d) => d.kind === "pattern").map((d) => d.id);
   assert.deepEqual(ids(), ["pattern:M15:flag:confirmed:3661:3655:threads", "pattern:M15:pennant:confirmed:3670:3664:threads", "pattern:H1:rectangle:confirmed:3640:3620:threads"], "a forming M15 is not drafted");
