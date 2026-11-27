@@ -1297,16 +1297,21 @@
   function renderModel(m, canEdit) {
     const box = $("agentmodel"); box.textContent = "";
     if (!m) return;
+    // Command's CTA Beam row is the switch (owner 2026-11-27: "usulan saya"); this studio's switch only stops it here.
+    const on = m.has_key && m.enabled && m.command?.on === true;
+    const label = !m.has_key ? "No key" : !m.enabled ? "Stopped here" : !m.connected ? "Not connected to Command" : on ? "On (Command)" : "Off on Command";
     const head = make("div");
-    head.append(badge(!m.has_key ? "" : m.enabled ? "green" : "red", !m.has_key ? "No key" : m.enabled ? "On" : "Off"), " ", make("b", null, `${m.model} on ${m.host}`));
+    head.append(badge(!m.has_key ? "" : on ? "green" : !m.enabled ? "red" : "", label), " ", make("b", null, `${m.model} on ${m.host}`));
     box.appendChild(head);
+    box.appendChild(make("div", "meta", !m.connected ? "Beam for CTA is turned on and off on the platform's Cerebrum → Command page; this Worker is not connected to it yet, so the model stays off."
+      : `Command (Cerebrum → Command, CTA row): ${m.command ? `${m.command.on ? "on" : `off (${m.command.reason ?? "off"})`}, read ${when(m.command.at)}` : "not read yet"}. The switch below only stops the model here.`));
     box.appendChild(make("div", "meta", `Today (WIB): ${usd(m.today.cost_usd)} of ${usd(m.cap_usd, 2)} · ${m.today.calls} call(s) · ${m.today.tokens_in + m.today.tokens_out} tokens`));
     if (m.caps) box.appendChild(make("div", "meta", `${m.free_only ? "Free only: a payment request turns it off · " : ""}today ${m.today.tokens_in.toLocaleString("en-US")} of ${m.caps.tokens_in.toLocaleString("en-US")} input and ${m.today.tokens_out.toLocaleString("en-US")} of ${m.caps.tokens_out.toLocaleString("en-US")} output tokens · at most ${m.caps.rpm} calls a minute`));
     if (!m.has_key) box.appendChild(make("div", "meta", "The key (REFLECTION_API_KEY) is set as a Worker secret through the platform; until then the agent uses no model."));
-    if (m.reason) box.appendChild(make("div", "meta warn", `Off: ${m.reason}${m.switched_by ? ` (${m.switched_by}, ${when(m.switched_at)})` : ""}`));
+    if (m.reason) box.appendChild(make("div", "meta warn", `Stopped here: ${m.reason}${m.switched_by ? ` (${m.switched_by}, ${when(m.switched_at)})` : ""}`));
     for (const c of m.recent ?? []) box.appendChild(make("div", "meta", `${when(c.at)} · ${c.purpose} · ${c.status} · ${c.tokens_in + c.tokens_out} tokens · ${usd(c.cost_usd)}${c.retention ? ` · retention ${c.retention}` : ""}`));
     if (m.has_key) {
-      const b = make("button", m.enabled ? "btn outline sm" : "btn primary sm", m.enabled ? "Turn the model off" : "Turn the model on"); b.type = "button"; b.disabled = !canEdit;
+      const b = make("button", m.enabled ? "btn outline sm" : "btn primary sm", m.enabled ? "Stop the model here" : "Allow the model again (Command decides)"); b.type = "button"; b.disabled = !canEdit;
       if (!canEdit) b.title = "Approvers only";
       b.addEventListener("click", async () => { b.disabled = true; try { await call("/api/studio/agent/model", "POST", { enabled: !m.enabled }); await loadAgent(); } catch (e) { showErr(e); b.disabled = false; } });
       box.appendChild(b);

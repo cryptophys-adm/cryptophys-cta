@@ -26,7 +26,7 @@ export const AGENT_SECRETS = Object.freeze(["REFLECTION_API_KEY"]);
 export const MODEL_DEFAULTS = Object.freeze({ base: "https://api.reflection.ai/openai/v1", model: "Beam-1.0-501B-A23B", daily_usd: 1, price_in: 0.4, price_out: 1.2,
   free_only: true, tokens_in_day: 1_000_000, tokens_out_day: 200_000, rpm: 20 });
 /** The skips that end a run quietly: the caller falls back (the template, or no reply) and tries again later. */
-export const MODEL_STOPS = Object.freeze(["off", "no_key", "budget", "retention", "tokens", "rpm", "paid", "rate"]);
+export const MODEL_STOPS = Object.freeze(["off", "no_key", "budget", "retention", "tokens", "rpm", "paid", "rate", "command_off"]);
 const BILLING = /billing|credit|payment|insufficient[_ ]?(funds|balance)|prepaid|paid[_ ]?plan|upgrade|subscription/i;
 /** A 429's wait when it names no daily limit and gives no Retry-After. */
 export const RATE_BACKOFF_MS = 60_000;
@@ -45,6 +45,51 @@ export function rateUntil(said, retryAfter, now = Date.now()) {
   const at = Date.parse(ra);
   if (ra && Number.isFinite(at) && at > now) return Math.min(at, now + DAY);
   return now + RATE_BACKOFF_MS;
+}
+/**
+ * Command's CTA Beam row is the switch (ADR-0007 amendment; owner 2026-11-27: "usulan saya"): the router reads it as the
+ * kernel agent `cta-model-router` over the AgentRpc Service Binding (`AGENTS`, host-pinned to cryptophys-cta), at most once
+ * a minute, and calls Beam only while CTA's own effective state is on and free_only with no global paid stop. A read that
+ * fails, is denied or is not CTA's is off (fail closed). The studio's `agent_model` can only turn Beam off.
+ */
+export const KERNEL_AGENT = "cta-model-router";
+export const KERNEL_CAPABILITIES = Object.freeze(["model_router.status", "model_router.report_paid"]);
+export const KERNEL_KEY = "agent_model_kernel";
+export const KERNEL_READ_MS = 60_000;
+const kernelMemo = new WeakMap();
+/** Command's switch for CTA as last read: { at, on, state, mode, paid_off, reason }; read again after KERNEL_READ_MS. */
+export async function kernelSwitch(env, store, now = Date.now()) {
+  if (typeof env?.AGENTS?.syscall !== "function") return { at: null, on: false, reason: "not_connected" };
+  const fresh = (v) => { const t = Date.parse(v?.at); return Number.isFinite(t) && now >= t && now - t < KERNEL_READ_MS; };
+  const memo = kernelMemo.get(env.AGENTS);
+  if (fresh(memo)) return memo;
+  const stored = (await store.setting(KERNEL_KEY).catch(() => null))?.value;
+  if (fresh(stored)) { kernelMemo.set(env.AGENTS, stored); return stored; }
+  let next;
+  try {
+    const r = await env.AGENTS.syscall(KERNEL_AGENT, "model_router.status", {});
+    const s = r?.outcome === "succeeded" ? r.result : null;
+    if (!s || s.schema !== "model_router.status.v1" || s.system !== "cta") next = { on: false, reason: String(r?.reason ?? (s ? "not_cta_status" : r?.outcome ?? "no_answer")).slice(0, 120) };
+    else {
+      const on = s.state?.state === "on" && s.state?.mode === "free_only" && !s.global?.paid_off;
+      next = { on, state: s.state?.state ?? null, mode: s.state?.mode ?? null, paid_off: Boolean(s.global?.paid_off), reason: on ? null : s.global?.paid_off ? "paid_stop" : "command_off" };
+    }
+  } catch { next = { on: false, reason: "read_failed" }; }
+  next = { at: new Date(now).toISOString(), ...next };
+  await store.saveSetting({ key: KERNEL_KEY, value: next, actor: "cta-agent" }).catch(() => null);
+  kernelMemo.set(env.AGENTS, next);
+  return next;
+}
+/** On CTA's own paid sign: one model_router.report_paid as cta-model-router (the global stop). True when the kernel took it. */
+export async function reportPaidSign(env, store, signal, now = Date.now()) {
+  if (typeof env?.AGENTS?.syscall !== "function") return false;
+  let ok = false;
+  try { ok = (await env.AGENTS.syscall(KERNEL_AGENT, "model_router.report_paid", { signal }))?.outcome === "succeeded"; } catch { ok = false; }
+  const off = { at: new Date(now).toISOString(), on: false, reason: "paid_stop" };
+  kernelMemo.set(env.AGENTS, off);
+  await store.saveSetting({ key: KERNEL_KEY, value: off, actor: "cta-agent" }).catch(() => null);
+  console.log("cta_model_report_paid", JSON.stringify({ signal, reported: ok }));
+  return ok;
 }
 const WIB = 7 * 3_600_000;
 const DAY = 86_400_000;
@@ -79,8 +124,8 @@ export async function askModel(env, store, { purpose, messages, maxTokens = 2000
   const cfg = modelConfig(env);
   if (!cfg.has_key) return { ok: false, skipped: "no_key" };
   const sw = await store.setting("agent_model").catch(() => null);
-  // Off until an approver turns it on in the studio (orchestrator review, 2026-11-25: the router off by default).
-  if (sw?.value?.enabled !== true) return { ok: false, skipped: "off", reason: sw?.value?.reason ?? "not turned on yet" };
+  // The studio's switch only turns Beam off (owner 2026-11-27: "usulan saya"); Command's CTA row turns it on.
+  if (sw?.value?.enabled === false) return { ok: false, skipped: "off", reason: sw?.value?.reason ?? "turned off in the studio" };
   const spent = await store.spendSince(wibDayStartIso(now));
   if (spent.cost_usd >= cfg.daily_usd) return { ok: false, skipped: "budget", spent_usd: spent.cost_usd, cap_usd: cfg.daily_usd };
   if (spent.tokens_in >= cfg.tokens_in_day || spent.tokens_out >= cfg.tokens_out_day) return { ok: false, skipped: "tokens", tokens_in: spent.tokens_in, tokens_out: spent.tokens_out };
@@ -89,6 +134,8 @@ export async function askModel(env, store, { purpose, messages, maxTokens = 2000
   const wait = await store.setting(RATE_KEY).catch(() => null);
   const waitUntil = Date.parse(wait?.value?.until);
   if (Number.isFinite(waitUntil) && now < waitUntil) return { ok: false, skipped: "rate", until: wait.value.until };
+  const command = await kernelSwitch(env, store, now);
+  if (!command.on) return { ok: false, skipped: "command_off", reason: command.reason };
   const log = (c) => store.record({ purpose, model: cfg.model, ...c }).catch(() => false);
   // Free only: the model goes off with the reason (the studio shows it) and one log line; callers fall back.
   const turnOff = async (reason) => {
@@ -131,8 +178,12 @@ export async function askModel(env, store, { purpose, messages, maxTokens = 2000
   const billingRefusal = res.status >= 400 && res.status < 500 && BILLING.test(said);
   if (cfg.free_only && (res.status === 402 || billingRefusal || (res.ok && Number.isFinite(billed) && billed > 0))) {
     await log({ status: res.status === 402 ? "http_402" : billed > 0 ? "billed" : `http_${res.status}`, retention, ...usage, cost_usd, detail: "paid" });
-    await turnOff(`Reflection asked for payment or reported a cost (${res.status === 402 ? "402" : billed > 0 ? `cost ${billed}` : String(body?.error?.code ?? res.status).slice(0, 40)}): the model is off until an approver turns it on; posts keep their templates`);
-    return { ok: false, skipped: "paid" };
+    const signal = res.status === 402 ? "http_402" : res.ok && billed > 0 ? "cost_field" : "billing_error";
+    // The kernel's global stop turns Beam off for every system until the owner turns it on again on Command; only when
+    // the report did not reach the kernel does the studio's own switch go off too, so Beam stays off either way.
+    const reported = await reportPaidSign(env, store, signal, now);
+    if (!reported) await turnOff(`Reflection asked for payment or reported a cost (${res.status === 402 ? "402" : billed > 0 ? `cost ${billed}` : String(body?.error?.code ?? res.status).slice(0, 40)}) and the platform could not be told: the model is off here until an approver turns it on; posts keep their templates`);
+    return { ok: false, skipped: "paid", reported };
   }
   if (!res.ok) {
     const code = String(body?.error?.code ?? res.status).slice(0, 60);
@@ -148,8 +199,10 @@ export async function askModel(env, store, { purpose, messages, maxTokens = 2000
 export async function modelStatus(env, store, { now = Date.now() } = {}) {
   const cfg = modelConfig(env);
   const sw = await store.setting("agent_model").catch(() => null);
+  const command = (await store.setting(KERNEL_KEY).catch(() => null))?.value ?? null;
   return {
-    model: cfg.model, host: new URL(cfg.base).host, has_key: cfg.has_key, enabled: sw?.value?.enabled === true, reason: sw?.value?.reason ?? (sw ? null : "not turned on yet"),
+    model: cfg.model, host: new URL(cfg.base).host, has_key: cfg.has_key, enabled: sw?.value?.enabled !== false, reason: sw?.value?.enabled === false ? (sw?.value?.reason ?? "turned off in the studio") : null,
+    connected: typeof env?.AGENTS?.syscall === "function", command,
     switched_by: sw?.updated_by ?? null, switched_at: sw?.updated_at ?? null,
     cap_usd: cfg.daily_usd, free_only: cfg.free_only, caps: { tokens_in: cfg.tokens_in_day, tokens_out: cfg.tokens_out_day, rpm: cfg.rpm },
     today: await store.spendSince(wibDayStartIso(now)), recent: await store.recent(10)

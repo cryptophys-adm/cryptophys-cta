@@ -10,7 +10,7 @@ import { PATTERN_SEEN_KEY } from "../src/analysis-drafts.mjs";
 import { ABOUT_LEDE } from "../src/agent/write.mjs";
 import { resetKeyCacheForTests } from "../src/access.mjs";
 import { CONNECT_SECRETS } from "../src/oauth.mjs";
-import { AGENT_SECRETS } from "../src/agent/router.mjs";
+import { AGENT_SECRETS, KERNEL_AGENT, KERNEL_CAPABILITIES } from "../src/agent/router.mjs";
 import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites, claimPublish, failStuckPublishing, STUCK_NOTE, draftsWithPrefixSince, ARCHIVE_LAST_CHANNELS, postKey, onePatternPost } from "../src/desk.mjs";
 import { editCheck } from "../src/compose.mjs";
 import { publishX, publishTelegram, publishTo } from "../src/publishers.mjs";
@@ -201,8 +201,16 @@ test("the organ's DNA: one portal organ within the platform's external ceiling, 
   for (const a of o.agents) {
     assert.equal(a.voter, false);
     assert.ok(a.tier_max <= 1);
+    if (a.id === "cta-model-router") continue;
     assert.ok(a.capabilities.every((c) => CEILING.has(c)), a.id);
   }
+  // The platform's CTA_CEILING (ADR-0007 amendment; owner 2026-11-27: "usulan saya"): exactly one named agent with exactly
+  // the two router capabilities; anything more and the census refuses the agent whole.
+  assert.deepEqual(o.agents.find((a) => a.id === "cta-model-router"), { id: "cta-model-router", display_name: "CTA model router client", capabilities: ["model_router.status", "model_router.report_paid"], tier_max: 1, voter: false });
+  assert.deepEqual([...KERNEL_CAPABILITIES], ["model_router.status", "model_router.report_paid"]);
+  assert.equal(KERNEL_AGENT, "cta-model-router");
+  const cfgServices = JSON.parse(readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8").replace(/^\s*\/\/.*$/gm, "")).services;
+  assert.deepEqual(cfgServices.find((s) => s.binding === "AGENTS"), { binding: "AGENTS", service: "cryptophys-ai-kernel", entrypoint: "AgentRpc", props: { host_worker: "cryptophys-cta" } }, "host-pinned to this Worker");
   assert.deepEqual(o.engines, [], "no model writes public text");
 });
 
@@ -879,7 +887,8 @@ test("the model's switch (the CTA agent's router): an approver turns it off and 
   const service = await jwt({ common_name: "svc.access", sub: "" });
   const post = (body, extra = {}) => handle(req("/api/studio/agent/model", { method: "POST", body, ...extra }), e, opts);
   const first = await (await handle(req("/api/studio/agent", { token: person }), e, opts)).json();
-  assert.deepEqual([first.model.enabled, first.model.reason], [false, "not turned on yet"], "off until an approver turns it on");
+  // Command's CTA row is the switch (owner 2026-11-27: "usulan saya"); the studio's switch only turns Beam off.
+  assert.deepEqual([first.model.enabled, first.model.reason, first.model.connected, first.model.command], [true, null, false, null], "not stopped here; Command not connected yet");
   assert.equal((await post({ enabled: false }, { token: service })).status, 403, "never a service token");
   assert.equal((await post({ enabled: false }, { token: person, origin: "https://evil.example" })).status, 403, "same origin only");
   assert.equal((await post({ enabled: "no" }, { token: person })).status, 400);
@@ -968,7 +977,8 @@ test("auto-approve end to end (owner 2026-11-25): a Threads pattern draft goes o
 
 test("cta-write end to end (rule 4 amended): the switch, a written post auto-approved and published in the run that wrote it, a failed guard keeps the template, the kill switch", async () => {
   resetKeyCacheForTests();
-  const { env: e, d } = env({ CONTENT_PUBLISH: "on", PUBLISH_CHANNELS: "threads", THREADS_ACCESS_TOKEN: "T", THREADS_USER_ID: "77", REFLECTION_API_KEY: "rk-test" });
+  const AGENTS = { syscall: async (agent, capability) => (capability === "model_router.status" ? { outcome: "succeeded", result: { schema: "model_router.status.v1", system: "cta", state: { state: "on", mode: "free_only" }, global: null } } : { outcome: "succeeded", result: {} }) };
+  const { env: e, d } = env({ CONTENT_PUBLISH: "on", PUBLISH_CHANNELS: "threads", THREADS_ACCESS_TOKEN: "T", THREADS_USER_ID: "77", REFLECTION_API_KEY: "rk-test", AGENTS });
   const T0 = Date.parse("2026-11-25T06:00:00Z");
   const TEMPLATE = "Education · Pattern breakout · XAUUSD H1\nRounding Top · direction down\n\nBreakout line 3570.54\nThe pattern fails if an H1 candle closes back above 3689.87.\nPrice when read: 3555.10 · 12:09 AM UTC\n\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.";
   const GOOD = "Rounding Top, direction down.\n\nThe breakout line is at 3570.54.\nIt fails if an H1 candle closes back above 3689.87.\nPrice when read: 3555.10 at 12:09 AM UTC.";
