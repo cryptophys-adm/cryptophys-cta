@@ -34,7 +34,7 @@ const commandOn = (state = "on", mode = "free_only", paid_off = false) => {
 };
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
-const POST = "Education · XAUUSD key-level map · Wednesday, 25 November 2026 1:41 AM UTC\nPrice when read: 3544.30\n\nSupply zones (sell area):\n• 3595.29–3600.00 (4H swing high)\n\nChart by Cryptophys.\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD #gold #education";
+const POST = "Education · XAUUSD key-level map · Wednesday, 25 November 2026 1:41 AM UTC\nPrice when read: 3544.30\n\nSupply zones (sell area):\n• 3595.29–3600.00 (4H swing high)\n\nChart by TradingView.\nEducational analysis by Cryptophys. Not an invitation to buy or sell, and not financial advice.\n#XAUUSD #gold #education";
 
 test("AG1 the humanizer: the lexicon as taken (MIT, credited), every pattern compiles, invisible characters go and words stay", () => {
   assert.equal(SLOP.words.length + SLOP.phrases.length, 154, "the 154 stock words and phrases of slop.json v1.0");
@@ -415,7 +415,7 @@ test("AG12 key-level maps per chart (owner 2026-11-25): each chart's map once pe
   assert.deepEqual(analysisDrafts({ ...A, zones_by_chart: undefined, closed: undefined, zones: [{ role: "supply", low: 4060, high: 4062, strength: "strong", metrics: [] }] }, { now: Date.parse("2026-11-25T06:09:00Z"), channels: ["threads"], levelsRun: true }).map((d) => d.id), ["levels:2026-11-25:threads"]);
   assert.deepEqual(analysisDrafts(A, { now: Date.parse("2026-11-25T06:09:00Z"), channels: ["threads"], levelsRun: true }).map((d) => d.id), [], "with zones_by_chart the daily map gives way (and the 4:00 close is no longer fresh at 6:09)");
   assert.equal(MAP_FRESH_MINUTES, 70);
-  // the card (owner 2026-11-25: "apakah post juga termasuk image yang dirender?"): the schematic of the post's largest chart, its zones drawn
+  // the card (owner 2026-11-25: "apakah post juga termasuk image yang dirender?"): TradingView's chart of the post's largest chart, its zones drawn
   assert.equal(drafts[0].overlay.chart, "H4");
   assert.equal(chartOf(drafts[0]), "H4", "H4 + H1: the H4 chart");
   assert.equal(chartOf({ kind: "key_levels", overlay: { chart: "D1" } }), "D1");

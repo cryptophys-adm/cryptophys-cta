@@ -44,12 +44,12 @@ test("the WebM duration is written into the Segment Info the way a recorder leav
   assert.throws(() => setWebmDuration(raw, 0), /duration/);
 });
 
-test("the video's words are the draft's own (title, lines, the end card with the chart's credit and the disclaimer); the page is safe", () => {
-  const draft = { kind: "pattern", text: `Education · Pattern breakout · XAUUSD H4\nDescending Channel · direction down\n\nBreakout line 3871.60\nThe pattern fails if an H4 candle closes back above 3905.20.\n\nChart by Cryptophys.\n${ANALYSIS_DISCLAIMER}\n#XAUUSD #gold #shorts` };
+test("the video's words are the draft's own (title, lines, the end card with TradingView and the disclaimer); the page is safe", () => {
+  const draft = { kind: "pattern", text: `Education · Pattern breakout · XAUUSD H4\nDescending Channel · direction down\n\nBreakout line 3871.60\nThe pattern fails if an H4 candle closes back above 3905.20.\n\nChart by TradingView.\n${ANALYSIS_DISCLAIMER}\n#XAUUSD #gold #shorts` };
   const s = videoScript(draft, brand, { disclaimers: [ANALYSIS_DISCLAIMER] });
   assert.equal(s.title, "Pattern breakout · XAUUSD H4");
   assert.deepEqual(s.lines, ["Descending Channel · direction down", "Breakout line 3871.60", "The pattern fails if an H4 candle closes back above 3905.20."]);
-  assert.deepEqual(s.end, ["Chart by Cryptophys", brand.card_disclaimer, "cta.cryptophys.work"]);
+  assert.deepEqual(s.end, ["Chart by TradingView", brand.card_disclaimer, "cta.cryptophys.work"]);
   assert.match(s.end[1], /not financial advice/);
   const html = videoHtml("data:image/jpeg;base64,AAAA", { ...s, title: "</script><script>alert(1)</script>" });
   // The cover (2026-11-18: a fade-in from black gave a dark thumbnail): the card and the title are drawn from frame 0.
@@ -60,15 +60,15 @@ test("the video's words are the draft's own (title, lines, the end card with the
   assert.match(html, new RegExp(`"seconds":${VIDEO_SECONDS}`));
 });
 
-test("video drafts: YouTube and TikTok get the overlay and the chart's credit, wait for their video, and store it in chunks", () => {
+test("video drafts: YouTube and TikTok get the overlay and TradingView's credit, wait for their video, and store it in chunks", () => {
   const now = Date.parse("2026-11-17T06:09:30Z");
   const analysis = { at: "2026-11-17T06:09:00Z", price: 3884.7, zones: [{ role: "supply", low: 3898, high: 3902.4 }], patterns: [{ chart: "H4", pattern: "descending_channel", name: "Descending Channel", status: "confirmed", direction: "down", upper: 3905.2, lower: 3871.6, projection: 3820.4 }], structure: {} };
   const drafts = analysisDrafts(analysis, { now, channels: ["youtube", "tiktok"] });
   assert.deepEqual(drafts.map((d) => [d.channel, d.status, Boolean(d.overlay)]), [["youtube", "needs_video", true], ["tiktok", "needs_video", true]]);
-  for (const d of drafts) assert.match(d.text, /Chart by Cryptophys\./);
+  for (const d of drafts) assert.match(d.text, /Chart by TradingView\./);
   const recap = dailyDrafts([{ bar_close: "2026-11-15T10:00:00.000Z", stance: "WAIT", bias: "NEUTRAL" }], { now: Date.parse("2026-11-16T22:17:00Z"), channels: ["tiktok"] }).drafts[0];
   assert.equal(recap.status, "needs_video");
-  assert.match(recap.text, /Chart by Cryptophys\./);
+  assert.match(recap.text, /Chart by TradingView\./);
   const sql = sqlite();
   addDrafts(sql, drafts, { now });
   assert.equal(draftsNeedingImage(sql, { limit: 5 }).length, 2, "video drafts wait with the cards");
@@ -117,7 +117,7 @@ test("YouTube: refreshes the token, opens a resumable session, uploads the bytes
     : url === YOUTUBE_UPLOAD_URL ? { headers: { location: "https://upload.example/session1" } }
     : url === "https://upload.example/session1" ? { body: { id: "vid123", status: { privacyStatus: "private" } } } : { status: 404 });
   const account = { client_id: "cid", client_secret: "csecret", refresh_token: "1//rt" };
-  const text = "Education · Pattern breakout · XAUUSD H4\nline\n\nChart by Cryptophys.\nNot financial advice.\n#XAUUSD #shorts";
+  const text = "Education · Pattern breakout · XAUUSD H4\nline\n\nChart by TradingView.\nNot financial advice.\n#XAUUSD #shorts";
   const r = await publishYouTube({ account, text, video: VIDEO, fetcher: p.fetcher });
   assert.deepEqual(r, { remote_id: "vid123", privacy: "private" });
   assert.equal(p.calls[0].body.get("grant_type"), "refresh_token");

@@ -1,7 +1,7 @@
 // Create (owner 2026-11-16: "belum ada menu ... content creation"; person-written posts allowed: "Boleh, tetap
 // guardian"). A person writes a post for one or more channels, from a blank post or from a template filled with the
 // current analysis (the same fixed templates the engine uses; no model writes public text). Each channel's text is
-// checked by the guardian the way the engine's drafts are (price levels only in the analysis kinds; the chart's
+// checked by the guardian the way the engine's drafts are (price levels only in the analysis kinds; TradingView's
 // credit where the post is the chart card or its video) and must fit the channel. A post is saved only when every
 // channel passes; it then waits in the queue for approval like any draft. Pure, except for the data `context` holds.
 import { checkContentDraft } from "./guardian.mjs";
@@ -18,7 +18,7 @@ export const COMPOSE_KINDS = Object.freeze(["custom", ...KINDS, "warroom"]);
 export const COMPOSE_KIND_NAMES = Object.freeze({ custom: "Custom post", key_levels: "Key-level map", pattern: "Chart pattern", daily_recap: "Daily recap", warroom: "War Room" });
 export const MAX_COMPOSE_CHANNELS = CHANNELS.length;
 
-/** The blank post: a title line, room to write, the chart's credit where the post is the chart card, the disclaimer, the hashtags. */
+/** The blank post: a title line, room to write, TradingView's credit where the post is the chart card, the disclaimer, the hashtags. */
 export function customTemplate(channel, hashtags) {
   return ["Education · XAUUSD", "", "", "", ...(hasImage(channel) ? [CHART_CREDIT] : []), channel === "x" ? SHORT_DISCLAIMER : ANALYSIS_DISCLAIMER, ...[hashtags].filter(Boolean)].join("\n");
 }
@@ -139,7 +139,7 @@ export function overlayFor(kind, analysis, ref) {
 
 /**
  * The guardian's check of an edited or copied draft, as for a composed post: its kind's rules, the decisions it covers
- * (the recap's delay rule, counted from now), the chart's credit where its post is the chart card or video, its
+ * (the recap's delay rule, counted from now), TradingView's credit where its post is the chart card or video, its
  * channel's limit. A custom post still needs its own words. Runs inside the desk (functions do not cross RPC).
  */
 export function editCheck(draft, { delayHours = 24, now = Date.now() } = {}) {
