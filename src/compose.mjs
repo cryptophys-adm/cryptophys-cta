@@ -46,7 +46,7 @@ export function templateTexts(kind, { channels, settings, analysis = null, recap
     const p = list.find((x) => patternKey(x) === ref) ?? list[0] ?? null;
     out.ref = p ? patternKey(p) : null;
     for (const c of channels) out.texts[c] = p ? patternText(p, analysis, { channel: c }) : null;
-    if (!p) out.note = "No pattern to post right now (confirmed on H1, H4, D1; forming on H4, D1).";
+    if (!p) out.note = "No pattern to post right now (confirmed on M15, H1, H4, D1; forming on H4, D1).";
   } else if (kind === "warroom") {
     // Owner 2026-11-18 ("Real-time analysis"): the source's latest reading, never its decision.
     out.options = WARROOM_SOURCES.map((s) => ({ ...s }));

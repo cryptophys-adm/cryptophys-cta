@@ -17,7 +17,7 @@ import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import puppeteer from "@cloudflare/puppeteer";
 import { expireStale, addDrafts, listDrafts, getDraft, draftEvents, decideDraft, recordPublish, requeueFailed, deskCounts, channelStatusCounts, storedToken, storeToken, draftIdsWithPrefix, kindCountsSince, publishedPosts, draftsNeedingImage, attachImage, mediaOf, noteDraft, publishedSince, saveMetrics, storedSettings, saveChannelSettings, channelCountsSince, searchDrafts, editDraft, duplicateDraft, calendarMonth, listMedia, nextApproved, approvedCounts, claimSlot, slotOutcome, recentSlots, addLink, getLink, countClick, listLinks, listHashtagSets, saveHashtagSet, studioSetting, saveStudioSetting, kindMixSince, addAbTest, listAbTests, measuredPosts, copiedSince, putOAuthState, takeOAuthState, saveConnection, connectionsOf, removeConnection, saveCreds, credsOf, credsStatus, recordModelCall, modelSpendSince, recentModelCalls, replySeen, answeredInThread, repliesSentSince, recordReply, recentReplies, forgetReplies, autoCandidates, writeCandidates, recordWrite, recentWrites, claimPublish, draftsWithPrefixSince } from "./desk.mjs";
 import { editCheck } from "./compose.mjs";
-import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, collectInsights, runSchedule, agentWeekly, agentReplies, forgetOldReplies, ANALYSIS_CRON, analysisRunDue } from "./app.mjs";
+import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, collectInsights, runSchedule, agentWeekly, agentReplies, forgetOldReplies, ANALYSIS_CRON, analysisRunDue, fastPassOn } from "./app.mjs";
 import { SCHEDULE_CRON } from "./scheduler.mjs";
 import ORGANISM from "../organism.json" with { type: "json" };
 
@@ -37,7 +37,7 @@ export class ContentDesk extends DurableObject {
   async saveToken(channel, token, now) { storeToken(this.sql, channel, token, { now }); return true; }
   async idsWithPrefix(prefix) { return draftIdsWithPrefix(this.sql, prefix); }
   async draftsSince(prefix, sinceIso) { return draftsWithPrefixSince(this.sql, prefix, sinceIso); }
-  async kindCounts(kind, sinceIso) { return kindCountsSince(this.sql, kind, sinceIso); }
+  async kindCounts(kind, sinceIso, excludePrefix = null) { return kindCountsSince(this.sql, kind, sinceIso, excludePrefix); }
   async archive(limit) { return publishedPosts(this.sql, { limit }); }
   async needingImage(limit, retry) { return draftsNeedingImage(this.sql, { limit, retry }); }
   async attachImage(input, now) { return attachImage(this.sql, input, { now }); }
@@ -117,8 +117,18 @@ export default {
     if (event?.cron === SCHEDULE_CRON) {
       const r = await runSchedule(env, { now: event.scheduledTime || Date.now() }).catch(fail);
       if (r?.slots?.length || r?.auto?.length || r?.status === "error" || r?.written) console.log("cta_schedule", JSON.stringify(r));
-      // The CTA agent's Replies, every 15 minutes (src/agent/replies.mjs).
       const at = event.scheduledTime || Date.now();
+      // Patterns of every chart, every 5 minutes while gold trades, only while PATTERN_FAST_PASS is "on" (held: the
+      // orchestrator's review of #113, xauusd's analysis() is not cheap; owner 2026-11-27: "jika bisa ditrigger langsung ketika
+      // pattern 15m confirmed tanpa menunggu jadwal 1H", then "berlaku juga untuk 1H/4H/1D termasuk jika ada pattern
+      // invalidated tertrigger"): a new confirmed or invalidated one is drafted, its card made when it takes one, and,
+      // under the auto-approve rule, published in this run.
+      if (fastPassOn(env) && analysisRunDue(at)) {
+        const live = await draftAnalysis(env, { now: at, fast: true }).catch(fail);
+        if (live?.added?.length || live?.dropped?.length || live?.status === "error") console.log("cta_pattern_drafts", JSON.stringify(live));
+        if (live?.added?.length) { await cards(env, fail); await publishNow(env, fail); }
+      }
+      // The CTA agent's Replies, every 15 minutes (src/agent/replies.mjs).
       if (new Date(at).getUTCMinutes() % 15 === 0) {
         const replies = await agentReplies(env, { now: at }).catch(fail);
         if (replies?.status !== "off") console.log("cta_agent_replies", JSON.stringify(replies));

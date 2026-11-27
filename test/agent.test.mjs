@@ -591,7 +591,7 @@ test("AG17 the analysis run's log (orchestrator review after the 07:09 UTC miss)
     { closed: { H1: "2026-11-25T07:00:00Z", H4: "2026-11-25T04:00:00Z", D1: null }, zones_by_chart: { H1: 2, H4: 0, D1: null } });
   assert.deepEqual(analysisRead(null), { closed: { H1: null, H4: null, D1: null }, zones_by_chart: { H1: null, H4: null, D1: null } });
   assert.match(read("src/index.mjs"), /\n\s+console\.log\("cta_analysis_drafts", JSON\.stringify\(drafted\)\);/, "every run is logged, not only one that added");
-  assert.match(read("src/app.mjs"), /\.\.\.read, drafts: drafts\.map\(\(x\) => \(\{ id: x\.id, status: x\.status \}\)\), added, \.\.\.\(dropped\.length \? \{ dropped \} : \{\}\)/);
+  assert.match(read("src/app.mjs"), /\.\.\.read, [^\n]*drafts: drafts\.map\(\(x\) => \(\{ id: x\.id, status: x\.status \}\)\), added[^\n]*\.\.\.\(dropped\.length \? \{ dropped \} : \{\}\)/);
   assert.match(read("AGENTS.md"), /held: owner 2026-11-25, dynamic-worker budget/);
   assert.match(read("docs/SSOT.md"), /\*\*held: owner 2026-11-25, dynamic-worker budget\*\*/);
 });

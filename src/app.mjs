@@ -2,7 +2,8 @@
 // run it under Node). src/index.mjs holds the Durable Object and the RPC entrypoints.
 import { levelFailures } from "./guardian.mjs";
 import { dailyDrafts } from "./drafts.mjs";
-import { analysisDrafts, PATTERN_LOOKBACK_MS, PATTERN_SEEN_KEY, seenPatternKeys } from "./analysis-drafts.mjs";
+import { analysisDrafts, PATTERN_LOOKBACK_MS, PATTERN_SEEN_KEY, PATTERN_CHARTS, seenPatternKeys, KIND_FAMILY, PATTERN_LEDGER_KEY, PATTERN_RECAP_KEY, updateLedger, invalidationDrafts, patternRecapDrafts, patternOfId, PATTERN_RECAP_CHANNELS } from "./analysis-drafts.mjs";
+import { CHANNEL_SPECS as SPECS } from "./channels.mjs";
 import { CHANNELS, CHANNEL_SPECS } from "./channels.mjs";
 import { publishTo, publishingQuota, refreshToken, tiktokAccessToken, googleAccessToken, REFRESH_AFTER_DAYS, isBusinessToken, threadsReplies, publishThreadsReply } from "./publishers.mjs";
 import { verifyAccessJwt } from "./access.mjs";
@@ -256,26 +257,82 @@ export async function draftDay(env, { now = Date.now() } = {}) {
   return { bars: summary.bars, window_delay_hours: windowDelayHours, ...(summary.cut ? { cut: true, rows: (projection?.recaps ?? []).length } : {}), drafts: drafts.map((d) => ({ id: d.id, status: d.status })), added };
 }
 
-/** The real-time analysis drafts (key-level map at 06 UTC, pattern posts every hour), queued once. */
-export async function draftAnalysis(env, { now = Date.now() } = {}) {
-  const analysis = await env.PROJECTION.analysis();
-  const d = desk(env);
+/**
+ * The 5-minute pattern pass is a switch (orchestrator review of #113, 2026-11-27: xauusd's analysis() is not a cheap
+ * read and the account is over its CPU and KV allowances, so 288 reads a day wait for a cheap M15 path there). Unset or
+ * anything but "on": off, and the hourly run reads every chart's patterns as before.
+ */
+export const fastPassOn = (env) => String(env?.PATTERN_FAST_PASS ?? "").trim().toLowerCase() === "on";
+
+/**
+ * The pattern posts of one reading: the confirmed patterns of every chart (M15, H1, H4, D1) not posted yet, and an
+ * invalidated pattern's post (owner 2026-11-27: "berlaku juga untuk 1H/4H/1D termasuk jika ada pattern invalidated
+ * tertrigger"). Moves the seen set and the ledger only on a reading with its patterns list.
+ */
+async function patternPass(env, d, analysis, { now, channels, settings, dropped }) {
   const known = new Set(await d.idsWithPrefix("pattern:"));
   const history = await d.draftsSince("pattern:", new Date(now - PATTERN_LOOKBACK_MS).toISOString());
-  const knownLevels = new Set(await d.idsWithPrefix("levels:"));
   const seen = await d.studioSetting(PATTERN_SEEN_KEY);
   const seenBefore = new Set(Array.isArray(seen?.value?.keys) ? seen.value.keys : []);
-  const postedToday = await d.kindCounts("pattern", new Date(now).toISOString().slice(0, 10));
-  const { settings } = await channelSettings(env);
-  const dropped = [];
-  const drafts = await settled(env, analysisDrafts(analysis, { now, channels: draftingChannels(channelsOf(env), settings), levelsRun: new Date(now).getUTCHours() === 6, postedToday, known, knownLevels, history, seenBefore }), settings, now, dropped);
+  // M15 patterns have no daily cap and do not count toward the others' (owner 2026-11-27: "Tanpa batas khusus").
+  const postedToday = await d.kindCounts("pattern", new Date(now).toISOString().slice(0, 10), "pattern:M15:");
+  const made = analysisDrafts(analysis, { now, channels, postedToday, known, history, seenBefore, patternCharts: PATTERN_CHARTS, maps: false });
+  const drafts = await settled(env, made, settings, now, dropped);
   const added = drafts.length ? await d.add(drafts, now) : [];
-  // Only a reading with its patterns list moves the seen set (a failed read must not make every pattern new again).
-  if (Array.isArray(analysis?.patterns)) await d.saveStudioSetting({ key: PATTERN_SEEN_KEY, value: { at: new Date(now).toISOString(), keys: seenPatternKeys(analysis) }, actor: "cta-agent" }, now);
+  if (!Array.isArray(analysis?.patterns)) return { drafts, added };
+  await d.saveStudioSetting({ key: PATTERN_SEEN_KEY, value: { at: new Date(now).toISOString(), keys: seenPatternKeys(analysis, PATTERN_CHARTS) }, actor: "cta-agent" }, now);
+  const ledgerRow = await d.studioSetting(PATTERN_LEDGER_KEY);
+  const addedSet = new Set(added);
+  const drafted = (analysis.patterns ?? []).filter((p) => drafts.some((x) => addedSet.has(x.id) && x.id.startsWith(`pattern:${p.chart}:${p.pattern}:confirmed:`)));
+  const { ledger, invalidated } = updateLedger(Array.isArray(ledgerRow?.value?.items) ? ledgerRow.value.items : [], analysis, { drafted, now });
+  // An invalidated pattern is posted on the text channels where its confirmed post went out.
+  const out = [];
+  for (const e of invalidated) {
+    const went = new Set(history.filter((h) => h.status === "published").map((h) => patternOfId(h.id)).filter((o) => o && o.chart === e.chart && o.pattern === e.pattern && o.status === "confirmed").map((o) => o.channel));
+    out.push(...invalidationDrafts([e], analysis, { channels: channels.filter((c) => went.has(c) && SPECS[c]?.media === "none"), now }));
+  }
+  const ready = await settled(env, out, settings, now, dropped);
+  const invalid = ready.length ? await d.add(ready, now) : [];
+  await d.saveStudioSetting({ key: PATTERN_LEDGER_KEY, value: { at: new Date(now).toISOString(), items: ledger }, actor: "cta-agent" }, now);
+  return { drafts: [...drafts, ...ready], added: [...added, ...invalid] };
+}
+
+/**
+ * The real-time analysis drafts, queued once. The hourly run: the key-level maps, the pattern posts of every chart
+ * (unless the 5-minute pass is on: then they are its), and the hourly pattern recap (owner 2026-11-27: "setiap jam perlu
+ * recap pattern apa yang sedang aktif dengan target harganya dan pattern apa yang invalidated"). `fast`: the 5-minute
+ * pass, the pattern posts only (owner 2026-11-27: "jika bisa ditrigger langsung ... tanpa menunggu jadwal 1H"), run only
+ * while `fastPassOn`.
+ */
+export async function draftAnalysis(env, { now = Date.now(), fast = false } = {}) {
+  const analysis = await env.PROJECTION.analysis();
+  const d = desk(env);
+  const { settings } = await channelSettings(env);
+  const channels = draftingChannels(channelsOf(env), settings);
+  const dropped = [];
+  if (fast) {
+    const p = await patternPass(env, d, analysis, { now, channels, settings, dropped });
+    return { charts: PATTERN_CHARTS, patterns: (analysis?.patterns ?? []).length, drafts: p.drafts.map((x) => ({ id: x.id, status: x.status })), added: p.added, ...(dropped.length ? { dropped } : {}) };
+  }
+  const pat = fastPassOn(env) ? { drafts: [], added: [] } : await patternPass(env, d, analysis, { now, channels, settings, dropped });
+  const knownLevels = new Set(await d.idsWithPrefix("levels:"));
+  const maps = analysisDrafts(analysis, { now, channels, levelsRun: new Date(now).getUTCHours() === 6, knownLevels, patternCharts: [] });
+  // The hourly recap: the active confirmed patterns and those invalidated since the last recap (this run's included);
+  // none when it would say nothing new (owner 2026-11-27: "Lewati", no duplicate).
+  const ledgerRow = await d.studioSetting(PATTERN_LEDGER_KEY);
+  const ledger = Array.isArray(ledgerRow?.value?.items) ? ledgerRow.value.items : [];
+  const last = await d.studioSetting(PATTERN_RECAP_KEY);
+  const since = Date.parse(last?.value?.at ?? "") || now - 3_600_000;
+  const invalidated = ledger.filter((e) => e.invalidated_at && Date.parse(e.invalidated_at) > since && Date.parse(e.invalidated_at) <= now);
+  const recap = Array.isArray(analysis?.patterns) ? patternRecapDrafts(analysis, { invalidated, lastSignature: last?.value?.signature ?? null, channels: channels.filter((c) => PATTERN_RECAP_CHANNELS.includes(c)), now }) : { drafts: [], skipped: "no_reading" };
+  const rest = await settled(env, [...maps, ...recap.drafts], settings, now, dropped);
+  const added = rest.length ? await d.add(rest, now) : [];
+  if (recap.drafts.length) await d.saveStudioSetting({ key: PATTERN_RECAP_KEY, value: { at: new Date(now).toISOString(), signature: recap.signature }, actor: "cta-agent" }, now);
+  const drafts = [...pat.drafts, ...rest];
   // What the run read, for its log every hour (orchestrator review, 2026-11-25, after the 07:09 UTC miss): each chart's
   // latest close and how many zones it has, and each draft left out with why.
   const read = analysisRead(analysis);
-  return { zones: analysis?.zones?.length ?? 0, patterns: analysis?.patterns?.length ?? 0, ...read, drafts: drafts.map((x) => ({ id: x.id, status: x.status })), added, ...(dropped.length ? { dropped } : {}) };
+  return { zones: analysis?.zones?.length ?? 0, patterns: analysis?.patterns?.length ?? 0, ...read, ...(recap.skipped ? { recap: recap.skipped } : {}), drafts: drafts.map((x) => ({ id: x.id, status: x.status })), added: [...pat.added, ...added], ...(dropped.length ? { dropped } : {}) };
 }
 
 /** Pure: each chart's latest close (PublicProjection.analysis().closed) and its zone count (zones_by_chart), H1, H4, D1. */
@@ -323,10 +380,12 @@ export async function runSchedule(env, { now = Date.now(), fetcher } = {}) {
  * draft of a kind it approves automatically that is ready (AUTO_WINDOW_MINUTES, 0 since 2026-11-25) is approved as a person's approval is
  * (the guardian again; an aged analysis draft expires), then published at once or left for the channel's next slot.
  */
+/** The auto-approve kinds with their family: Chart pattern brings the invalidated post and the hourly recap (owner 2026-11-27). */
+export const withFamily = (kinds) => [...new Set([...(kinds ?? []), ...Object.keys(KIND_FAMILY).filter((k) => (kinds ?? []).includes(KIND_FAMILY[k]))])];
 export async function autoApprove(env, settings, { now = Date.now(), fetcher } = {}) {
   const d = desk(env), out = [];
   for (const channel of publishChannels(env)) {
-    const kinds = settings[channel]?.enabled === false ? [] : settings[channel]?.auto_approve ?? [];
+    const kinds = withFamily(settings[channel]?.enabled === false ? [] : settings[channel]?.auto_approve ?? []);
     if (!kinds.length) continue;
     for (const c of dueNow(await d.autoCandidates({ channel, kinds }), now)) {
       const r = await d.decide({ id: c.id, decision: "approve", actor: AUTO_ACTOR, reason: `rule: ${channel} approves ${c.kind} once it is ready and checked` }, now);
@@ -626,7 +685,7 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
           const { settings } = await channelSettings(env);
           const autoBy = {};
           for (const c of new Set(drafts.filter((x) => x.status === "pending").map((x) => x.channel))) {
-            const kinds = publishChannels(env).includes(c) ? settings[c]?.auto_approve ?? [] : [];
+            const kinds = withFamily(publishChannels(env).includes(c) ? settings[c]?.auto_approve ?? [] : []);
             for (const a of kinds.length ? await d.autoCandidates({ channel: c, kinds }) : []) autoBy[a.id] = autoAt(a);
           }
           return { drafts: drafts.map((x) => (x.id in autoBy ? { ...x, auto_at: autoBy[x.id] } : x)), counts: await d.counts(), by_channel: await d.channelCountsByStatus(), can_decide: role === "approver", can_write: role !== "service" };
