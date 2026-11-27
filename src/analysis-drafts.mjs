@@ -520,3 +520,13 @@ export function patternRecapDrafts(analysis, { ledger = [], lastSignature = null
   }
   return { drafts, signature: sig, charts: close.charts };
 }
+
+/**
+ * Pure: whether a reading would make a pattern draft: a confirmed pattern of a pattern chart not in the seen set, or a
+ * ledger entry it shows busted or confirmed the other way. The 5-minute pass reads the price only then.
+ */
+export function patternsDue(analysis, { seen = [], ledger = [], now = Date.now() } = {}) {
+  const was = new Set(seen);
+  if (draftedPatterns(analysis).some((p) => PATTERN_CHARTS.includes(p.chart) && !was.has(patternSeenKey(p)))) return true;
+  return updateLedger(ledger, analysis, { now }).invalidated.length > 0;
+}

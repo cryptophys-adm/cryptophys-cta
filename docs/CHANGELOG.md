@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-27 (the 5-minute pattern pass is on, on xauusd's patterns())
+- feat(pattern): the 5-minute pattern pass is switched on (`PATTERN_FAST_PASS` "on" in wrangler.jsonc and organism.json) and reads xauusd's cheap `PublicProjection.patterns()` (xauusd #654: one KV key, written at each chart's close, M15 and `busted` included). Owner, 27 Nov: "pattern confirmed 15m dicek tiap 15m dan langsung dipost ketika muncul confirmed sehingga info ketinggalan atau expired ini bisa dieliminasi".
+  - Each pass reads the whole value. It does no draft work when every chart's close is the one it last drafted from (`pattern_fast_closed`). This is a per-chart compare, not `sinceCloseMs`, because a late series can rewrite one chart's close under the same `at_close_ms`.
+  - Otherwise it runs the same pattern pass as before: seen set, cooldown, band, once-only, projection reached (#116), the ledger, and the invalidated post (`busted` now arrives). A new M15 breakout goes out about 5 minutes after its candle closes on Telegram. Threads still follows the owner's posting slots.
+  - The hourly run keeps `analysis()` for the key-level maps and the recap, and drafts no pattern post.
+  - Price: the posts need the price when read, and `patterns()` carries none yet. The pass uses `patterns().price` when present; without it, it reads `analysis()` once, only when a draft is due (a new unseen confirmed pattern, or a ledger entry busted or flipped), never on an unchanged or nothing-new pass. Asked of xauusd: a `price`/`price_at` field from the last 15m close it already reads.
+  - The card of a fast-pass post draws the pattern only. `patterns()` has no zones; with the `analysis()` fallback, the zones are drawn as before.
+
 ## 2026-11-27 (a pattern whose measured projection the price already reached is not posted)
 - feat(pattern): a confirmed pattern is not posted when the price when read already reached its measured projection. That is up with the price at or above the projection, or down with the price at or below it (`projectionReached`). The move is done, so there is no post and no card. The run logs it under `dropped` with reason `projection_reached`. The owner approved this on 27 Nov ("setuju"), after the 18:09Z M15 Descending Broadening Wedge went out with "Measured projection: 3650.11" while the price was already 3653.47.
   - The recap keeps such a pattern and writes "measured projection reached" in place of the number. The guardian reads those words as naming no level.
