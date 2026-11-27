@@ -19,7 +19,7 @@ export const CARD_HEIGHT = 1350;
 export const chartHeightFor = (lines) => (lines <= 7 ? 700 : lines <= 11 ? 600 : 520);
 export const CARD_VERSION = "cryptophys.cta-card.v2";
 
-const KIND_LABEL = { pattern: "Chart pattern", key_levels: "Key-level map", daily_recap: "Daily recap", warroom: "War Room reading" };
+const KIND_LABEL = { pattern: "Chart pattern", pattern_invalidated: "Chart pattern", key_levels: "Key-level map", daily_recap: "Daily recap", warroom: "War Room reading" };
 /** TradingView widget intervals. */
 const INTERVAL = { M15: "15", H1: "60", H4: "240", D1: "D" };
 
@@ -27,6 +27,8 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 
 /** The chart timeframe of a draft: a pattern's own chart; the key-level map on its largest chart, else H4; the daily recap on H1. */
 export function chartOf(draft) {
+  // An invalidated pattern's card (owner 2026-11-27: "dengan gambarnya"): the pattern's own chart.
+  if (draft?.kind === "pattern_invalidated" && INTERVAL[draft?.overlay?.pattern?.chart]) return draft.overlay.pattern.chart;
   if (draft?.kind === "pattern") {
     const m = /^pattern:(M15|H1|H4|D1):/.exec(String(draft.id ?? ""));
     if (m) return m[1];
@@ -228,12 +230,17 @@ export function layoutLabels(labels, { top, bottom }) {
 const drawLabel = (l) => `<rect x="${l.x.toFixed(1)}" y="${l.y.toFixed(1)}" width="${l.w}" height="${l.h}" rx="6" fill="#0b0f17" fill-opacity="0.85"/>` +
   `<text x="${(l.x + 8).toFixed(1)}" y="${(l.y + l.h / 2 + l.size * 0.36).toFixed(1)}" font-size="${l.size}" font-weight="${l.weight}" fill="${l.color}" font-family="Inter,Segoe UI,Arial,sans-serif">${esc(l.text)}</text>`;
 /** The words the overlay writes on the chart (checked by the guardian in the tests). */
+/**
+ * The pattern's title tag: an invalidated pattern says so on the image (orchestrator review of #115: seen alone, as an
+ * image, it must not pass for an active pattern); its card draws its lines only, no projection, arrow or confirm hint.
+ */
+const patternTitle = (p) => `${p.name} · ${p.chart}${p.status === "invalidated" ? " · invalidated" : ""}`;
 export function overlayLabels(overlay) {
   const out = [];
   for (const z of overlay?.zones ?? []) out.push(zoneLabel(z));
   const p = overlay?.pattern;
   if (p) {
-    out.push(`${p.name} · ${p.chart}`, `Upper line ${f2(p.upper)}`, `Lower line ${f2(p.lower)}`);
+    out.push(patternTitle(p), `Upper line ${f2(p.upper)}`, `Lower line ${f2(p.lower)}`);
     if (p.status === "confirmed" && p.projection != null) out.push(`Measured projection ${f2(p.projection)}`, "Projection area");
     if (p.status === "forming") out.push(`Close above ${f2(p.upper)} confirms up`, `Close below ${f2(p.lower)} confirms down`);
   }
@@ -280,7 +287,7 @@ export function overlaySvg(overlay, geo, { frame = { x: 0, y: 0 } } = {}) {
       if (anchored) parts.push(`<circle cx="${x0.toFixed(1)}" cy="${path[0][1].toFixed(1)}" r="4" fill="${GOLD}"/>`);
       parts.push(tag(now - 6, path[1][1] + dy, label, { color: GOLD, anchor: "end", size: 18 }));
     }
-    parts.push(tag(from, frame.y + geo.pane.y + 54, `${p.name} · ${p.chart}`, { color: GOLD, size: 20, weight: 700 }));
+    parts.push(tag(from, frame.y + geo.pane.y + 54, patternTitle(p), { color: GOLD, size: 20, weight: 700 }));
     parts.push(`<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${GOLD}"/></marker></defs>`);
     if (p.status === "confirmed" && p.projection != null) {
       const start = p.direction === "down" ? p.lower : p.upper;
