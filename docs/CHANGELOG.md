@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-28 (docs match the code: the kernel binding, the agents, auto-approve, the crons)
+- docs: the Orchestrator's protocol audit, 28 Nov. Only the docs and comments changed; behaviour is the same, apart from one 405.
+  - SSOT no longer says the Worker does not bind the kernel. It binds `AGENTS` for `cta-model-router` only (`model_router.status`, `model_router.report_paid`). SSOT §5 now lists that agent too.
+  - `cta-editor` and `cta-guardian` are marked declared-only. They declare `reports.publish`, but no code calls it.
+  - `organism.json` `$comment` no longer says "no model writes public text". Model-written text goes only through the router's Beam, behind AGENTS.md rule 4 (amended 2026-11-25). The DNA's fields did not change.
+  - "Every draft waits for a person" now names the auto-approve rule (AGENTS.md rule 2's second exception). This changed in AGENTS.md rule 2, `wrangler.jsonc`, `src/index.mjs`, `src/desk.mjs`, `src/app.mjs` and SSOT.
+  - "Recaps after 24 hours" now reads "the daily recap of the last 24 hours", because `PUBLIC_DELAY_HOURS` is 0 in both Workers. This changed in `wrangler.jsonc`, `src/index.mjs`, `src/brands.mjs`, README and SSOT's cron table.
+  - SSOT's `PROJECTION` list now has `patterns()` and `warroom({source})`.
+  - The `wrangler.jsonc` cron comment now describes all four crons.
+- fix(studio): `/api/studio/agent/write` joins `STUDIO_ROUTES`, so a wrong method gets 405 instead of 404 (test in `test/app.test.mjs`). Every routed studio path is now listed.
 ## 2026-11-27 (a pattern post only for a fresh breakout, within 2 bars of its chart)
 - feat(pattern): a confirmed pattern is posted only when its breakout was confirmed within the last 2 bars of its own chart: M15 30 minutes, H1 2 hours, H4 8 hours, D1 2 days. Its confirming candle must be the chart's latest closed candle or the one before: closed-bar age 0 or 1, as xauusd counts it. The age is counted against the latest close at the reading (xauusd's `closed`, else the bar boundary; gold's D1 closes at 22:00 UTC), never against wall-clock time (`breakoutState`, `latestClose`, `BREAKOUT_FRESH_BARS`). A `confirmed_at_ms` after that close (a future time) counts as unknown. Owner, 27 Nov: "setuju aturan breakout maksimal 2 candle".
   - An older breakout is not posted and is logged `breakout_stale`; it still appears in the recap.

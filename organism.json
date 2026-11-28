@@ -1,5 +1,5 @@
 {
-  "$comment": "The CTA organ's DNA for the Cryptophys platform census (owner 2026-11-14: cryptophys-cta 'terhubung kernel'; ADR-0013 external organs). Served read-only by the OrganismDna RPC entrypoint (src/index.mjs) to the platform Forge over EXT_ORGANISM_CTA. External ceiling: tier 1, no council seat, signals.observe and reports.publish only. No AI task: no model writes public text here.",
+  "$comment": "The CTA organ's DNA for the Cryptophys platform census (owner 2026-11-14: cryptophys-cta 'terhubung kernel'; ADR-0013 external organs). Served read-only by the OrganismDna RPC entrypoint (src/index.mjs) to the platform Forge over EXT_ORGANISM_CTA. External ceiling: tier 1, no council seat, signals.observe and reports.publish only (cta-editor and cta-guardian: declared only, nothing calls reports.publish yet); cta-model-router holds exactly model_router.status and model_router.report_paid (the platform's CTA_CEILING), the one agent the Worker calls over AGENTS. No platform AI task: model-written public text goes only through the router's Beam, behind AGENTS.md rule 4's guards (amended 2026-11-25), else the fixed template.",
   "schema": "cta-organism.v1",
   "organs": [
     {

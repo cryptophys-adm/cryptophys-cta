@@ -19,7 +19,7 @@ kernel, sebagai services/engine terpisah dari xauusd-ai-trading-assistant"). Top
 2. **Nothing is published without the owner.** `CONTENT_PUBLISH` stays "off" until the owner turns it on in a PR
    (after the lawyer's check of POJK 6/2026). Owner 2026-11-17 (check done): on, for the channels in
    `PUBLISH_CHANNELS` only, starting with `telegram`, then `threads` (owner "ya lanjutkan", after Telegram's first post), then `instagram` (owner "lanjutkan penerbitan instagram", after Threads' first post); another channel is added in its own owner PR after the one
-   before it works. `PUBLISH_CHANNELS` unset or empty publishes nothing. Every draft waits in the studio for a person's approval; an approval
+   before it works. `PUBLISH_CHANNELS` unset or empty publishes nothing. Every draft waits in the studio for a person's approval, except the two exceptions below; an approval
    runs the guardian again. A service token can read the studio, never decide.
    **Replies are the one exception** (owner 2026-11-25: "semua autonomous jadi reply tanpa approval"; caps "10 an hour,
    40 a day"; "By themselves after 3 days"): the CTA agent answers replies under our own posts without a person's
