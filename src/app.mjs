@@ -310,7 +310,7 @@ async function patternPass(env, d, analysis, { now, channels, settings, dropped 
   for (const e of invalidated) {
     // Its post too only while the bust is fresh (owner 2026-11-27: "setuju aturan breakout maksimal 2 candle"); it is
     // invalidated in the ledger either way, so the recap lists it.
-    const fresh = breakoutState(e.chart, e.bust_at_ms, readMs);
+    const fresh = breakoutState(e.chart, e.bust_at_ms, readMs, analysis?.closed?.[e.chart]);
     if (fresh !== "fresh") { dropped.push({ id: invalidatedId(e, "*"), reason: BREAKOUT_SKIP[fresh] }); continue; }
     const went = new Set(history.filter((h) => h.status === "published").map((h) => patternOfId(h.id)).filter((o) => o && o.chart === e.chart && o.pattern === e.pattern && o.status === "confirmed").map((o) => o.channel));
     out.push(...invalidationDrafts([e], analysis, { channels: channels.filter((c) => went.has(c)), now }));
@@ -345,7 +345,7 @@ async function fastPatternPass(env, { now = Date.now() } = {}) {
   // price_at: ms from xauusd (a number), or an ISO string; else the reading's latest close.
   const atRaw = res.price_at;
   const atMs = typeof atRaw === "number" && Number.isFinite(atRaw) ? atRaw : Number.isFinite(Date.parse(atRaw ?? "")) ? Date.parse(atRaw) : Number(res.at_close_ms);
-  let reading = { at: new Date(Number.isFinite(atMs) ? atMs : now).toISOString(), price, zones: [], patterns: res.patterns };
+  let reading = { at: new Date(Number.isFinite(atMs) ? atMs : now).toISOString(), price, zones: [], closed: res.closed, patterns: res.patterns };
   let priceFrom = price != null ? "patterns" : null;
   if (price == null) {
     // No price in the reading (xauusd's patterns() before it carries one): the posts need it ("Price when read", a
@@ -354,7 +354,7 @@ async function fastPatternPass(env, { now = Date.now() } = {}) {
     const ledgerRow = await d.studioSetting(PATTERN_LEDGER_KEY);
     if (patternsDue(reading, { seen: Array.isArray(seen?.value?.keys) ? seen.value.keys : [], ledger: Array.isArray(ledgerRow?.value?.items) ? ledgerRow.value.items : [], now })) {
       const a = await env.PROJECTION.analysis();
-      if (Number.isFinite(Number(a?.price))) { reading = { ...reading, at: a.at ?? reading.at, price: Number(a.price), zones: Array.isArray(a.zones) ? a.zones : [] }; priceFrom = "analysis"; }
+      if (Number.isFinite(Number(a?.price))) { reading = { ...reading, at: a.at ?? reading.at, price: Number(a.price), zones: Array.isArray(a.zones) ? a.zones : [] }; priceFrom = "analysis"; } // `closed` stays patterns()' own
       // One line per run that used it (orchestrator review of #117): it stops once xauusd's patterns() carries a price.
       console.log("cta_fast_pass_price_fallback", JSON.stringify({ at_close_ms: res.at_close_ms ?? null, price: priceFrom === "analysis" }));
     }

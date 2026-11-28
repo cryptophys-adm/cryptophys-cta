@@ -174,21 +174,32 @@ test("projection reached (owner 2026-11-27, \"setuju\"): not posted at or beyond
   assert.deepEqual(passes(recap).failures, []);
 });
 
-test("fresh breakout only (owner 2026-11-27, \"setuju aturan breakout maksimal 2 candle\"): within 2 bars of its chart, else breakout_stale; no confirmed_at_ms, breakout_time_unknown; the recap still lists it; the invalidated post too", async () => {
-  const { breakoutState, BREAKOUT_FRESH_BARS, analysisDrafts } = await import("../src/analysis-drafts.mjs");
+test("fresh breakout only (owner 2026-11-27, \"setuju aturan breakout maksimal 2 candle\"): closed-bar age 0 or 1 of its chart, else breakout_stale; no confirmed_at_ms, breakout_time_unknown; the recap still lists it; the invalidated post too", async () => {
+  const { breakoutState, BREAKOUT_FRESH_BARS, latestClose, analysisDrafts } = await import("../src/analysis-drafts.mjs");
   assert.equal(BREAKOUT_FRESH_BARS, 2);
   const read = Date.parse("2026-11-30T10:03:00Z");
   const min = 60_000, hr = 60 * min;
+  assert.equal(latestClose("H1", read), Date.parse("2026-11-30T10:00:00Z"));
+  assert.equal(latestClose("H4", read), Date.parse("2026-11-30T08:00:00Z"));
+  assert.equal(latestClose("D1", read), Date.parse("2026-11-29T22:00:00Z"), "gold's daily candle closes at 22:00 UTC");
+  assert.equal(latestClose("H1", read, "2026-11-30T09:00:00.000Z"), Date.parse("2026-11-30T09:00:00Z"), "xauusd's own close when given");
+  // closed-bar age (review of #119): 0 and 1 fresh, 2 stale, a time after the latest close unknown; a read during the forming candle does not shift it
   for (const [chart, bar] of [["M15", 15 * min], ["H1", hr], ["H4", 4 * hr], ["D1", 24 * hr]]) {
-    assert.equal(breakoutState(chart, read - 2 * bar, read), "fresh", `${chart}: exactly 2 bars`);
-    assert.equal(breakoutState(chart, read - bar / 3, read), "fresh", `${chart}: inside`);
-    assert.equal(breakoutState(chart, read - 2 * bar - 1, read), "stale", `${chart}: just outside`);
+    const last = latestClose(chart, read);
+    assert.equal(breakoutState(chart, last, read), "fresh", `${chart}: age 0`);
+    assert.equal(breakoutState(chart, last - bar, read), "fresh", `${chart}: age 1`);
+    assert.equal(breakoutState(chart, last - 2 * bar, read), "stale", `${chart}: age 2, exactly two intervals old`);
+    assert.equal(breakoutState(chart, last + bar, read), "unknown", `${chart}: a time in the future`);
+    assert.equal(breakoutState(chart, last + 1, read), "unknown", `${chart}: after the latest close`);
+    const forming = last + bar - 1; // the next candle still forming, a millisecond before it closes
+    assert.equal(breakoutState(chart, last - bar, forming), "fresh", `${chart}: forming candle, age still 1`);
+    assert.equal(breakoutState(chart, last - 2 * bar, forming), "stale", `${chart}: forming candle, age still 2`);
   }
   assert.equal(breakoutState("H1", null, read), "unknown");
   assert.equal(breakoutState("H1", undefined, read), "unknown");
   // the drafts: fresh posted, stale and unknown not, each logged
   const pat = (pattern, confirmed_at_ms, extra = {}) => ({ chart: "H1", pattern, name: pattern, chapter: 1, status: "confirmed", direction: "up", upper: 3640 + extra.k * 50, lower: 3620 + extra.k * 50, projection: 3700 + extra.k * 50, ...(confirmed_at_ms === undefined ? {} : { confirmed_at_ms }) });
-  const analysis = { at: new Date(read).toISOString(), price: 3630, zones: [], closed: { H1: "2026-11-30T10:00:00.000Z" }, patterns: [pat("fresh_one", read - 30 * min, { k: 0 }), pat("stale_one", read - 3 * hr, { k: 1 }), pat("no_time", undefined, { k: 2 })] };
+  const analysis = { at: new Date(read).toISOString(), price: 3630, zones: [], closed: { H1: "2026-11-30T10:00:00.000Z" }, patterns: [pat("fresh_one", Date.parse("2026-11-30T10:00:00Z"), { k: 0 }), pat("stale_one", Date.parse("2026-11-30T07:00:00Z"), { k: 1 }), pat("no_time", undefined, { k: 2 })] };
   const skipped = [];
   const ids = analysisDrafts(analysis, { now: read, channels: ["threads"], maps: false, skipped }).filter((d) => d.kind === "pattern").map((d) => d.id);
   assert.deepEqual(ids, ["pattern:H1:fresh_one:confirmed:3640:3620:threads"]);
@@ -199,7 +210,7 @@ test("fresh breakout only (owner 2026-11-27, \"setuju aturan breakout maksimal 2
   // the invalidated post: its bust's confirmed_at_ms, fresh or not; the ledger marks it invalidated either way
   const entry = ledgerEntry({ chart: "H1", pattern: "wedge_rising", name: "Rising Wedge", status: "confirmed", direction: "down", upper: 3622.4, lower: 3606.1, projection: 3580 }, { price: 3600 }, read - 5 * hr);
   const bust = (t) => ({ at: new Date(read).toISOString(), price: 3631, patterns: [{ chart: "H1", pattern: "wedge_rising", name: "Rising Wedge", status: "busted", direction: "up", upper: 3622.4, lower: 3606.1, projection: null, ...(t === undefined ? {} : { confirmed_at_ms: t }) }] });
-  for (const [t, want] of [[read - 20 * min, "fresh"], [read - 3 * hr, "stale"], [undefined, "unknown"]]) {
+  for (const [t, want] of [[Date.parse("2026-11-30T10:00:00Z"), "fresh"], [Date.parse("2026-11-30T07:00:00Z"), "stale"], [undefined, "unknown"]]) {
     const { invalidated } = updateLedger([entry], bust(t), { now: read });
     assert.equal(invalidated.length, 1, "invalidated in the ledger whatever the time");
     assert.equal(breakoutState("H1", invalidated[0].bust_at_ms, read), want);

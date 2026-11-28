@@ -1330,7 +1330,7 @@ test("the 5-minute pass reads xauusd's patterns() only: never analysis() when it
   const calls = { analysis: 0, patterns: [] };
   let value;
   const e = { ...base.env, PROJECTION: { ...base.env.PROJECTION,
-    analysis: async () => { calls.analysis += 1; return { at: "2026-11-27T18:09:00.000Z", price: 3640, zones: [], patterns: [] }; },
+    analysis: async () => { calls.analysis += 1; return { at: "2026-11-27T19:04:00.000Z", price: 3640, zones: [], patterns: [] }; },
     patterns: async (input) => { calls.patterns.push(input ?? null); return freshValue(value); } } };
   const wedge = { chart: "M15", pattern: "broadening_wedge_descending", name: "Descending Broadening Wedge", chapter: 7, status: "confirmed", direction: "up", upper: 3625.34, lower: 3596.4, projection: 3650.11 };
   const close = (t, extra = {}) => ({ version: "cryptophys.public-patterns.v1", at_close_ms: Date.parse(t), closed: { M15: Date.parse(t), H1: Date.parse("2026-11-27T18:00:00Z"), H4: Date.parse("2026-11-27T16:00:00Z"), D1: Date.parse("2026-11-26T22:00:00Z") }, patterns: [wedge], price: 3640.2, price_at: t, ...extra });
@@ -1403,7 +1403,7 @@ test("the invalidated post is not drafted for a stale bust (breakout_stale), tho
   let reading;
   const e = { ...base.env, PROJECTION: { ...base.env.PROJECTION, analysis: async () => reading, patterns: async () => patternsFrom(reading) } };
   const t0 = Date.parse("2026-11-30T08:20:00Z");
-  const wedge = (extra = {}) => ({ chart: "H1", pattern: "wedge_rising", name: "Rising Wedge", chapter: 50, status: "confirmed", direction: "down", upper: 3622.4, lower: 3606.1, projection: 3580, confirmed_at_ms: t0 - 10 * 60_000, ...extra });
+  const wedge = (extra = {}) => ({ chart: "H1", pattern: "wedge_rising", name: "Rising Wedge", chapter: 50, status: "confirmed", direction: "down", upper: 3622.4, lower: 3606.1, projection: 3580, confirmed_at_ms: Date.parse("2026-11-30T08:00:00Z"), ...extra });
   reading = { at: new Date(t0).toISOString(), price: 3600, zones: [], patterns: [wedge()] };
   await draftAnalysis(e, { now: t0, fast: true });
   base.d.sql.exec("UPDATE drafts SET status = 'published' WHERE id = ?", "pattern:H1:wedge_rising:confirmed:3622:3606:threads");

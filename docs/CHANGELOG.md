@@ -1,7 +1,7 @@
 # Changelog
 
 ## 2026-11-27 (a pattern post only for a fresh breakout, within 2 bars of its chart)
-- feat(pattern): a confirmed pattern is posted only when its breakout was confirmed within the last 2 bars of its own chart: M15 30 minutes, H1 2 hours, H4 8 hours, D1 2 days. The age runs from xauusd's `confirmed_at_ms` to the reading's time (`breakoutState`, `BREAKOUT_FRESH_BARS`). Owner, 27 Nov: "setuju aturan breakout maksimal 2 candle".
+- feat(pattern): a confirmed pattern is posted only when its breakout was confirmed within the last 2 bars of its own chart: M15 30 minutes, H1 2 hours, H4 8 hours, D1 2 days. Its confirming candle must be the chart's latest closed candle or the one before: closed-bar age 0 or 1, as xauusd counts it. The age is counted against the latest close at the reading (xauusd's `closed`, else the bar boundary; gold's D1 closes at 22:00 UTC), never against wall-clock time (`breakoutState`, `latestClose`, `BREAKOUT_FRESH_BARS`). A `confirmed_at_ms` after that close (a future time) counts as unknown. Owner, 27 Nov: "setuju aturan breakout maksimal 2 candle".
   - An older breakout is not posted and is logged `breakout_stale`; it still appears in the recap.
   - Without `confirmed_at_ms` the pattern is not posted and is logged `breakout_time_unknown`, so nothing stale slips through.
   - The invalidated post follows the same rule on the bust's `confirmed_at_ms` (kept in the ledger as `bust_at_ms`). The ledger marks the pattern invalidated either way, so the recap lists it.

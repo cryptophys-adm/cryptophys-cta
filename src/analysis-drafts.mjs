@@ -162,18 +162,36 @@ export function projectionReached(p, price) {
 }
 
 /**
- * A breakout is posted only while fresh (owner 2026-11-27: "setuju aturan breakout maksimal 2 candle"): confirmed
- * within the last BREAKOUT_FRESH_BARS bars of its own chart (M15 30 minutes, H1 2 hours, H4 8 hours, D1 2 days),
- * from xauusd's `confirmed_at_ms` to the reading's time. Older: not posted ("breakout_stale"; it stays in the recap).
- * Without `confirmed_at_ms`: not posted ("breakout_time_unknown"), so nothing stale slips through.
+ * A breakout is posted only while fresh (owner 2026-11-27: "setuju aturan breakout maksimal 2 candle"): its confirming
+ * candle is the chart's latest closed candle or the one before (closed-bar age 0 or 1, as xauusd counts it; review of
+ * #119). The age is counted against the chart's latest closed candle at the reading (xauusd's `closed`, else the bar
+ * boundary at or before the reading), never wall-clock time, so a read during a forming candle does not shift it. Older:
+ * not posted ("breakout_stale"; it stays in the recap). Without `confirmed_at_ms`, or with one after that latest close
+ * (a future time): not posted ("breakout_time_unknown"), so nothing stale or wrong slips through.
  */
 export const BREAKOUT_FRESH_BARS = 2;
 const BAR_MS = Object.freeze({ M15: 900_000, H1: 3_600_000, H4: 4 * 3_600_000, D1: 24 * 3_600_000 });
-/** Pure: "fresh", "stale" or "unknown" for a breakout confirmed at `confirmedAtMs` on `chart`, read at `readMs`. */
-export function breakoutState(chart, confirmedAtMs, readMs) {
+/** Gold's daily candle closes at 22:00 UTC: the D1 boundaries are offset from midnight. */
+const BAR_OFFSET_MS = Object.freeze({ D1: 22 * 3_600_000 });
+const msOf = (x) => (typeof x === "number" ? x : Date.parse(x ?? ""));
+/** Pure: the chart's latest closed candle at `readMs`: `closed` (ms or ISO) when given and not after the read, else the bar boundary at or before it. */
+export function latestClose(chart, readMs, closed = null) {
+  const c = msOf(closed);
+  if (Number.isFinite(c) && c > 0 && c <= readMs) return c;
+  const bar = BAR_MS[chart], off = BAR_OFFSET_MS[chart] ?? 0;
+  return bar && Number.isFinite(readMs) ? Math.floor((readMs - off) / bar) * bar + off : NaN;
+}
+/**
+ * Pure: "fresh" (closed-bar age 0 or 1), "stale" (2 or more) or "unknown" (no time, a time after the latest close, or
+ * no chart) for a breakout confirmed at `confirmedAtMs` (the confirming candle's close) on `chart`, read at `readMs`.
+ */
+export function breakoutState(chart, confirmedAtMs, readMs, closed = null) {
   const t = Number(confirmedAtMs), bar = BAR_MS[chart];
   if (confirmedAtMs == null || !Number.isFinite(t) || t <= 0 || !bar || !Number.isFinite(readMs)) return "unknown";
-  return readMs - t <= BREAKOUT_FRESH_BARS * bar ? "fresh" : "stale";
+  const last = latestClose(chart, readMs, closed);
+  if (!Number.isFinite(last) || t > last) return "unknown";
+  const age = Math.round((last - t) / bar);
+  return age < BREAKOUT_FRESH_BARS ? "fresh" : "stale";
 }
 export const BREAKOUT_SKIP = Object.freeze({ stale: "breakout_stale", unknown: "breakout_time_unknown" });
 
@@ -371,7 +389,7 @@ export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS
       bands.push(p);
       if (known.has(id) || seenBefore.has(patternSeenKey(p)) || patternDrafted(p, channel, history, now) || bandDrafted(p, channel, history, now) || patternCooling(p, channel, history, now)) continue;
       // Only a fresh breakout (owner 2026-11-27: "setuju aturan breakout maksimal 2 candle").
-      const fresh = breakoutState(p.chart, p.confirmed_at_ms, Number.isFinite(Date.parse(analysis?.at ?? "")) ? Date.parse(analysis.at) : now);
+      const fresh = breakoutState(p.chart, p.confirmed_at_ms, Number.isFinite(Date.parse(analysis?.at ?? "")) ? Date.parse(analysis.at) : now, analysis?.closed?.[p.chart]);
       if (fresh !== "fresh") { skipped?.push({ id, channel, reason: BREAKOUT_SKIP[fresh] }); continue; }
       // The move is done before the post would go out: not posted (owner 2026-11-27, "setuju"; 18:09 M15 wedge).
       if (projectionReached(p, analysis?.price)) { skipped?.push({ id, channel, reason: "projection_reached" }); continue; }
