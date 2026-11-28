@@ -94,7 +94,7 @@ const req = (path, { token, method = "GET", body, origin = "https://cta.cryptoph
 test("the public face: health, the brand's profile and links, the empty archive, the page; no studio data", async () => {
   resetKeyCacheForTests();
   const { env: e } = env();
-  assert.deepEqual(await (await handle(req("/health"), e, opts)).json(), { ok: true, service: "cryptophys-cta", publish: "off", publish_channels: [] });
+  assert.deepEqual(await (await handle(req("/health"), e, opts)).json(), { ok: true, service: "cryptophys-cta", publish: "off", publish_channels: [], version: { id: null, tag: null, timestamp: null } });
   const p = await (await handle(req("/api/public/profile"), e, opts)).json();
   assert.equal(p.brand.id, "xauusd-ai-cta");
   assert.match(p.brand.disclaimer, /not an invitation to buy or sell and not financial advice/);
@@ -233,6 +233,7 @@ test("the native deploy block in organism.json equals wrangler.jsonc, and the or
   assert.deepEqual(d.do_migrations, cfg.migrations);
   assert.deepEqual(d.services, cfg.services);
   assert.deepEqual(d.browser, cfg.browser);
+  assert.deepEqual(d.version_metadata, cfg.version_metadata, "the running version's binding (src/version.mjs)");
   assert.deepEqual(d.compatibility_flags, cfg.compatibility_flags);
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   assert.deepEqual(Object.keys(pkg.dependencies ?? {}), ["@cloudflare/puppeteer"], "one runtime dependency, declared in the deploy block");
@@ -382,6 +383,7 @@ test("the bridge deploy workflow: main or by hand, no Worker secret, no delete, 
   assert.match(code, /CONTENT_PUBLISH/);
   const deploys = [...code.matchAll(/wrangler@[\d.]+ deploy([^\n]*)/g)].map((m) => m[1].trim());
   assert.deepEqual(deploys, ["--dry-run", '--tag "${GITHUB_SHA:0:12}" --message "commit ${GITHUB_SHA}"'], "the deploy runs what the dry run validated, its version named by the commit (owner 2026-11-24)");
+  assert.match(code, /j\?\.version\?\.tag === tag/, "health waits for this commit's version, not only for the publish settings");
   assert.doesNotMatch(code, /--var/, "no variable is set from the workflow: wrangler.jsonc is the Worker's whole config");
   assert.match(code, /deploy\.health/);
   assert.match(code, /deploy\.smoke/);

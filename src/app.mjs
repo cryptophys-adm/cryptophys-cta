@@ -30,6 +30,7 @@ import { linkHosts, normalizeLink, randomSlug, shortUrl, redirectTarget, GO_PATH
 import { templateTexts, checkPost, composeDrafts, overlayFor, recapWindow, COMPOSE_KINDS, COMPOSE_KIND_NAMES } from "./compose.mjs";
 import { sourceOf } from "./warroom-drafts.mjs";
 import { goldClosedAt } from "../site/home/market-hours.js";
+import { versionOf } from "./version.mjs";
 
 export const RECAP_CRON = "17 22 * * TUE-SAT";
 export const ANALYSIS_CRON = "9 * * * SUN-FRI";
@@ -688,7 +689,8 @@ export async function handle(request, env, { fetchImpl = fetch, now, launch, cac
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   const route = `${request.method} ${path}`;
-  if (route === "GET /health") return json({ ok: true, service: "cryptophys-cta", publish: publishOn(env) ? "on" : "off", publish_channels: publishChannels(env) });
+  // version: the running version (CF_VERSION_METADATA; tag = the commit's first 12 characters), for the platform's drift check.
+  if (route === "GET /health") return json({ ok: true, service: "cryptophys-cta", publish: publishOn(env) ? "on" : "off", publish_channels: publishChannels(env), version: versionOf(env) });
 
   // The public face: the brand's profile and the published archive. Nothing private.
   if (route === "GET /api/public/profile") {

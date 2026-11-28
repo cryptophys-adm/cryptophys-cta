@@ -23,6 +23,9 @@
   // Browser Run: the Instagram cards (TradingView's own chart widget plus the Cryptophys panel, src/card.mjs),
   // screenshotted right after drafting. 10 browser hours a month are included; a card takes about 7 seconds.
   "browser": { "binding": "BROWSER" },
+  // The running version (id, tag, timestamp) for /health and CtaHealth.health(): deploy.yml tags each version with the
+  // commit's first 12 characters, so the platform's drift check reads the commit that runs (src/version.mjs).
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
   // The approval queue, the published archive and the refreshed tokens: one Durable Object with SQLite storage.
   "durable_objects": {
     "bindings": [

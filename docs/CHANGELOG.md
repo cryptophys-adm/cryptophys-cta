@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-28 (the running commit in /health, CtaHealth and the DNA)
+- feat(version): desired_version, option B, organ side (Orchestrator, 28 Nov).
+  - The new binding `CF_VERSION_METADATA` reads back the deploy's `--tag <commit12>`.
+  - `/health` and `CtaHealth.health()` now carry `version: { id, tag, timestamp }`, the field the platform's drift probe reads (`version.tag`).
+  - `OrganismDna.dna()` adds `deploy_commit` (the tag) and `deployed_at` (the version's upload time).
+  - A version uploaded without a 12-character commit tag reads `null` for all three.
+  - No variable is set from the workflow, so `wrangler.jsonc` stays the whole config.
+- feat(deploy): the deploy's health check now also waits for `/health`'s `version.tag` to equal its own commit's first 12 characters. A deploy therefore passes only once the new version answers.
+- `organism.json` `deploy` now declares `version_metadata`, and a test keeps it equal to `wrangler.jsonc`.
+- Tests: V1 to V3 in `test/version.test.mjs`.
+
 ## 2026-11-28 (docs match the code: the kernel binding, the agents, auto-approve, the crons)
 - docs: the Orchestrator's protocol audit, 28 Nov. Only the docs and comments changed; behaviour is the same, apart from one 405.
   - SSOT no longer says the Worker does not bind the kernel. It binds `AGENTS` for `cta-model-router` only (`model_router.status`, `model_router.report_paid`). SSOT §5 now lists that agent too.
