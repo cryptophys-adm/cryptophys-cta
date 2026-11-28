@@ -161,6 +161,40 @@ export function projectionReached(p, price) {
   return p.direction === "up" ? pr >= x : p.direction === "down" ? pr <= x : false;
 }
 
+/**
+ * A breakout is posted only while fresh (owner 2026-11-27: "setuju aturan breakout maksimal 2 candle"): its confirming
+ * candle is the chart's latest closed candle or the one before (closed-bar age 0 or 1, as xauusd counts it; review of
+ * #119). The age is counted against the chart's latest closed candle at the reading (xauusd's `closed`, else the bar
+ * boundary at or before the reading), never wall-clock time, so a read during a forming candle does not shift it. Older:
+ * not posted ("breakout_stale"; it stays in the recap). Without `confirmed_at_ms`, or with one after that latest close
+ * (a future time): not posted ("breakout_time_unknown"), so nothing stale or wrong slips through.
+ */
+export const BREAKOUT_FRESH_BARS = 2;
+const BAR_MS = Object.freeze({ M15: 900_000, H1: 3_600_000, H4: 4 * 3_600_000, D1: 24 * 3_600_000 });
+/** Gold's daily candle closes at 22:00 UTC: the D1 boundaries are offset from midnight. */
+const BAR_OFFSET_MS = Object.freeze({ D1: 22 * 3_600_000 });
+const msOf = (x) => (typeof x === "number" ? x : Date.parse(x ?? ""));
+/** Pure: the chart's latest closed candle at `readMs`: `closed` (ms or ISO) when given and not after the read, else the bar boundary at or before it. */
+export function latestClose(chart, readMs, closed = null) {
+  const c = msOf(closed);
+  if (Number.isFinite(c) && c > 0 && c <= readMs) return c;
+  const bar = BAR_MS[chart], off = BAR_OFFSET_MS[chart] ?? 0;
+  return bar && Number.isFinite(readMs) ? Math.floor((readMs - off) / bar) * bar + off : NaN;
+}
+/**
+ * Pure: "fresh" (closed-bar age 0 or 1), "stale" (2 or more) or "unknown" (no time, a time after the latest close, or
+ * no chart) for a breakout confirmed at `confirmedAtMs` (the confirming candle's close) on `chart`, read at `readMs`.
+ */
+export function breakoutState(chart, confirmedAtMs, readMs, closed = null) {
+  const t = Number(confirmedAtMs), bar = BAR_MS[chart];
+  if (confirmedAtMs == null || !Number.isFinite(t) || t <= 0 || !bar || !Number.isFinite(readMs)) return "unknown";
+  const last = latestClose(chart, readMs, closed);
+  if (!Number.isFinite(last) || t > last) return "unknown";
+  const age = Math.round((last - t) / bar);
+  return age < BREAKOUT_FRESH_BARS ? "fresh" : "stale";
+}
+export const BREAKOUT_SKIP = Object.freeze({ stale: "breakout_stale", unknown: "breakout_time_unknown" });
+
 /** Pure: one pattern's text for one channel. */
 export function patternText(p, analysis, { channel = "threads" } = {}) {
   const lines = [];
@@ -354,6 +388,9 @@ export function analysisDrafts(analysis, { now = Date.now(), channels = CHANNELS
       if (bands.some((b) => sameBand(b, p))) continue;
       bands.push(p);
       if (known.has(id) || seenBefore.has(patternSeenKey(p)) || patternDrafted(p, channel, history, now) || bandDrafted(p, channel, history, now) || patternCooling(p, channel, history, now)) continue;
+      // Only a fresh breakout (owner 2026-11-27: "setuju aturan breakout maksimal 2 candle").
+      const fresh = breakoutState(p.chart, p.confirmed_at_ms, Number.isFinite(Date.parse(analysis?.at ?? "")) ? Date.parse(analysis.at) : now, analysis?.closed?.[p.chart]);
+      if (fresh !== "fresh") { skipped?.push({ id, channel, reason: BREAKOUT_SKIP[fresh] }); continue; }
       // The move is done before the post would go out: not posted (owner 2026-11-27, "setuju"; 18:09 M15 wedge).
       if (projectionReached(p, analysis?.price)) { skipped?.push({ id, channel, reason: "projection_reached" }); continue; }
       const text = patternText(p, analysis, { channel });
@@ -413,6 +450,8 @@ export function updateLedger(ledger, analysis, { drafted = [], now = Date.now() 
     if (!p) continue;
     if (p.status === "busted" || (p.status === "confirmed" && p.direction && e.direction && p.direction !== e.direction)) {
       e.invalidated_at = new Date(now).toISOString();
+      // when the bust was confirmed (xauusd's confirmed_at_ms), for the fresh-breakout rule of its post
+      e.bust_at_ms = Number.isFinite(Number(p.confirmed_at_ms)) && Number(p.confirmed_at_ms) > 0 ? Number(p.confirmed_at_ms) : null;
       invalidated.push(e);
     }
   }

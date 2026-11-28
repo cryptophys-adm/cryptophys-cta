@@ -6,7 +6,9 @@ import { cardHtml, chartOf, panelLines, widgetConfig, chartHeightFor } from "../
 import { renderCard, chartFrame, toBase64, fromBase64, MIN_CARD_BYTES } from "../src/render.mjs";
 import { BRANDS } from "../src/brands.mjs";
 import { addDrafts, getDraft, decideDraft, attachImage, mediaOf, draftsNeedingImage } from "../src/desk.mjs";
-import { analysisDrafts, ANALYSIS_DISCLAIMER } from "../src/analysis-drafts.mjs";
+import { analysisDrafts as analysisDraftsRaw, ANALYSIS_DISCLAIMER } from "../src/analysis-drafts.mjs";
+import { fresh } from "./fresh.mjs";
+const analysisDrafts = (a, o) => analysisDraftsRaw(fresh(a), o);
 import { dailyDrafts } from "../src/drafts.mjs";
 import { checkContentDraft } from "../src/guardian.mjs";
 

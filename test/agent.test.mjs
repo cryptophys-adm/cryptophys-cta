@@ -22,7 +22,9 @@ import { triage, checkReply, shapeAnswer, replyMode, runReplies, roomReply, room
 import { autoAt, dueNow, AUTO_WINDOW_MINUTES } from "../src/agent/auto-approve.mjs";
 import { AUTO_KINDS, AUTO_DEFAULTS, normalizeSettings } from "../src/settings.mjs";
 import { chartOf } from "../src/card.mjs";
-import { draftedPatterns, analysisDrafts, dueChartMaps, chartMapText, chartsOfId, chartMapId, zoneRange, zoneLine, MAP_FRESH_MINUTES } from "../src/analysis-drafts.mjs";
+import { draftedPatterns, analysisDrafts as analysisDraftsRaw, dueChartMaps, chartMapText, chartsOfId, chartMapId, zoneRange, zoneLine, MAP_FRESH_MINUTES } from "../src/analysis-drafts.mjs";
+import { fresh } from "./fresh.mjs";
+const analysisDrafts = (a, o) => analysisDraftsRaw(fresh(a), o);
 import { publishThreads } from "../src/publishers.mjs";
 import { HASHTAGS } from "../src/channels.mjs";
 import { keyLevelsText } from "../src/analysis-drafts.mjs";
