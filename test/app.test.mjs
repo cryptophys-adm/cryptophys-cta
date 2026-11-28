@@ -1010,6 +1010,7 @@ test("cta-write end to end (rule 4 amended): the switch, a written post auto-app
   const a0 = await (await handle(req("/api/studio/agent", { token: person }), e, opts)).json();
   assert.deepEqual([a0.write.mode, a0.write.enabled], ["off", false]);
   assert.equal((await post("/api/studio/agent/write", { enabled: "yes" }, T0)).status, 400);
+  assert.equal((await handle(req("/api/studio/agent/write", { token: person }), e, opts)).status, 405, "a known route with the wrong method is 405, not 404");
   assert.equal((await post("/api/studio/agent/write", { enabled: true, kinds: ["custom"] }, T0)).status, 400, "never a custom post");
   assert.equal((await post("/api/studio/agent/model", { enabled: true }, T0)).status, 200);
   assert.equal((await post("/api/studio/agent/write", { enabled: true }, T0)).status, 200);

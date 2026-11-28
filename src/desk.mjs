@@ -1,4 +1,5 @@
-// The approval queue (content roadmap P2): every draft waits for a person. Pure over a SQL handle with
+// The approval queue (content roadmap P2): every draft waits for its approval, a person's or a channel's
+// auto-approve rule (src/agent/auto-approve.mjs; an edited draft waits for a person). Pure over a SQL handle with
 // exec(query, ...binds) → { toArray() } (the Durable Object's SQLite storage; node:sqlite in the tests).
 //
 // Statuses: pending (waits for approval), needs_image / needs_video (the channel needs media not made yet; cannot

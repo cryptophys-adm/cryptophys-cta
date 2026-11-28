@@ -12,7 +12,7 @@
   "routes": [
     { "pattern": "cta.cryptophys.work", "custom_domain": true }
   ],
-  // The only data source: the xauusd AI Worker's PublicProjection (recaps after 24 hours; real-time analysis with
+  // The only data source: the xauusd AI Worker's PublicProjection (the daily recap of the last 24 hours; real-time analysis with
   // key levels and patterns; never a decision, plan or account). Read-only RPC over a Service Binding.
   "services": [
     { "binding": "PROJECTION", "service": "xauusd-ai-trading-assistant", "entrypoint": "PublicProjection" },
@@ -32,8 +32,9 @@
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["ContentDesk"] }
   ],
-  // The recap Tuesday to Saturday at 22:17 UTC (05:17 WIB); the analysis every hour at :09 Sunday to Friday while gold trades (analysisRunDue), with the
-  // key-level map at 06:09 UTC (13:09 WIB).
+  // The recap Tuesday to Saturday at 22:17 UTC (05:17 WIB); the analysis every hour at :09 Sunday to Friday while gold
+  // trades (analysisRunDue: key-level maps, the pattern recap); every 5 minutes the slots, the queued posts and the
+  // replies; at minute 3 of every 5 the pattern fast pass (PATTERN_FAST_PASS, PublicProjection.patterns()).
   "triggers": {
     "crons": ["17 22 * * TUE-SAT", "9 * * * SUN-FRI", "*/5 * * * *", "3-59/5 * * * *"]
   },
@@ -43,7 +44,8 @@
     // for the channels in PUBLISH_CHANNELS only; "kita sambungkan dulu ke Telegram setelah sukses baru ke channel lain".
     "CONTENT_PUBLISH": "on",
     // The channels that publish while CONTENT_PUBLISH is "on". Unset or empty: none. One channel at a time, each in
-    // an owner PR. Every post still waits for a person's approval in the studio.
+    // an owner PR. A post goes out once approved: by a person in the studio, or by a channel's auto-approve rule
+    // (AGENTS.md rule 2: the four kinds, a 0-minute window, never an edited draft).
     // Owner 2026-11-17: Telegram first; Threads after Telegram's first post went out (06:15 UTC) and @cryptophys.adm
     // was connected by OAuth ("ya lanjutkan"). Instagram after Threads' first post went out (owner 2026-11-17: "lanjutkan
     // penerbitan instagram", confirmed in the session): an image post (the card), so it needs the card rendered and an

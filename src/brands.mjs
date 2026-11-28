@@ -7,7 +7,7 @@ export const BRANDS = Object.freeze({
     name: "XAUUSD AI · Cryptophys",
     // All public content is in English (owner 2026-11-15: "Semua content in english").
     tagline: "Gold (XAUUSD) analysis from the Cryptophys AI system: key levels, chart patterns and the daily recap. Education, not an invitation to trade.",
-    // The analysis source: the xauusd AI Worker's PublicProjection (recaps after 24 hours; real-time analysis).
+    // The analysis source: the xauusd AI Worker's PublicProjection (the daily recap of the last 24 hours; real-time analysis).
     source: "xauusd",
     // Public handles (not secrets). The numeric ids and tokens are Worker secrets.
     // Threads: the account the Threads token posts as (owner 2026-11-20: "@cryptophys.adm"; there is no @xauusd-ai-cta).
