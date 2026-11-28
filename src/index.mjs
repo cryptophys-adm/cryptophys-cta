@@ -21,6 +21,7 @@ import { editCheck } from "./compose.mjs";
 import { handle, desk, publishOn, draftDay, draftAnalysis, refreshTokens, renderImages, collectInsights, runSchedule, agentWeekly, agentReplies, forgetOldReplies, ANALYSIS_CRON, PATTERN_CRON, analysisRunDue, fastPassOn } from "./app.mjs";
 import { SCHEDULE_CRON } from "./scheduler.mjs";
 import ORGANISM from "../organism.json" with { type: "json" };
+import { versionOf, organismDna } from "./version.mjs";
 
 /** The queue: one Durable Object (SQLite storage), named "desk". */
 export class ContentDesk extends DurableObject {
@@ -96,15 +97,16 @@ export class ContentDesk extends DurableObject {
   async creds(input) { return credsOf(this.sql, input); }
   async credsStatus() { return credsStatus(this.sql); }
 }
-/** The platform's census: this organ's DNA (agents, AI tasks), read through the Forge (EXT_ORGANISM_CTA). */
+/** The platform's census: this organ's DNA (agents, AI tasks) and its deployed commit, read through the Forge (EXT_ORGANISM_CTA). */
 export class OrganismDna extends WorkerEntrypoint {
-  async dna() { return JSON.parse(JSON.stringify(ORGANISM)); }
+  async dna() { return organismDna(ORGANISM, this.env); }
 }
-/** The platform's drift check (EXT_CRYPTOPHYS_CTA). */
+/** The platform's drift check (EXT_CRYPTOPHYS_CTA): health and the running version (`version.tag`, the commit's first 12). */
 export class CtaHealth extends WorkerEntrypoint {
   async health() {
-    try { return { ok: true, service: "cryptophys-cta", publish: publishOn(this.env) ? "on" : "off", counts: await desk(this.env).counts() }; }
-    catch (e) { return { ok: false, service: "cryptophys-cta", error: String(e?.message ?? e).slice(0, 200) }; }
+    const version = versionOf(this.env);
+    try { return { ok: true, service: "cryptophys-cta", publish: publishOn(this.env) ? "on" : "off", counts: await desk(this.env).counts(), version }; }
+    catch (e) { return { ok: false, service: "cryptophys-cta", error: String(e?.message ?? e).slice(0, 200), version }; }
   }
 }
 

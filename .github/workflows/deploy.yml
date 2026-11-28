@@ -79,6 +79,7 @@ jobs:
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        # The tag is also what /health, CtaHealth.health() and the DNA report as the running commit (src/version.mjs).
         run: npx --yes wrangler@4.156.2 deploy --tag "${GITHUB_SHA:0:12}" --message "commit ${GITHUB_SHA}"
 
       - name: Health and smoke checks (organism.json deploy)
@@ -95,7 +96,9 @@ jobs:
           // The live Worker publishes exactly what wrangler.jsonc says: off, or on for the named channels only.
           const want = JSON.parse(readFileSync("wrangler.jsonc", "utf8").replace(/^\s*\/\/.*$/gm, "")).vars ?? {};
           const wantList = want.CONTENT_PUBLISH === "on" ? String(want.PUBLISH_CHANNELS ?? "").split(",").map((c) => c.trim()).filter(Boolean) : [];
-          const matches = (j) => j?.publish === want.CONTENT_PUBLISH && JSON.stringify(j?.publish_channels ?? []) === JSON.stringify(wantList);
+          // ...and it is this commit's version: /health's version.tag is the --tag above (src/version.mjs).
+          const tag = String(process.env.GITHUB_SHA ?? "").slice(0, 12);
+          const matches = (j) => j?.publish === want.CONTENT_PUBLISH && JSON.stringify(j?.publish_channels ?? []) === JSON.stringify(wantList) && j?.version?.tag === tag;
           // Right after a deploy the edge can still answer from the old version for a short while, so a publish
           // mismatch is retried for up to 2 minutes before it fails the run (2026-11-17: #37 failed on the first read).
           let health = null, last = null, mismatches = 0;
@@ -106,12 +109,12 @@ jobs:
               if (r.ok && Object.entries(deploy.health.expect).every(([k, v]) => j?.[k] === v)) {
                 last = j;
                 if (matches(j)) health = j;
-                else { mismatches++; console.log(`health answers with publish ${j.publish} for [${j.publish_channels}]; waiting for [${wantList}]`); }
+                else { mismatches++; console.log(`health answers with publish ${j.publish} for [${j.publish_channels}] at version ${j.version?.tag}; waiting for [${wantList}] at ${tag}`); }
               } else console.log(`health not ready: HTTP ${r.status}`);
             } catch (e) { console.log(`health: ${e?.cause?.code || e?.cause?.message || e?.name}`); }
             if (!health) await wait(10000);
           }
-          if (!health && last) { console.error(`::error::the deployed Worker reports publish ${last.publish} for [${last.publish_channels}], config says ${want.CONTENT_PUBLISH} for [${wantList}]`); process.exit(1); }
+          if (!health && last) { console.error(`::error::the deployed Worker reports publish ${last.publish} for [${last.publish_channels}] at version ${last.version?.tag}, config says ${want.CONTENT_PUBLISH} for [${wantList}] at ${tag}`); process.exit(1); }
           if (!health) { console.error(`::error::${origin}${deploy.health.path} did not answer as expected`); process.exit(1); }
           console.log(`health: ${JSON.stringify(health)}`);
           let failed = 0;
